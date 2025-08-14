@@ -264,3 +264,37 @@ body {
     cursor: pointer;
     flex-shrink: 0; /* 防止按钮被压缩 */
 }
+/* 在 style.css 文件末尾追加 */
+
+/* --- 聊天窗口顶部信息区样式 --- */
+#chat-header-info {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px; /* 在计数器和按钮之间增加间距 */
+}
+
+#message-counter {
+    color: #f0f0f0;
+    font-size: 12px;
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 3px 8px;
+    border-radius: 10px;
+}
+
+#summarize-chat-button {
+    background: none;
+    border: 1px solid white;
+    color: white;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+#summarize-chat-button:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
