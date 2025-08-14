@@ -3,21 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>通用AI聊天室</title>
+    <title>通用AI聊天室 Pro</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div id="app-container">
-        <!-- 聊天、朋友圈窗口保持不变 -->
+        <!-- 聊天窗口 -->
         <div id="chat-window" class="view">
             <div class="header">
-                        <!-- ▼▼▼ 新增代码 开始 ▼▼▼ -->
-        <div id="chat-header-info">
-            <span id="message-counter">对话：0</span>
-            <button id="summarize-chat-button">总结对话</button>
-        </div>
-        <!-- ▲▲▲ 新增代码 结束 ▲▲▲ -->
+                <div id="chat-header-info">
+                    <span id="message-counter">对话: 0</span>
+                    <button id="summarize-chat-button">总结对话</button>
+                </div>
                 <span>AI 聊天助手</span>
                 <button id="toggle-suggestions-button">关闭建议</button>
             </div>
@@ -30,12 +28,14 @@
                 <button id="send-button">发送</button>
             </div>
         </div>
+
+        <!-- 朋友圈窗口 -->
         <div id="moments-window" class="view hidden">
              <div class="header">朋友圈</div>
              <div id="posts-container"></div>
         </div>
         
-        <!-- 【全新】终极形态的设置窗口 -->
+        <!-- 设置窗口 -->
         <div id="settings-window" class="view hidden">
             <div class="header">通用设置</div>
             <div id="settings-form">
@@ -50,13 +50,10 @@
                     <label for="api-url-input">API 地址 (URL)</label>
                     <input type="text" id="api-url-input" placeholder="根据所选类型填写">
                 </div>
-                <!-- 模型名称区域现在会由JS动态控制 -->
                 <div class="form-group" id="model-area">
-                    <label for="api-model-input">模型名称 (Model)</label>
+                    <label>模型名称 (Model)</label>
                     <div class="model-selection-area">
-                        <!-- 对于OpenAI，这里是下拉菜单 -->
                         <select id="api-model-select" class="hidden"></select>
-                        <!-- 对于Gemini，这里是输入框 -->
                         <input type="text" id="api-model-input" placeholder="直连时此项通常留空">
                         <button id="fetch-models-button">拉取</button>
                     </div>
@@ -65,35 +62,62 @@
                     <label for="api-key-input">API 密钥 (Key)</label>
                     <input type="password" id="api-key-input" placeholder="粘贴你的密钥">
                 </div>
-                    <!-- ▼▼▼ 新增代码 开始 ▼▼▼ -->
-    <div class="form-group">
-        <label for="context-length-input">AI记忆条数 (最近N条对话)</label>
-        <input type="number" id="context-length-input" value="10" min="2" max="50">
-    </div>
-    <!-- ▲▲▲ 新增代码 结束 ▲▲▲ -->
+                <div class="form-group">
+                    <label for="context-length-input">AI记忆条数 (最近N条对话)</label>
+                    <input type="number" id="context-length-input" value="20" min="2" max="100">
+                </div>
                 <hr>
                 <div class="form-group">
-                    <label for="ai-persona-input">AI的人设</label>
-                    <textarea id="ai-persona-input" rows="4"></textarea>
+                    <label for="ai-persona-input">AI的人设 (第一行为AI昵称)</label>
+                    <textarea id="ai-persona-input" rows="4" placeholder="第一行写AI的名字，会被用作角色记忆的标题"></textarea>
                 </div>
                 <div class="form-group">
                     <label for="user-persona-input">你的人设 (User)</label>
                     <textarea id="user-persona-input" rows="4"></textarea>
                 </div>
+                
+                <!-- 角色专属记忆 -->
                 <div class="form-group">
-                    <label for="world-book-input">附加设定 (世界书)</label>
-                    <textarea id="world-book-input" rows="5"></textarea>
+                    <label id="character-memory-label">角色专属记忆</label>
+                    <textarea id="character-memory-input" rows="6" placeholder="对话总结将自动保存到这里..."></textarea>
                 </div>
+
+                <!-- 世界书高级编辑器 -->
+                <div class="form-group">
+                    <label>附加设定 (世界书编辑器)</label>
+                    <div id="world-book-editor">
+                        <!-- JS将在这里动态生成条目 -->
+                    </div>
+                    <button type="button" id="add-world-book-entry-button">添加新条目</button>
+                </div>
+
                 <button id="save-settings-button">保存设置</button>
             </div>
         </div>
     </div>
 
-    <!-- 导航栏不变 -->
+    <!-- 导航栏 -->
     <div id="app-nav">
         <div class="nav-button active" data-view="chat-window">聊天</div>
         <div class="nav-button" data-view="moments-window">朋友圈</div>
         <div class="nav-button" data-view="settings-window">设置</div>
+    </div>
+
+    <!-- 自定义总结弹窗 (默认隐藏) -->
+    <div id="summary-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>对话总结</h3>
+                <button id="close-modal-button" class="close-button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <pre id="summary-output"></pre>
+            </div>
+            <div class="modal-footer">
+                <button id="copy-summary-button">复制到剪贴板</button>
+                <button id="save-to-memory-button">保存到角色记忆</button>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>
