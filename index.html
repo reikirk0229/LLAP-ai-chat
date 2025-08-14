@@ -12,6 +12,12 @@
         <!-- 聊天、朋友圈窗口保持不变 -->
         <div id="chat-window" class="view">
             <div class="header">
+                        <!-- ▼▼▼ 新增代码 开始 ▼▼▼ -->
+        <div id="chat-header-info">
+            <span id="message-counter">对话：0</span>
+            <button id="summarize-chat-button">总结对话</button>
+        </div>
+        <!-- ▲▲▲ 新增代码 结束 ▲▲▲ -->
                 <span>AI 聊天助手</span>
                 <button id="toggle-suggestions-button">关闭建议</button>
             </div>
@@ -59,6 +65,12 @@
                     <label for="api-key-input">API 密钥 (Key)</label>
                     <input type="password" id="api-key-input" placeholder="粘贴你的密钥">
                 </div>
+                    <!-- ▼▼▼ 新增代码 开始 ▼▼▼ -->
+    <div class="form-group">
+        <label for="context-length-input">AI记忆条数 (最近N条对话)</label>
+        <input type="number" id="context-length-input" value="10" min="2" max="50">
+    </div>
+    <!-- ▲▲▲ 新增代码 结束 ▲▲▲ -->
                 <hr>
                 <div class="form-group">
                     <label for="ai-persona-input">AI的人设</label>
