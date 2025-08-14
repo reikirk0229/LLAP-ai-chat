@@ -262,6 +262,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let requestOptions = {};
         
         try {
+// script.js 文件中，请找到并替换 getAiResponse 函数里的 'openai_proxy' 条件块
+
             if (settings.apiType === 'openai_proxy') {
                 const finalPrompt = `
                     # 你的双重任务
@@ -284,23 +286,43 @@ document.addEventListener('DOMContentLoaded', () => {
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.apiKey}` },
                     body: JSON.stringify({
                         model: settings.apiModel,
-                        messages: [{ role: 'user', content: finalPrompt }],
-                        response_format: { type: "json_object" }
+                        messages: [{ role: 'user', content: finalPrompt }]
+                        // --- 【修正】移除 response_format 参数，提高兼容性 ---
                     })
                 };
                 const response = await fetch(requestUrl, requestOptions);
-                const data = await response.json();
-                if (!response.ok) { throw new Error(JSON.stringify(data.error || data)); }
                 
-                const responseText = data.choices[0].message.content;
-                const responseData = JSON.parse(responseText);
+                // --- 【修正】将错误检查放在获取data之后，并提供更清晰的错误信息 ---
+                if (!response.ok) {
+                    const errorBody = await response.text(); // 先以文本形式获取错误信息
+                    throw new Error(`HTTP 错误: ${response.status} ${response.statusText}. 响应内容: ${errorBody}`);
+                }
 
-                const aiText = responseData.reply;
-                const suggestions = responseData.suggestions;
-                chatHistory.push({ role: 'assistant', content: aiText });
-                loadingDiv.textContent = aiText;
-                if (isSuggestionEnabled && Array.isArray(suggestions)) {
-                    displaySuggestions(suggestions);
+                const data = await response.json();
+                const responseText = data.choices[0].message.content;
+
+                // --- 【修正】增加健壮性，使用 try-catch 解析JSON ---
+                try {
+                    const responseData = JSON.parse(responseText);
+                    const aiText = responseData.reply;
+                    const suggestions = responseData.suggestions;
+
+                    if (!aiText) {
+                        throw new Error("AI返回的JSON中缺少 'reply' 字段。");
+                    }
+
+                    chatHistory.push({ role: 'assistant', content: aiText });
+                    loadingDiv.textContent = aiText;
+                    if (isSuggestionEnabled && Array.isArray(suggestions)) {
+                        displaySuggestions(suggestions);
+                    }
+                } catch (parseError) {
+                    // 如果解析失败，说明AI没有按要求返回JSON，直接把原文显示出来
+                    console.error('JSON 解析失败:', parseError);
+                    console.error('AI 返回的原始文本:', responseText);
+                    loadingDiv.textContent = responseText; // 直接显示原始内容
+                    chatHistory.push({ role: 'assistant', content: responseText });
+                    // 此时不显示建议按钮，因为无法解析
                 }
             } 
             else if (settings.apiType === 'gemini_direct') {
