@@ -1,0 +1,266 @@
+/* style.css (最终版) */
+body {
+    font-family: sans-serif;
+    background-color: #f0f2f5;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+#app-container {
+    width: 360px;
+    height: 640px;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+.view {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.header {
+    background-color: #007bff;
+    color: white;
+    padding: 15px;
+    text-align: center;
+    font-weight: bold;
+    position: relative;
+    flex-shrink: 0;
+}
+
+#message-container {
+    flex-grow: 1;
+    padding: 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.message {
+    padding: 8px 12px;
+    border-radius: 18px;
+    margin-bottom: 10px;
+    max-width: 70%;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.ai-message {
+    background-color: #e9e9eb;
+    color: #000;
+    align-self: flex-start;
+    border-radius: 18px 18px 18px 5px;
+}
+
+.user-message {
+    background-color: #007bff;
+    color: #fff;
+    align-self: flex-end;
+    border-radius: 18px 18px 5px 18px;
+}
+
+#input-area {
+    display: flex;
+    padding: 10px;
+    border-top: 1px solid #e0e0e0;
+    flex-shrink: 0;
+}
+
+#chat-input {
+    flex-grow: 1;
+    border: 1px solid #ccc;
+    border-radius: 20px;
+    padding: 10px 15px;
+    font-size: 16px;
+    resize: none;
+}
+
+#send-button {
+    margin-left: 10px;
+    padding: 0 20px;
+    border: none;
+    background-color: #007bff;
+    color: white;
+    border-radius: 20px;
+    cursor: pointer;
+}
+
+#app-nav {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 50px;
+    background-color: #f7f7f7;
+    border-top: 1px solid #dcdcdc;
+    display: flex;
+    z-index: 10;
+}
+
+.nav-button {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    color: #8e8e93;
+    font-size: 14px;
+}
+.nav-button.active {
+    color: #007bff;
+}
+
+#posts-container {
+    flex-grow: 1;
+    padding: 10px;
+    overflow-y: auto;
+}
+.post {
+    background-color: #fff;
+    border-bottom: 1px solid #f0f0f0;
+    padding: 15px;
+    margin-bottom: 8px;
+}
+.post-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.post-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-right: 10px;
+}
+.post-author {
+    font-weight: bold;
+}
+.post-content {
+    line-height: 1.6;
+    font-size: 15px;
+}
+
+#suggestion-area {
+    padding: 5px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    border-top: 1px solid #e0e0e0;
+    flex-shrink: 0;
+}
+.suggestion-button {
+    background-color: #f0f2f5;
+    border: 1px solid #dcdcdc;
+    border-radius: 15px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+}
+.suggestion-button:hover {
+    background-color: #e0e2e5;
+}
+
+#toggle-suggestions-button {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: rgba(255, 255, 255, 0.2);
+    border: 1px solid white;
+    color: white;
+    border-radius: 5px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}
+#toggle-suggestions-button.disabled {
+    background-color: rgba(0, 0, 0, 0.2);
+    color: #ccc;
+}
+/* style.css (在文件末尾追加) */
+
+/* --- 设置页面样式 --- */
+#settings-form {
+    padding: 20px;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #333;
+}
+
+.form-group input,
+.form-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 14px;
+    box-sizing: border-box; /* 确保内边距不会让输入框超出容器 */
+}
+
+.form-group textarea {
+    resize: vertical; /* 允许用户垂直拖动改变大小 */
+    min-height: 80px;
+}
+
+#save-settings-button {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    background-color: #28a745; /* 绿色，表示保存成功 */
+    color: white;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+}
+/* style.css (在文件末尾追加) */
+
+/* --- 模型选择区域样式 --- */
+.model-selection-area {
+    display: flex;
+    gap: 10px; /* 在下拉菜单和按钮之间增加间距 */
+}
+
+#api-model-select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 14px;
+    box-sizing: border-box;
+    flex-grow: 1; /* 让下拉菜单占据大部分空间 */
+}
+
+#fetch-models-button {
+    padding: 0 20px;
+    border: none;
+    background-color: #007bff;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    flex-shrink: 0; /* 防止按钮被压缩 */
+}
