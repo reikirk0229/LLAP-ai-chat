@@ -1,4 +1,4 @@
-// script.js (最终修复版，增加了对Gemini空回复的安全检查)
+// script.js (最终发布版 - 无需 Live Server)
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -35,13 +35,13 @@ document.addEventListener('DOMContentLoaded', () => {
             apiUrlInput.placeholder = '例如: https://generativelanguage.googleapis.com/...';
             apiModelInput.classList.remove('hidden');
             apiModelSelect.classList.add('hidden');
-            fetchModelsButton.style.display = 'none'; // 直接隐藏
+            fetchModelsButton.style.display = 'none';
             apiModelInput.placeholder = '模型名通常已在URL中，此项可留空';
         } else if (type === 'openai_proxy') {
             apiUrlInput.placeholder = '例如: https://api.proxy.com/v1/chat/completions';
             apiModelInput.classList.add('hidden');
             apiModelSelect.classList.remove('hidden');
-            fetchModelsButton.style.display = 'inline-block'; // 显示
+            fetchModelsButton.style.display = 'inline-block';
         }
     }
 
@@ -65,16 +65,17 @@ document.addEventListener('DOMContentLoaded', () => {
         userPersonaInput.value = settings.userPersona;
         worldBookInput.value = settings.worldBook;
 
-        updateSettingsUI(settings.apiType); // 根据加载的类型更新UI
+        updateSettingsUI(settings.apiType);
 
         if (settings.apiType === 'openai_proxy') {
              if (settings.apiModel) {
                 apiModelSelect.innerHTML = `<option value="${settings.apiModel}">${settings.apiModel}</option>`;
+                apiModelSelect.value = settings.apiModel;
             } else {
                 apiModelSelect.innerHTML = `<option value="">-- 请先拉取模型 --</option>`;
             }
         } else {
-            apiModelInput.value = settings.apiModel; // Gemini 模式加载到输入框
+            apiModelInput.value = settings.apiModel;
         }
     }
 
@@ -103,7 +104,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const postButton = document.createElement('button');
     postButton.textContent = '发布';
-    postButton.style.position = 'absolute'; postButton.style.right = '10px'; postButton.style.top = '10px'; postButton.style.background = 'none'; postButton.style.border = '1px solid white'; postButton.style.color = 'white'; postButton.style.borderRadius = '5px'; postButton.style.cursor = 'pointer';
+    postButton.style.position = 'absolute';
+    postButton.style.right = '10px';
+    postButton.style.top = '10px';
+    postButton.style.background = 'none';
+    postButton.style.border = '1px solid white';
+    postButton.style.color = 'white';
+    postButton.style.borderRadius = '5px';
+    postButton.style.cursor = 'pointer';
     momentsHeader.appendChild(postButton);
     postButton.addEventListener('click', createNewPost);
 
@@ -184,30 +192,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 7. 动态拉取模型列表 ---
     async function fetchModels() {
+        const type = apiTypeSelect.value;
+        if (type !== 'openai_proxy') {
+            alert("Gemini 直连模式不需要在线拉取模型。");
+            return;
+        }
         const url = apiUrlInput.value.trim();
         const key = apiKeyInput.value.trim();
         if (!url || !key) {
-            alert('请先填写 API 地址和密钥！');
+            alert('请先填写 API 中转地址和密钥！');
             return;
         }
         fetchModelsButton.textContent = '拉取中...';
         fetchModelsButton.disabled = true;
 
-        const requestUrl = url.replace(/\/chat\/completions$/, '') + '/models';
-        const requestOptions = { method: 'GET', headers: { 'Authorization': `Bearer ${key}` } };
+        const modelsUrl = url.replace(/\/chat\/completions$/, '') + '/models';
 
         try {
-            const response = await fetch(requestUrl, requestOptions);
+            const response = await fetch(modelsUrl, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${key}` }
+            });
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error.message || JSON.stringify(errorData));
+                throw new Error(errorData.error.message || `HTTP 错误，状态码: ${response.status}`);
             }
             const data = await response.json();
+            
+            if (!data.data || !Array.isArray(data.data)) {
+                throw new Error("中转站返回的模型列表格式不正确。");
+            }
             const models = data.data.map(model => model.id);
             
             apiModelSelect.innerHTML = '';
             if (models.length > 0) {
-                models.forEach(modelId => {
+                models.sort().forEach(modelId => {
                     const option = document.createElement('option');
                     option.value = modelId;
                     option.textContent = modelId;
@@ -222,13 +241,14 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('模型列表已成功拉取！');
         } catch (error) {
             alert(`拉取模型失败: ${error.message}`);
+            apiModelSelect.innerHTML = '<option value="">拉取失败</option>';
         } finally {
             fetchModelsButton.textContent = '拉取';
             fetchModelsButton.disabled = false;
         }
     }
 
-    // --- 8. 通用AI请求函数 ---
+    // --- 8. 最终的、兼容的AI请求函数 ---
     async function getAiResponse(userText) {
         chatHistory.push({ role: 'user', content: userText });
         
@@ -238,35 +258,27 @@ document.addEventListener('DOMContentLoaded', () => {
         messageContainer.appendChild(loadingDiv);
         messageContainer.scrollTop = messageContainer.scrollHeight;
 
-        const finalPrompt = `
-            # 你的双重任务
-            你现在需要同时完成两个任务。
-            ## 任务1: 扮演AI助手
-            - 你的名字是"小梦"，人设是：${settings.aiPersona}
-            - 附加设定(世界书)：${settings.worldBook}
-            - 请根据下面的对话历史，以"小梦"的身份，对用户的最后一句话做出回应。
-            ## 任务2: 扮演用户本人，提供回复建议
-            - 用户的人设是：${settings.userPersona}
-            - 请你站在用户的角度，根据"小梦"即将给出的回复，为用户生成3条符合用户人设的、简短的、口语化的回复建议。
-            # 对话历史
-            ${chatHistory.map(msg => `${msg.role === 'user' ? '用户' : '小梦'}: ${msg.content}`).join('\n')}
-            # 输出格式要求
-            你的回复【必须且只能】是一个单一的、能被JSON解析的对象，格式如下：
-            {
-              "reply": "（这里是小梦的回复内容）",
-              "suggestions": [
-                "（这是第一条建议）",
-                "（这是第二条建议）",
-                "（这是第三条建议）"
-              ]
-            }
-        `;
-
         let requestUrl = settings.apiUrl;
         let requestOptions = {};
         
         try {
             if (settings.apiType === 'openai_proxy') {
+                const finalPrompt = `
+                    # 你的双重任务
+                    你现在需要同时完成两个任务。
+                    ## 任务1: 扮演AI助手
+                    - 你的名字是"小梦"，人设是：${settings.aiPersona}
+                    - 附加设定(世界书)：${settings.worldBook}
+                    - 请根据下面的对话历史，以"小梦"的身份，对用户的最后一句话做出回应。
+                    ## 任务2: 扮演用户本人，提供回复建议
+                    - 用户的人设是：${settings.userPersona}
+                    - 请你站在用户的角度，根据"小梦"即将给出的回复，为用户生成3条符合用户人设的、简短的、口语化的回复建议。
+                    # 对话历史
+                    ${chatHistory.map(msg => `${msg.role === 'user' ? '用户' : '小梦'}: ${msg.content}`).join('\n')}
+                    # 输出格式要求
+                    你的回复【必须且只能】是一个单一的、能被JSON解析的对象，格式如下：
+                    { "reply": "...", "suggestions": ["...", "...", "..."] }
+                `;
                 requestOptions = {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.apiKey}` },
@@ -276,56 +288,74 @@ document.addEventListener('DOMContentLoaded', () => {
                         response_format: { type: "json_object" }
                     })
                 };
+                const response = await fetch(requestUrl, requestOptions);
+                const data = await response.json();
+                if (!response.ok) { throw new Error(JSON.stringify(data.error || data)); }
+                
+                const responseText = data.choices[0].message.content;
+                const responseData = JSON.parse(responseText);
+
+                const aiText = responseData.reply;
+                const suggestions = responseData.suggestions;
+                chatHistory.push({ role: 'assistant', content: aiText });
+                loadingDiv.textContent = aiText;
+                if (isSuggestionEnabled && Array.isArray(suggestions)) {
+                    displaySuggestions(suggestions);
+                }
             } 
             else if (settings.apiType === 'gemini_direct') {
-                requestUrl = `${settings.apiUrl}?key=${settings.apiKey}`;
-                requestOptions = {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: finalPrompt }] }],
+                // Gemini 直连：分两步走
+                const geminiReplyPrompt = `
+                    # 你的角色是：${settings.aiPersona}
+                    # 你的附加设定是：${settings.worldBook}
+                    # 以下是对话历史:
+                    ${chatHistory.map(msg => `${msg.role === 'user' ? '用户' : '你'}: ${msg.content}`).join('\n')}
+                    请根据以上信息，对用户的最后一句话做出回应。
+                `;
+                const replyPayload = { contents: [{ parts: [{ text: geminiReplyPrompt }] }] };
+                const replyResponse = await fetch(`${settings.apiUrl}?key=${settings.apiKey}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(replyPayload)
+                });
+                const replyData = await replyResponse.json();
+                if (!replyResponse.ok) throw new Error(JSON.stringify(replyData.error || replyData));
+                
+                let aiText;
+                if (replyData.candidates && replyData.candidates[0] && replyData.candidates[0].content && replyData.candidates[0].content.parts && replyData.candidates[0].content.parts[0] && replyData.candidates[0].content.parts[0].text) {
+                    aiText = replyData.candidates[0].content.parts[0].text;
+                } else {
+                    const finishReason = replyData.candidates?.[0]?.finishReason;
+                    if (finishReason) { throw new Error(`AI 提前终止了回复，原因: ${finishReason}`); }
+                    throw new Error("Gemini 直连没有返回回复内容。");
+                }
+                
+                loadingDiv.textContent = aiText;
+                chatHistory.push({ role: 'assistant', content: aiText });
+
+                // 如果开启了建议，则进行第二次调用
+                if (isSuggestionEnabled) {
+                    const suggestionPrompt = `
+                        # 你的角色: 扮演用户本人。
+                        # 用户的人设: ${settings.userPersona}
+                        # 对话情景: AI助手刚刚对你说了下面这句话： "${aiText}"
+                        # 你的任务: 请根据你的人设，生成3条简短、口语化、且风格不同的回复。
+                        # 输出格式要求: 你的回复【必须且只能】是一个JSON数组，里面包含三个字符串。例如： ["好的，谢谢你呀！", "嗯嗯，让我想想...", "是这样吗？"]
+                    `;
+                    const suggestionPayload = {
+                        contents: [{ parts: [{ text: suggestionPrompt }] }],
                         generationConfig: { responseMimeType: "application/json" }
-                    })
-                };
-            }
-
-            const response = await fetch(requestUrl, requestOptions);
-            const data = await response.json();
-
-            if (!response.ok) { 
-                throw new Error(JSON.stringify(data.error || data)); 
-            }
-
-            let responseText = '';
-            if (settings.apiType === 'openai_proxy') {
-                if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
-                    responseText = data.choices[0].message.content;
-                } else {
-                    throw new Error("OpenAI 返回了空的或无效的数据结构。");
-                }
-            } 
-            else if (settings.apiType === 'gemini_direct') {
-                if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) {
-                    responseText = data.candidates[0].content.parts[0].text;
-                } else {
-                    const finishReason = data.candidates?.[0]?.finishReason;
-                    if (finishReason) {
-                        throw new Error(`AI 提前终止了回复，原因: ${finishReason} (通常是安全设置拦截)`);
+                    };
+                    const suggestionResponse = await fetch(`${settings.apiUrl}?key=${settings.apiKey}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(suggestionPayload)
+                    });
+                    const suggestionData = await suggestionResponse.json();
+                    if (suggestionData.candidates && suggestionData.candidates[0]) {
+                        const suggestionsText = suggestionData.candidates[0].content.parts[0].text;
+                        const suggestions = JSON.parse(suggestionsText);
+                        if (Array.isArray(suggestions)) {
+                            displaySuggestions(suggestions);
+                        }
                     }
-                    throw new Error("Gemini 返回了空的或无效的数据结构。");
                 }
-            }
-            
-            const responseData = JSON.parse(responseText);
-            const aiText = responseData.reply;
-            const suggestions = responseData.suggestions;
-
-            chatHistory.push({ role: 'assistant', content: aiText });
-            loadingDiv.textContent = aiText;
-
-            if (isSuggestionEnabled && Array.isArray(suggestions)) {
-                displaySuggestions(suggestions);
-                messageContainer.scrollTop = messageContainer.scrollHeight;
             }
 
         } catch (error) {
