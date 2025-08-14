@@ -1,4 +1,4 @@
-/* style.css (Pro版) */
+/* style.css (Pro V7 - QQ UI版) */
 :root {
     --primary-color: #007bff;
     --background-light: #f0f2f5;
@@ -7,6 +7,8 @@
     --text-light: #fff;
     --border-color: #ccc;
     --shadow-color: rgba(0,0,0,0.1);
+    --qq-blue: #0099ff;
+    --bubble-gray: #e9e9eb;
 }
 
 body {
@@ -33,20 +35,11 @@ body {
     position: relative;
 }
 
-.view {
-    height: 100%;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-}
+.view { height: 100%; width: 100%; display: flex; flex-direction: column; }
+.hidden { display: none !important; }
 
-.hidden {
-    display: none !important;
-}
-
-/* --- 通用头部 --- */
 .header {
-    background-color: var(--primary-color);
+    background-color: var(--qq-blue);
     color: var(--text-light);
     padding: 15px;
     text-align: center;
@@ -57,19 +50,13 @@ body {
     justify-content: center;
     align-items: center;
 }
-.header > span {
-    font-size: 18px;
-}
+.header > #ai-name-header { font-size: 18px; }
 
-/* --- 聊天窗口 --- */
 #chat-header-info {
     position: absolute;
     left: 15px;
     top: 50%;
     transform: translateY(-50%);
-    display: flex;
-    align-items: center;
-    gap: 10px;
 }
 #message-counter {
     color: #f0f0f0;
@@ -78,7 +65,9 @@ body {
     padding: 3px 8px;
     border-radius: 10px;
 }
-#summarize-chat-button, #toggle-suggestions-button {
+#toggle-suggestions-button {
+    position: absolute;
+    right: 15px;
     background: none;
     border: 1px solid var(--text-light);
     color: var(--text-light);
@@ -86,292 +75,117 @@ body {
     padding: 4px 8px;
     font-size: 12px;
     cursor: pointer;
-    transition: background-color 0.2s;
-}
-#summarize-chat-button:hover, #toggle-suggestions-button:hover {
-    background-color: rgba(255, 255, 255, 0.2);
-}
-#toggle-suggestions-button {
-    position: absolute;
-    right: 15px;
-}
-#toggle-suggestions-button.disabled {
-    background-color: rgba(0, 0, 0, 0.2);
-    color: #ccc;
-    border-color: #888;
 }
 
+/* --- 【全新】QQ风格聊天UI --- */
 #message-container {
     flex-grow: 1;
-    padding: 10px;
+    padding: 15px 10px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+    gap: 15px; /* 消息行之间的间距 */
 }
+
+.message-row {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+}
+
+.avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.message-content {
+    display: flex;
+    flex-direction: column;
+    gap: 3px; /* 连续消息气泡的间距 */
+    max-width: calc(100% - 50px);
+}
+
 .message {
-    padding: 8px 12px;
-    border-radius: 18px;
-    margin-bottom: 10px;
-    max-width: 75%;
+    padding: 10px 12px;
+    border-radius: 10px;
     line-height: 1.5;
     word-break: break-word;
+    position: relative;
 }
-.ai-message {
-    background-color: #e9e9eb;
+
+/* AI消息在左边 */
+.ai-row {
+    justify-content: flex-start;
+}
+.ai-row .message {
+    background-color: var(--bubble-gray);
     color: var(--text-dark);
     align-self: flex-start;
-    border-radius: 18px 18px 18px 5px;
 }
-.user-message {
-    background-color: var(--primary-color);
+.ai-row .message::before { /* 气泡小三角 */
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: 12px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 6px 8px 6px 0;
+    border-color: transparent var(--bubble-gray) transparent transparent;
+}
+
+/* 用户消息在右边 */
+.user-row {
+    justify-content: flex-end;
+}
+.user-row .avatar { order: 2; }
+.user-row .message-content { order: 1; }
+.user-row .message {
+    background-color: var(--qq-blue);
     color: var(--text-light);
     align-self: flex-end;
-    border-radius: 18px 18px 5px 18px;
 }
-#input-area {
-    display: flex;
-    padding: 10px;
-    border-top: 1px solid #e0e0e0;
-    flex-shrink: 0;
-    gap: 10px;
-}
-#chat-input {
-    flex-grow: 1;
-    border: 1px solid var(--border-color);
-    border-radius: 20px;
-    padding: 10px 15px;
-    font-size: 16px;
-    resize: none;
-}
-#send-button {
-    border: none;
-    background-color: var(--primary-color);
-    color: var(--text-light);
-    border-radius: 20px;
-    cursor: pointer;
-    font-weight: bold;
-    padding: 0 20px;
-}
-#suggestion-area {
-    padding: 5px 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    border-top: 1px solid #e0e0e0;
-    flex-shrink: 0;
-}
-.suggestion-button {
-    background-color: #f0f2f5;
-    border: 1px solid #dcdcdc;
-    border-radius: 15px;
-    padding: 6px 12px;
-    font-size: 13px;
-    cursor: pointer;
-}
-
-/* --- 导航栏 --- */
-#app-nav {
+.user-row .message::after { /* 气泡小三角 */
+    content: '';
     position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 50px;
-    background-color: #f7f7f7;
-    border-top: 1px solid #dcdcdc;
-    display: flex;
-    z-index: 10;
-}
-.nav-button {
-    flex: 1;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-    color: #8e8e93;
-    font-size: 14px;
-}
-.nav-button.active {
-    color: var(--primary-color);
+    right: -6px;
+    top: 12px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 6px 0 6px 8px;
+    border-color: transparent transparent transparent var(--qq-blue);
 }
 
-/* --- 设置页 --- */
-#settings-form {
-    padding: 20px;
-    overflow-y: auto;
-    flex-grow: 1;
-}
-.form-group {
-    margin-bottom: 20px;
-}
-.form-group label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: bold;
-    color: #333;
-}
-.form-group input[type="text"],
-.form-group input[type="password"],
-.form-group input[type="number"],
-.form-group select,
-.form-group textarea {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid var(--border-color);
-    border-radius: 5px;
-    font-size: 14px;
-    box-sizing: border-box;
-}
-.form-group textarea {
-    resize: vertical;
-    min-height: 80px;
-}
-.model-selection-area {
-    display: flex;
-    gap: 10px;
-}
-#api-model-select {
-    flex-grow: 1;
-}
-#fetch-models-button {
-    padding: 0 20px;
-    border: none;
-    background-color: var(--primary-color);
-    color: var(--text-light);
-    border-radius: 5px;
-    cursor: pointer;
-    flex-shrink: 0;
-}
-#save-settings-button {
-    width: 100%;
-    padding: 12px;
-    border: none;
-    background-color: #28a745;
-    color: white;
-    border-radius: 5px;
-    font-size: 16px;
-    cursor: pointer;
+/* 连续消息隐藏头像 */
+.message-row.consecutive .avatar {
+    visibility: hidden;
 }
 
-/* --- 世界书编辑器样式 --- */
-#world-book-editor .entry {
-    background-color: #f9f9f9;
-    border: 1px solid #e0e0e0;
-    border-radius: 5px;
-    padding: 10px;
-    margin-bottom: 10px;
-}
-#world-book-editor .entry-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-#world-book-editor .entry-header input {
-    flex-grow: 1;
-    font-weight: bold;
-    border: none;
-    background: none;
-    border-bottom: 1px dashed var(--border-color);
-    padding: 4px;
-}
-#world-book-editor .delete-entry-button {
-    background: none;
-    border: none;
-    color: #f44336;
-    font-size: 20px;
-    cursor: pointer;
-    padding: 0 5px;
-}
-#world-book-editor .entry textarea {
-    width: 100%;
-    box-sizing: border-box;
-    border: 1px solid #e0e0e0;
-    min-height: 60px;
-    font-size: 13px;
-}
-#add-world-book-entry-button {
-    width: 100%;
-    padding: 10px;
-    background-color: #e7e7e7;
-    border: 1px dashed var(--border-color);
-    cursor: pointer;
-}
 
-/* --- 自定义弹窗样式 --- */
-.modal-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.6);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-}
-.modal-content {
-    background-color: var(--background-white);
-    padding: 20px;
-    border-radius: 8px;
-    width: 90%;
-    max-width: 340px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.25);
-    display: flex;
-    flex-direction: column;
-}
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 10px;
-    margin-bottom: 15px;
-}
-.modal-header h3 {
-    margin: 0;
-}
-.close-button {
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    color: #aaa;
-}
-.modal-body {
-    max-height: 300px;
-    overflow-y: auto;
-}
-.modal-body pre {
-    white-space: pre-wrap;
-    word-break: break-word;
-    background-color: #f6f8fa;
-    padding: 10px;
-    border-radius: 5px;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 13px;
-}
-.modal-footer {
-    display: flex;
-    gap: 10px;
-    margin-top: 20px;
-    border-top: 1px solid #eee;
-    padding-top: 15px;
-}
-.modal-footer button {
-    flex: 1;
-    padding: 10px;
-    border-radius: 5px;
-    border: 1px solid var(--border-color);
-    cursor: pointer;
-}
-#copy-summary-button {
-    background-color: var(--primary-color);
-    color: var(--text-light);
-    border-color: var(--primary-color);
-}
-#save-to-memory-button {
-    background-color: #28a745;
-    color: var(--text-light);
-    border-color: #28a745;
-}
+/* --- 输入区 --- */
+#input-area { display: flex; padding: 10px; border-top: 1px solid #e0e0e0; flex-shrink: 0; gap: 10px; align-items: flex-end; }
+#chat-input { flex-grow: 1; border: 1px solid var(--border-color); border-radius: 12px; padding: 10px 15px; font-size: 16px; resize: none; max-height: 100px; overflow-y: auto; }
+#send-button { border: none; background-color: var(--qq-blue); color: var(--text-light); border-radius: 8px; cursor: pointer; font-weight: bold; padding: 10px 20px; flex-shrink: 0; }
+
+#suggestion-area { padding: 5px 10px; display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid #e0e0e0; flex-shrink: 0; align-items: center; }
+.suggestion-button { background-color: #f0f2f5; border: 1px solid #dcdcdc; border-radius: 15px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+.refresh-suggestions-button { background-color: #d0e7ff; color: var(--qq-blue); border: 1px solid var(--qq-blue); border-radius: 50%; width: 28px; height: 28px; font-size: 18px; font-weight: bold; cursor: pointer; margin-left: auto; display: flex; justify-content: center; align-items: center; padding-bottom: 2px; }
+.refresh-suggestions-button:hover { background-color: #b9d9ff; }
+
+/* --- 其他页面样式保持不变 --- */
+#app-nav { position: absolute; bottom: 0; left: 0; width: 100%; height: 50px; background-color: #f7f7f7; border-top: 1px solid #dcdcdc; display: flex; z-index: 10; }
+.nav-button { flex: 1; display: flex; justify-content: center; align-items: center; cursor: pointer; color: #8e8e93; font-size: 14px; }
+.nav-button.active { color: var(--qq-blue); }
+#settings-form { padding: 20px; overflow-y: auto; flex-grow: 1; }
+.form-group { margin-bottom: 20px; }
+.form-group label { display: block; margin-bottom: 8px; font-weight: bold; color: #333; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 5px; font-size: 14px; box-sizing: border-box; }
+.model-selection-area { display: flex; gap: 10px; }
+#fetch-models-button { padding: 0 20px; border: none; background-color: var(--qq-blue); color: var(--text-light); border-radius: 5px; cursor: pointer; flex-shrink: 0; }
+#save-settings-button { width: 100%; padding: 12px; border: none; background-color: #28a745; color: white; border-radius: 5px; font-size: 16px; cursor: pointer; }
+#world-book-editor .entry { background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 5px; padding: 10px; margin-bottom: 10px; }
+#add-world-book-entry-button { width: 100%; padding: 10px; background-color: #e7e7e7; border: 1px dashed var(--border-color); cursor: pointer; }
