@@ -315,28 +315,45 @@ if (settings.apiType === 'openai_proxy' && !requestUrl.endsWith('/chat/completio
                 const responseText = data.choices[0].message.content;
 
                 // --- 【修正】增加健壮性，使用 try-catch 解析JSON ---
-                try {
-                    const responseData = JSON.parse(responseText);
-                    const aiText = responseData.reply;
-                    const suggestions = responseData.suggestions;
+// 这是【全新升级版】的代码，请复制替换
+try {
+    // --- 【升级】智能拆包：从回复中提取出JSON部分 ---
+    const jsonMatch = responseText.match(/{[\s\S]*}/);
+    let responseData;
 
-                    if (!aiText) {
-                        throw new Error("AI返回的JSON中缺少 'reply' 字段。");
-                    }
+    if (jsonMatch) {
+        // 如果找到了被包裹的JSON，就解析它
+        responseData = JSON.parse(jsonMatch);
+    } else {
+        // 如果没找到，说明AI可能返回了非JSON的普通文本
+        throw new Error("AI回复不是预期的JSON格式。");
+    }
+    // ---------------------------------------------
 
-                    chatHistory.push({ role: 'assistant', content: aiText });
-                    loadingDiv.textContent = aiText;
-                    if (isSuggestionEnabled && Array.isArray(suggestions)) {
-                        displaySuggestions(suggestions);
-                    }
-                } catch (parseError) {
-                    // 如果解析失败，说明AI没有按要求返回JSON，直接把原文显示出来
-                    console.error('JSON 解析失败:', parseError);
-                    console.error('AI 返回的原始文本:', responseText);
-                    loadingDiv.textContent = responseText; // 直接显示原始内容
-                    chatHistory.push({ role: 'assistant', content: responseText });
-                    // 此时不显示建议按钮，因为无法解析
-                }
+    const aiText = responseData.reply;
+    const suggestions = responseData.suggestions;
+
+    if (!aiText) {
+        throw new Error("AI返回的JSON中缺少 'reply' 字段。");
+    }
+
+    chatHistory.push({ role: 'assistant', content: aiText });
+    loadingDiv.textContent = aiText;
+    if (isSuggestionEnabled && Array.isArray(suggestions)) {
+        displaySuggestions(suggestions);
+    }
+
+} catch (error) {
+    // 如果上面的任何一步出错了（比如没找到JSON，或JSON内容不对）
+    // 我们就放弃解析，直接把AI返回的原始文本显示出来，确保程序不崩溃
+    console.error('处理AI回复时出错:', error);
+    console.error('AI 返回的原始文本:', responseText);
+    
+    // 直接显示最干净的原始文本，去掉可能存在的包装
+    const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    loadingDiv.textContent = cleanText; 
+    chatHistory.push({ role: 'assistant', content: cleanText });
+}
             } 
             else if (settings.apiType === 'gemini_direct') {
                 // Gemini 直连：分两步走
