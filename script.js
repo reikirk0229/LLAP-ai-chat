@@ -258,7 +258,20 @@ document.addEventListener('DOMContentLoaded', () => {
         messageContainer.appendChild(loadingDiv);
         messageContainer.scrollTop = messageContainer.scrollHeight;
 
-        let requestUrl = settings.apiUrl;
+// --- 【智能修正】自动补全API地址 ---
+let requestUrl = settings.apiUrl;
+// 如果是OpenAI中转站类型，并且用户填写的地址结尾不是 /chat/completions
+if (settings.apiType === 'openai_proxy' && !requestUrl.endsWith('/chat/completions')) {
+    // 如果地址结尾是 /，就直接拼接
+    if (requestUrl.endsWith('/')) {
+        requestUrl = requestUrl + 'chat/completions';
+    } 
+    // 否则，先加一个 / 再拼接，防止粘在一起
+    else {
+        requestUrl = requestUrl + '/chat/completions';
+    }
+}
+// ---------------------------------
         let requestOptions = {};
         
         try {
