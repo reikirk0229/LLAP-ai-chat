@@ -1,4 +1,4 @@
-// script.js (最终修正版 - 修复了启动错误和逻辑问题)
+// script.js (Pro V3 - 真实对话模拟版)
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -8,11 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const sendButton = document.getElementById('send-button');
     const navButtons = document.querySelectorAll('.nav-button');
     const suggestionArea = document.getElementById('suggestion-area');
-    const postsContainer = document.getElementById('posts-container');
     const momentsHeader = document.querySelector('#moments-window .header');
     const toggleSuggestionsButton = document.getElementById('toggle-suggestions-button');
-    
-    // 设置页面的演员
     const apiTypeSelect = document.getElementById('api-type-select');
     const apiUrlInput = document.getElementById('api-url-input');
     const apiModelInput = document.getElementById('api-model-input');
@@ -22,331 +19,43 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveSettingsButton = document.getElementById('save-settings-button');
     const aiPersonaInput = document.getElementById('ai-persona-input');
     const userPersonaInput = document.getElementById('user-persona-input');
-    const worldBookInput = document.getElementById('world-book-input');
-    
-    // 【新功能】演员
     const contextLengthInput = document.getElementById('context-length-input');
     const messageCounter = document.getElementById('message-counter');
     const summarizeChatButton = document.getElementById('summarize-chat-button');
+    const characterMemoryLabel = document.getElementById('character-memory-label');
+    const characterMemoryInput = document.getElementById('character-memory-input');
+    const worldBookEditor = document.getElementById('world-book-editor');
+    const addWorldBookEntryButton = document.getElementById('add-world-book-entry-button');
+    const summaryModal = document.getElementById('summary-modal');
+    const closeModalButton = document.getElementById('close-modal-button');
+    const summaryOutput = document.getElementById('summary-output');
+    const copySummaryButton = document.getElementById('copy-summary-button');
+    const saveToMemoryButton = document.getElementById('save-to-memory-button');
 
     // --- 2. 定义状态和设置变量 ---
     let isSuggestionEnabled = true;
     let chatHistory = [];
     let settings = {};
+    let worldBookData = [];
 
-    // --- 3. UI更新与功能函数 ---
-    function updateSettingsUI(type) {
-        if (type === 'gemini_direct') {
-            apiUrlInput.placeholder = '例如: https://generativelanguage.googleapis.com/...';
-            apiModelInput.classList.remove('hidden');
-            apiModelSelect.classList.add('hidden');
-            fetchModelsButton.style.display = 'none';
-            apiModelInput.placeholder = '模型名通常已在URL中，此项可留空';
-        } else if (type === 'openai_proxy') {
-            apiUrlInput.placeholder = '例如: https://api.proxy.com/v1';
-            apiModelInput.classList.add('hidden');
-            apiModelSelect.classList.remove('hidden');
-            fetchModelsButton.style.display = 'inline-block';
-        }
-    }
+    // --- 3. 核心功能函数 ---
 
-    function updateMessageCounter() {
-        messageCounter.textContent = `对话：${chatHistory.length}`;
-    }
-
-    // --- 4. 加载和保存函数 ---
-    function loadSettings() {
-        const savedSettings = JSON.parse(localStorage.getItem('myAiChatSettings')) || {};
-        settings = {
-            apiType: savedSettings.apiType || 'gemini_direct',
-            apiUrl: savedSettings.apiUrl || '',
-            apiModel: savedSettings.apiModel || '',
-            apiKey: savedSettings.apiKey || '',
-            contextLength: savedSettings.contextLength || 10,
-            aiPersona: savedSettings.aiPersona || '你是一个名叫"小梦"的AI助手，性格活泼可爱，喜欢用表情符号。',
-            userPersona: savedSettings.userPersona || '我是一个性格有点内向、说话温柔、喜欢思考的大学生。',
-            worldBook: savedSettings.worldBook || ''
-        };
-        
-        apiTypeSelect.value = settings.apiType;
-        apiUrlInput.value = settings.apiUrl;
-        apiKeyInput.value = settings.apiKey;
-        contextLengthInput.value = settings.contextLength;
-        aiPersonaInput.value = settings.aiPersona;
-        userPersonaInput.value = settings.userPersona;
-        worldBookInput.value = settings.worldBook;
-
-        updateSettingsUI(settings.apiType);
-
-        if (settings.apiType === 'openai_proxy') {
-             if (settings.apiModel) {
-                apiModelSelect.innerHTML = `<option value="${settings.apiModel}">${settings.apiModel}</option>`;
-                apiModelSelect.value = settings.apiModel;
-            } else {
-                apiModelSelect.innerHTML = `<option value="">-- 请先拉取模型 --</option>`;
-            }
-        } else {
-            apiModelInput.value = settings.apiModel;
-        }
-    }
-
-    function saveSettings() {
-        const currentType = apiTypeSelect.value;
-        settings = {
-            apiType: currentType,
-            apiUrl: apiUrlInput.value.trim(),
-            apiModel: currentType === 'openai_proxy' ? apiModelSelect.value : apiModelInput.value.trim(),
-            apiKey: apiKeyInput.value.trim(),
-            contextLength: parseInt(contextLengthInput.value, 10),
-            aiPersona: aiPersonaInput.value.trim(),
-            userPersona: userPersonaInput.value.trim(),
-            worldBook: worldBookInput.value.trim()
-        };
-        localStorage.setItem('myAiChatSettings', JSON.stringify(settings));
-        alert('设置已保存！');
-    }
-
-    // --- 5. 绑定所有事件 ---
-    apiTypeSelect.addEventListener('change', () => updateSettingsUI(apiTypeSelect.value));
-    saveSettingsButton.addEventListener('click', saveSettings);
-    fetchModelsButton.addEventListener('click', fetchModels);
-    sendButton.addEventListener('click', sendMessage);
-    chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }});
-    navButtons.forEach(button => button.addEventListener('click', () => switchToView(button.dataset.view)));
-    summarizeChatButton.addEventListener('click', summarizeConversation);
-
-    const postButton = document.createElement('button');
-    postButton.textContent = '发布';
-    postButton.style.cssText = 'position: absolute; right: 10px; top: 10px; background: none; border: 1px solid white; color: white; border-radius: 5px; cursor: pointer;';
-    momentsHeader.appendChild(postButton);
-    postButton.addEventListener('click', createNewPost);
-
-    toggleSuggestionsButton.addEventListener('click', () => {
-        isSuggestionEnabled = !isSuggestionEnabled;
-        toggleSuggestionsButton.textContent = isSuggestionEnabled ? '关闭建议' : '开启建议';
-        toggleSuggestionsButton.classList.toggle('disabled', !isSuggestionEnabled);
-        if (!isSuggestionEnabled) {
-            suggestionArea.innerHTML = '';
-            suggestionArea.style.display = 'none';
-        }
-    });
-
-    // --- 6. 定义核心功能函数 ---
-    function sendMessage() {
-        const userText = chatInput.value.trim();
-        if (userText === '') return;
-        
-        if (!settings.apiKey || !settings.apiUrl) {
-            alert("请先在'设置'页面填写 API 地址和密钥！");
-            switchToView('settings-window');
-            return;
-        }
-        if (settings.apiType === 'openai_proxy' && !settings.apiModel) {
-            alert("请为 OpenAI/中转站 类型选择一个模型！");
-            switchToView('settings-window');
-            return;
-        }
-        
-        suggestionArea.innerHTML = '';
-        suggestionArea.style.display = 'none';
-        
-        displayMessage(userText, 'user');
-        getAiResponse(userText); 
-    }
+    const sleep = ms => new Promise(res => setTimeout(res, ms));
 
     function displayMessage(text, role) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${role}-message`;
         messageDiv.textContent = text;
         messageContainer.appendChild(messageDiv);
-        
-        if (role === 'ai') {
-            messageDiv.classList.add('ai-message');
-        }
 
         chatHistory.push({ role: (role === 'user' ? 'user' : 'assistant'), content: text });
         updateMessageCounter();
         
-        if (role === 'user') {
-            chatInput.value = '';
-        }
-
+        if (role === 'user') chatInput.value = '';
         messageContainer.scrollTop = messageContainer.scrollHeight;
     }
 
-    function switchToView(viewId) {
-        document.querySelectorAll('.view').forEach(view => view.classList.add('hidden'));
-        document.getElementById(viewId).classList.remove('hidden');
-        navButtons.forEach(button => {
-            button.classList.toggle('active', button.dataset.view === viewId);
-        });
-    }
-
-    function createNewPost() {
-        const postContent = prompt("分享你的新鲜事...");
-        if (postContent && postContent.trim() !== '') {
-            const postDiv = document.createElement('div');
-            postDiv.className = 'post';
-            postDiv.innerHTML = `<div class="post-header"><img class="post-avatar" src="https://i.postimg.cc/cLPP10Vm/4.jpg" alt="my-avatar"><span class="post-author">我</span></div><div class="post-content">${postContent}</div>`;
-            postsContainer.prepend(postDiv);
-        }
-    }
-
-    function displaySuggestions(suggestions) {
-        suggestionArea.innerHTML = '';
-        suggestionArea.style.display = 'flex';
-        suggestions.forEach(text => {
-            const button = document.createElement('button');
-            button.className = 'suggestion-button';
-            button.textContent = text;
-            button.addEventListener('click', () => {
-                suggestionArea.innerHTML = '';
-                suggestionArea.style.display = 'none';
-                displayMessage(text, 'user');
-                getAiResponse(text);
-            });
-            suggestionArea.appendChild(button);
-        });
-    }
-
-    // --- 7. 动态拉取模型列表 ---
-    async function fetchModels() {
-        const type = apiTypeSelect.value;
-        if (type !== 'openai_proxy') {
-            alert("Gemini 直连模式不需要在线拉取模型。");
-            return;
-        }
-        const url = apiUrlInput.value.trim();
-        const key = apiKeyInput.value.trim();
-        if (!url || !key) {
-            alert('请先填写 API 中转地址和密钥！');
-            return;
-        }
-        fetchModelsButton.textContent = '拉取中...';
-        fetchModelsButton.disabled = true;
-
-        const modelsUrl = url.replace(/\/chat\/completions$/, '') + '/models';
-
-        try {
-            const response = await fetch(modelsUrl, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${key}` }
-            });
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error.message || `HTTP 错误: ${response.status}`);
-            }
-            const data = await response.json();
-            if (!data.data || !Array.isArray(data.data)) {
-                throw new Error("中转站返回的模型列表格式不正确。");
-            }
-            const models = data.data.map(model => model.id);
-            apiModelSelect.innerHTML = '';
-            if (models.length > 0) {
-                models.sort().forEach(modelId => {
-                    const option = document.createElement('option');
-                    option.value = modelId;
-                    option.textContent = modelId;
-                    apiModelSelect.appendChild(option);
-                });
-                if (settings.apiModel && models.includes(settings.apiModel)) {
-                    apiModelSelect.value = settings.apiModel;
-                }
-            } else {
-                apiModelSelect.innerHTML = '<option value="">未找到可用模型</option>';
-            }
-            alert('模型列表已成功拉取！');
-        } catch (error) {
-            alert(`拉取模型失败: ${error.message}`);
-            apiModelSelect.innerHTML = '<option value="">拉取失败</option>';
-        } finally {
-            fetchModelsButton.textContent = '拉取';
-            fetchModelsButton.disabled = false;
-        }
-    }
-
-    // --- 8. 一键总结对话 ---
-    async function summarizeConversation() {
-        summarizeChatButton.textContent = '总结中...';
-        summarizeChatButton.disabled = true;
-    
-        const memoryDepth = settings.contextLength;
-        const recentHistory = chatHistory.slice(-memoryDepth);
-    
-        if (recentHistory.length === 0) {
-            alert("对话内容太少，无法总结。");
-            summarizeChatButton.textContent = '总结对话';
-            summarizeChatButton.disabled = false;
-            return;
-        }
-    
-        const summaryPrompt = `
-# 任务：对话总结员
-请根据“对话历史”，总结成一份严格的YAML格式文档。
-# 要求：
-- **客观陈述**：仅陈述事实，不加主观评价。
-- **简洁清晰**：使用最简练的语言。
-- **保留关键信息**：保留关键事件、重要细节和明确意图。
-- **突出转折点**：体现对话中的话题或关系转变。
-- **不回避敏感内容**：如实记录任何冲突或分歧。
-# 对话历史：
-${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : 'AI'}: ${msg.content}`).join('\n')}
-# 输出格式：
-你的回复【必须且只能】是一段纯粹的YAML代码，不要任何解释或\`\`\`包裹。格式如下：
-event_time: "${new Date().toLocaleString('zh-CN')}"
-location: "线上聊天"
-key_content: |
-  - [事件点1] 用户首先...
-  - [事件点2] AI回应...
-  - [转折点] 双方话题/情绪发生转变...
-  - [事件点3] 双方达成了关于...的共识/分歧。`;
-        
-        let summaryText = '总结失败，请检查控制台。';
-        try {
-            let requestUrl = settings.apiUrl;
-            let response;
-    
-            if (settings.apiType === 'openai_proxy') {
-                if (!requestUrl.endsWith('/chat/completions')) {
-                    requestUrl = requestUrl.endsWith('/') ? requestUrl + 'chat/completions' : requestUrl + '/chat/completions';
-                }
-                response = await fetch(requestUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.apiKey}` },
-                    body: JSON.stringify({ model: settings.apiModel, messages: [{ role: 'user', content: summaryPrompt }] })
-                });
-                if (!response.ok) throw new Error(await response.text());
-                const data = await response.json();
-                summaryText = data.choices[0].message.content;
-    
-            } else if (settings.apiType === 'gemini_direct') {
-                response = await fetch(`${settings.apiUrl}?key=${settings.apiKey}`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ contents: [{ parts: [{ text: summaryPrompt }] }] })
-                });
-                if (!response.ok) throw new Error(JSON.stringify(await response.json()));
-                const data = await response.json();
-                summaryText = data.candidates[0].content.parts[0].text;
-            }
-    
-            const userChoice = prompt("对话总结 (YAML格式):\n\n" + summaryText + "\n\n你可以直接复制上面的文本。\n如果想将此总结追加到“世界书”，请点击“确定”。");
-    
-            if (userChoice !== null) {
-                worldBookInput.value += `\n\n# --- 对话总结于 ${new Date().toLocaleString('zh-CN')} ---\n` + summaryText;
-                alert("已追加到“设置”页面的“附加设定(世界书)”中！");
-            }
-    
-        } catch (error) {
-            console.error("总结失败:", error);
-            alert("总结失败，错误信息: " + error.message);
-        } finally {
-            summarizeChatButton.textContent = '总结对话';
-            summarizeChatButton.disabled = false;
-        }
-    }
-    
-    // --- 9. 最终的、兼容的AI请求函数 ---
-    async function getAiResponse(userText) {
+    async function getAiResponse() {
         const loadingDiv = document.createElement('div');
         loadingDiv.className = 'message ai-message';
         loadingDiv.textContent = '对方正在输入...';
@@ -355,58 +64,76 @@ key_content: |
 
         const memoryDepth = settings.contextLength;
         const recentHistory = chatHistory.slice(-memoryDepth);
+        const worldBookString = serializeWorldBook();
+        const characterMemoryString = settings.characterMemory;
+        const aiName = settings.aiPersona.split('\n')[0].trim() || 'AI';
+        const fullPersona = `${settings.aiPersona}\n\n[这是该角色的专属记忆，请在对话中参考]\n${characterMemoryString}`;
 
-        let requestUrl = settings.apiUrl;
-        
         try {
-            if (settings.apiType === 'openai_proxy') {
-                if (!requestUrl.endsWith('/chat/completions')) {
-                    requestUrl = requestUrl.endsWith('/') ? requestUrl + '/chat/completions' : requestUrl + '/chat/completions';
-                }
-                const finalPrompt = `
-# 你的双重任务
+            let requestUrl = settings.apiUrl;
+            let response;
+            
+            // 【全新】修改后的Prompt，要求AI像真人一样分多条回复
+            const finalPrompt = `# 你的双重任务
 ## 任务1: 扮演AI助手
-- 你的名字是"小梦"，人设是：${settings.aiPersona}
-- 附加设定(世界书)：${settings.worldBook}
-- 请根据下面的对话历史，以"小梦"的身份，对用户的最后一句话做出回应。
+- 你的名字是"${aiName}"，你的人设(包括角色记忆)是：${fullPersona}
+- 附加设定(世界书)：${worldBookString}
+- **行为准则1**: 你的回复必须模拟真实的聊天软件（如微信/QQ），将一个完整的思想拆分成【一句或多句】独立的短消息来发送。
+- **行为准则2**: 你的回复中【绝对不能】包含任何括号内的动作、神态、或环境描写，例如 \`*...*\` 或 \`(...)\`。只输出纯粹的对话内容。
+- 请根据下面的对话历史，以你的身份回应用户。
+
 ## 任务2: 扮演用户本人，提供回复建议
 - 用户的人设是：${settings.userPersona}
-- 请你站在用户的角度，为用户生成3条符合其人设的、简短的回复建议。
-# 对话历史
-${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : '小梦'}: ${msg.content}`).join('\n')}
-# 输出格式要求
-你的回复【必须且只能】是一个能被JSON解析的对象，格式如下：
-{ "reply": "...", "suggestions": ["...", "...", "..."] }`;
+- 请为用户生成3条符合其人设的、简短的、口语化的回复建议。
 
-                const response = await fetch(requestUrl, {
+# 对话历史
+${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : '你'}: ${msg.content}`).join('\n')}
+
+# 输出格式要求
+你的回复【必须且只能】是一个能被JSON解析的对象。格式如下，其中"reply"的值是一个包含一句或多句消息的【数组】：
+{
+  "reply": ["第一条消息。", "这是第二条消息。", "嗯...让我想想。"],
+  "suggestions": ["建议1", "建议2", "建议3"]
+}`;
+
+            if (settings.apiType === 'openai_proxy') {
+                if (!requestUrl.endsWith('/chat/completions')) {
+                    requestUrl = requestUrl.endsWith('/') ? requestUrl + 'chat/completions' : requestUrl + '/chat/completions';
+                }
+                response = await fetch(requestUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.apiKey}` },
                     body: JSON.stringify({ model: settings.apiModel, messages: [{ role: 'user', content: finalPrompt }] })
                 });
-
-                if (!response.ok) throw new Error(`HTTP 错误: ${response.status}. ${await response.text()}`);
-                
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
                 const data = await response.json();
                 const responseText = data.choices[0].message.content;
 
                 const jsonMatch = responseText.match(/{[\s\S]*}/);
                 if (!jsonMatch) throw new Error("AI回复中未找到JSON对象。");
-                
                 const responseData = JSON.parse(jsonMatch[0]);
-                const aiText = responseData.reply;
-                const suggestions = responseData.suggestions;
-
-                if (!aiText) throw new Error("AI返回的JSON中缺少 'reply' 字段。");
-
-                loadingDiv.remove(); // 先移除“正在输入”
-                displayMessage(aiText, 'ai'); // 再显示AI的正式回复
                 
-                if (isSuggestionEnabled && Array.isArray(suggestions)) {
-                    displaySuggestions(suggestions);
+                loadingDiv.remove(); // 移除“正在输入”
+
+                // 【全新】处理多条消息回复
+                if (Array.isArray(responseData.reply)) {
+                    for (const msg of responseData.reply) {
+                        displayMessage(msg, 'ai');
+                        await sleep(Math.random() * 500 + 400); // 随机延迟400-900毫秒
+                    }
+                } else if (responseData.reply) { // 兼容AI不按套路出牌的情况
+                    displayMessage(responseData.reply, 'ai');
+                } else {
+                    throw new Error("AI返回的JSON中缺少 'reply' 字段。");
+                }
+                
+                if (isSuggestionEnabled && Array.isArray(responseData.suggestions)) {
+                    displaySuggestions(responseData.suggestions);
                 }
 
             } else if (settings.apiType === 'gemini_direct') {
-                const geminiReplyPrompt = `# 你的角色是：${settings.aiPersona}\n# 你的附加设定是：${settings.worldBook}\n# 以下是对话历史:\n${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : '你'}: ${msg.content}`).join('\n')}\n请根据以上信息，对用户的最后一句话做出回应。`;
+                // Gemini逻辑暂未实现分多条回复，但保留纯文本输出
+                const geminiReplyPrompt = `# 你的角色是：${fullPersona}\n# 附加设定：${worldBookString}\n# 对话历史:\n${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : '你'}: ${msg.content}`).join('\n')}\n# 行为准则: 绝对不能包含任何括号内的动作、神态、或环境描写。\n请回应用户。`;
                 const replyPayload = { contents: [{ parts: [{ text: geminiReplyPrompt }] }] };
                 
                 const replyResponse = await fetch(`${settings.apiUrl}?key=${settings.apiKey}`, {
@@ -420,22 +147,6 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : '小梦'}: ${msg.
                 
                 loadingDiv.remove();
                 displayMessage(aiText, 'ai');
-
-                if (isSuggestionEnabled) {
-                    const suggestionPrompt = `# 你的角色: 扮演用户本人。\n# 用户的人设: ${settings.userPersona}\n# 对话情景: AI助手刚刚对你说了下面这句话： "${aiText}"\n# 你的任务: 请根据你的人设，生成3条简短、口语化、且风格不同的回复。\n# 输出格式要求: 你的回复【必须且只能】是一个JSON数组，里面包含三个字符串。例如： ["好的，谢谢你呀！", "嗯嗯，让我想想...", "是这样吗？"]`;
-                    const suggestionPayload = {
-                        contents: [{ parts: [{ text: suggestionPrompt }] }],
-                        generationConfig: { responseMimeType: "application/json" }
-                    };
-                    const suggestionResponse = await fetch(`${settings.apiUrl}?key=${settings.apiKey}`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(suggestionPayload)
-                    });
-                    const suggestionData = await suggestionResponse.json();
-                    const suggestionsText = suggestionData.candidates?.[0]?.content?.parts?.[0]?.text;
-                    if (suggestionsText) {
-                        displaySuggestions(JSON.parse(suggestionsText));
-                    }
-                }
             }
         } catch (error) {
             console.error('API调用失败:', error);
@@ -444,7 +155,275 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : '小梦'}: ${msg.
         }
     }
 
-    // --- 10. 程序启动 ---
-    loadSettings();
-    switchToView('chat-window');
+    async function summarizeConversation() {
+        summarizeChatButton.textContent = '总结中...';
+        summarizeChatButton.disabled = true;
+    
+        const recentHistory = chatHistory.slice(-settings.contextLength);
+        if (recentHistory.length === 0) {
+            alert("对话内容太少，无法总结。");
+            summarizeChatButton.textContent = '总结对话';
+            summarizeChatButton.disabled = false;
+            return;
+        }
+    
+        const summaryPrompt = `# 任务：对话总结员\n请根据“对话历史”，总结成一份严格的YAML格式文档。\n# 要求：\n- 客观、简洁、不回避敏感内容。\n- 每一项独立事件都应包含日期、时间、地点和事件描述。\n# 对话历史：\n${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : 'AI'}: ${msg.content}`).join('\n')}\n# 输出格式：\n你的回复【必须且只能】是一段纯粹的YAML代码，不要任何解释或\`\`\`包裹。格式如下：\n关键事件:\n  - 日期: "YYYY-MM-DD"\n    时间: "HH:MM"\n    地点: "对话中明确或暗示的地点"\n    事件: "对该事件的客观、简洁描述。"\n  - 日期: ...`;
+        
+        try {
+            let requestUrl = settings.apiUrl;
+            let response;
+            if (settings.apiType === 'openai_proxy') {
+                if (!requestUrl.endsWith('/chat/completions')) requestUrl = requestUrl.endsWith('/') ? requestUrl + 'chat/completions' : requestUrl + '/chat/completions';
+                response = await fetch(requestUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.apiKey}` },
+                    body: JSON.stringify({ model: settings.apiModel, messages: [{ role: 'user', content: summaryPrompt }] })
+                });
+                if (!response.ok) throw new Error(await response.text());
+                const data = await response.json();
+                showSummaryModal(data.choices[0].message.content);
+            } else if (settings.apiType === 'gemini_direct') {
+                const payload = { contents: [{ parts: [{ text: summaryPrompt }] }] };
+                response = await fetch(`${settings.apiUrl}?key=${settings.apiKey}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error(JSON.stringify((await response.json()).error));
+                const data = await response.json();
+                showSummaryModal(data.candidates[0].content.parts[0].text);
+            }
+        } catch (error) {
+            alert("总结失败: " + error.message);
+        } finally {
+            summarizeChatButton.textContent = '总结对话';
+            summarizeChatButton.disabled = false;
+        }
+    }
+
+    // --- 4. 辅助与UI函数 ---
+
+    function sendMessage() {
+        const userText = chatInput.value.trim();
+        if (userText === '') return;
+        if (!settings.apiKey || !settings.apiUrl || (settings.apiType === 'openai_proxy' && !settings.apiModel)) {
+            alert("请先完成API设置！");
+            switchToView('settings-window');
+            return;
+        }
+        displayMessage(userText, 'user');
+        getAiResponse();
+    }
+    
+    function showSummaryModal(summary) {
+        summaryOutput.textContent = summary;
+        summaryModal.classList.remove('hidden');
+    }
+
+    function hideSummaryModal() {
+        summaryModal.classList.add('hidden');
+    }
+    
+    function copyToClipboard() {
+        navigator.clipboard.writeText(summaryOutput.textContent).then(() => {
+            copySummaryButton.textContent = '已复制!';
+            setTimeout(() => copySummaryButton.textContent = '复制到剪贴板', 2000);
+        }).catch(err => alert('复制失败: ' + err));
+    }
+
+    function saveSummaryToMemory() {
+        const summary = summaryOutput.textContent;
+        characterMemoryInput.value += (characterMemoryInput.value ? '\n\n---\n\n' : '') + summary;
+        hideSummaryModal();
+        alert('已保存到角色记忆！');
+    }
+
+    function switchToView(viewId) {
+        document.querySelectorAll('.view').forEach(view => view.classList.add('hidden'));
+        document.getElementById(viewId).classList.remove('hidden');
+        navButtons.forEach(button => button.classList.toggle('active', button.dataset.view === viewId));
+    }
+
+    function updateMessageCounter() {
+        messageCounter.textContent = `对话: ${chatHistory.length}`;
+    }
+
+    function displaySuggestions(suggestions) {
+        suggestionArea.innerHTML = '';
+        suggestionArea.style.display = 'flex';
+        suggestions.forEach(text => {
+            const button = document.createElement('button');
+            button.className = 'suggestion-button';
+            button.textContent = text;
+            button.addEventListener('click', () => {
+                displayMessage(text, 'user');
+                getAiResponse();
+                suggestionArea.style.display = 'none';
+            });
+            suggestionArea.appendChild(button);
+        });
+    }
+    
+    // --- 5. 世界书编辑器函数 ---
+    
+    function renderWorldBookEntry(key = '', value = '') {
+        const entryDiv = document.createElement('div');
+        entryDiv.className = 'entry';
+        entryDiv.innerHTML = `
+            <div class="entry-header">
+                <input type="text" class="entry-key" placeholder="条目/分类名" value="${key}">
+                <button class="delete-entry-button">&times;</button>
+            </div>
+            <textarea class="entry-value" placeholder="内容...">${value}</textarea>
+        `;
+        worldBookEditor.appendChild(entryDiv);
+        entryDiv.querySelector('.delete-entry-button').addEventListener('click', () => entryDiv.remove());
+    }
+    
+    function serializeWorldBook() {
+        const entries = [];
+        worldBookEditor.querySelectorAll('.entry').forEach(entryDiv => {
+            const key = entryDiv.querySelector('.entry-key').value.trim();
+            const value = entryDiv.querySelector('.entry-value').value.trim();
+            if (key && value) entries.push(`${key}:\n${value}`);
+        });
+        return entries.join('\n\n---\n\n');
+    }
+    
+    // --- 6. 设置加载与保存 ---
+    
+    function loadSettings() {
+        const saved = JSON.parse(localStorage.getItem('myAiChatSettings_Pro')) || {};
+        settings = {
+            apiType: saved.apiType || 'openai_proxy',
+            apiUrl: saved.apiUrl || '',
+            apiModel: saved.apiModel || '',
+            apiKey: saved.apiKey || '',
+            contextLength: saved.contextLength || 20,
+            aiPersona: saved.aiPersona || 'AI伙伴 (名字写在第一行)\n你是一个乐于助人的AI。',
+            userPersona: saved.userPersona || '我是一个充满好奇心的探索者。',
+            characterMemory: saved.characterMemory || '',
+        };
+        worldBookData = saved.worldBookData || [{key: '示例条目', value: '这是世界书的一个示例内容。'}];
+
+        apiTypeSelect.value = settings.apiType;
+        apiUrlInput.value = settings.apiUrl;
+        apiKeyInput.value = settings.apiKey;
+        contextLengthInput.value = settings.contextLength;
+        aiPersonaInput.value = settings.aiPersona;
+        userPersonaInput.value = settings.userPersona;
+        characterMemoryInput.value = settings.characterMemory;
+        
+        // 【修正】不再动态设置标题，HTML中已写死为“AI的专属记忆”
+        
+        worldBookEditor.innerHTML = '';
+        worldBookData.forEach(entry => renderWorldBookEntry(entry.key, entry.value));
+        
+        updateSettingsUI(settings.apiType);
+        if (settings.apiModel) apiModelSelect.innerHTML = `<option value="${settings.apiModel}">${settings.apiModel}</option>`;
+    }
+
+    function saveSettings() {
+        settings.apiType = apiTypeSelect.value;
+        settings.apiUrl = apiUrlInput.value.trim();
+        settings.apiModel = apiModelSelect.value;
+        settings.apiKey = apiKeyInput.value.trim();
+        settings.contextLength = parseInt(contextLengthInput.value, 10);
+        settings.aiPersona = aiPersonaInput.value;
+        settings.userPersona = userPersonaInput.value;
+        settings.characterMemory = characterMemoryInput.value;
+        
+        worldBookData = [];
+        worldBookEditor.querySelectorAll('.entry').forEach(entryDiv => {
+            const key = entryDiv.querySelector('.entry-key').value.trim();
+            const value = entryDiv.querySelector('.entry-value').value.trim();
+            if (key || value) worldBookData.push({ key, value });
+        });
+
+        localStorage.setItem('myAiChatSettings_Pro', JSON.stringify({ ...settings, worldBookData }));
+        alert('设置已保存！');
+    }
+
+    function updateSettingsUI(type) {
+        if (type === 'gemini_direct') {
+            apiModelInput.classList.remove('hidden');
+            apiModelSelect.classList.add('hidden');
+            fetchModelsButton.style.display = 'none';
+        } else if (type === 'openai_proxy') {
+            apiModelInput.classList.add('hidden');
+            apiModelSelect.classList.remove('hidden');
+            fetchModelsButton.style.display = 'inline-block';
+        }
+    }
+
+    async function fetchModels() {
+        const url = apiUrlInput.value.trim();
+        const key = apiKeyInput.value.trim();
+        if (!url || !key) {
+            alert('请先填写 API 中转地址和密钥！');
+            return;
+        }
+        fetchModelsButton.textContent = '拉取中...';
+        fetchModelsButton.disabled = true;
+        try {
+            const modelsUrl = url.replace(/\/chat\/completions$/, '') + '/models';
+            const response = await fetch(modelsUrl, { headers: { 'Authorization': `Bearer ${key}` } });
+            if (!response.ok) throw new Error(await response.text());
+            const data = await response.json();
+            if (!data.data || !Array.isArray(data.data)) throw new Error("模型列表格式不正确。");
+            
+            const models = data.data.map(model => model.id);
+            apiModelSelect.innerHTML = '';
+            models.sort().forEach(modelId => {
+                const option = document.createElement('option');
+                option.value = modelId;
+                option.textContent = modelId;
+                apiModelSelect.appendChild(option);
+            });
+            if (settings.apiModel && models.includes(settings.apiModel)) {
+                apiModelSelect.value = settings.apiModel;
+            }
+            alert('模型列表已成功拉取！');
+        } catch (error) {
+            alert(`拉取模型失败: ${error.message}`);
+        } finally {
+            fetchModelsButton.textContent = '拉取';
+            fetchModelsButton.disabled = false;
+        }
+    }
+
+    // --- 7. 事件绑定与启动 ---
+    function initialize() {
+        saveSettingsButton.addEventListener('click', saveSettings);
+        addWorldBookEntryButton.addEventListener('click', () => renderWorldBookEntry());
+        sendButton.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }});
+        navButtons.forEach(button => button.addEventListener('click', () => switchToView(button.dataset.view)));
+        summarizeChatButton.addEventListener('click', summarizeConversation);
+        closeModalButton.addEventListener('click', hideSummaryModal);
+        copySummaryButton.addEventListener('click', copyToClipboard);
+        saveToMemoryButton.addEventListener('click', saveSummaryToMemory);
+        apiTypeSelect.addEventListener('change', () => updateSettingsUI(apiTypeSelect.value));
+        
+        fetchModelsButton.addEventListener('click', fetchModels); 
+
+        toggleSuggestionsButton.addEventListener('click', () => {
+            isSuggestionEnabled = !isSuggestionEnabled;
+            toggleSuggestionsButton.textContent = isSuggestionEnabled ? '关闭建议' : '开启建议';
+        });
+
+        const postButton = document.createElement('button');
+        postButton.textContent = '发布';
+        postButton.style.cssText = 'position: absolute; right: 10px; top: 10px; background: none; border: 1px solid white; color: white; border-radius: 5px; cursor: pointer;';
+        momentsHeader.appendChild(postButton);
+        postButton.addEventListener('click', () => {
+            const content = prompt("分享你的新鲜事...");
+            if (content) { /* 发布逻辑 */ }
+        });
+
+        // 启动程序
+        loadSettings();
+        switchToView('chat-window');
+        updateMessageCounter();
+    }
+
+    initialize();
 });
