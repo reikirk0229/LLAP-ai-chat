@@ -315,44 +315,52 @@ if (settings.apiType === 'openai_proxy' && !requestUrl.endsWith('/chat/completio
                 const responseText = data.choices[0].message.content;
 
                 // --- 【修正】增加健壮性，使用 try-catch 解析JSON ---
-// 这是【全新升级版】的代码，请复制替换
+// 这是【最终修正版】，请完整复制并替换掉旧的 try...catch 代码块
+
 try {
-    // --- 【升级】智能拆包：从回复中提取出JSON部分 ---
+    // --- 【最终修正】智能拆包 V3.0 ---
+    
+    // 1. 先在AI的回复里，用“魔法”找到被 `{...}` 包起来的核心内容
     const jsonMatch = responseText.match(/{[\s\S]*}/);
-    let responseData;
 
-    if (jsonMatch) {
-        // 如果找到了被包裹的JSON，就解析它
-        responseData = JSON.parse(jsonMatch);
+    // 2. 检查是否真的找到了这个“盒子”
+    if (jsonMatch && jsonMatch) {
+        // 找到了！`jsonMatch[0]` 就是我们想要的 "{...}" 字符串，也就是“盒子里的礼物描述”
+        const jsonString = jsonMatch;
+        
+        // 3. 【关键步骤】把这个描述字符串，变成一个真正的程序能懂的“礼物对象”
+        const responseData = JSON.parse(jsonString);
+
+        // 4. 从礼物对象中取出回复和建议
+        const aiText = responseData.reply;
+        const suggestions = responseData.suggestions;
+
+        if (!aiText) {
+            // 礼物里没有 reply，这不对劲
+            throw new Error("解析成功，但AI返回的JSON中缺少 'reply' 字段。");
+        }
+
+        // 成功！更新聊天界面
+        loadingDiv.textContent = aiText;
+        chatHistory.push({ role: 'assistant', content: aiText });
+        if (isSuggestionEnabled && Array.isArray(suggestions)) {
+            displaySuggestions(suggestions);
+        }
+
     } else {
-        // 如果没找到，说明AI可能返回了非JSON的普通文本
-        throw new Error("AI回复不是预期的JSON格式。");
-    }
-    // ---------------------------------------------
-
-    const aiText = responseData.reply;
-    const suggestions = responseData.suggestions;
-
-    if (!aiText) {
-        throw new Error("AI返回的JSON中缺少 'reply' 字段。");
-    }
-
-    chatHistory.push({ role: 'assistant', content: aiText });
-    loadingDiv.textContent = aiText;
-    if (isSuggestionEnabled && Array.isArray(suggestions)) {
-        displaySuggestions(suggestions);
+        // 如果连 {...} 这个盒子都找不到，说明AI完全没按要求回复
+        throw new Error("AI回复中没有找到任何JSON格式的内容。");
     }
 
 } catch (error) {
-    // 如果上面的任何一步出错了（比如没找到JSON，或JSON内容不对）
-    // 我们就放弃解析，直接把AI返回的原始文本显示出来，确保程序不崩溃
+    // 如果上面的任何一步出错了（比如没找到盒子，或者礼物描述是错的）
+    // 我们就放弃解析，直接把AI返回的原始文本显示出来，这是最保险的做法
     console.error('处理AI回复时出错:', error);
     console.error('AI 返回的原始文本:', responseText);
     
-    // 直接显示最干净的原始文本，去掉可能存在的包装
-    const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    loadingDiv.textContent = cleanText; 
-    chatHistory.push({ role: 'assistant', content: cleanText });
+    // 直接把AI说的“胡言乱语”显示出来，总比程序崩溃要好
+    loadingDiv.textContent = responseText; 
+    chatHistory.push({ role: 'assistant', content: responseText });
 }
             } 
             else if (settings.apiType === 'gemini_direct') {
