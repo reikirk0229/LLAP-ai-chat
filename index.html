@@ -80,7 +80,7 @@
                     <span>相册</span>
                     <span>说说</span>
                     <span>装扮</span>
-                    <span>农场</span>
+                    <span>游戏</span>
                 </div>
                 <div class="moments-feed"></div>
                  <button id="create-post-button" class="fab">+</button>
@@ -98,6 +98,11 @@
                 <div class="form-group"><label for="api-url-input">API 地址 (URL)</label><input type="text" id="api-url-input" placeholder="根据所选类型填写"></div>
                 <div class="form-group" id="model-area"><label>模型名称 (Model)</label><div class="model-selection-area"><select id="api-model-select"></select><button id="fetch-models-button">拉取</button></div></div>
                 <div class="form-group"><label for="api-key-input">API 密钥 (Key)</label><input type="password" id="api-key-input" placeholder="粘贴你的密钥"></div>
+                                <!-- (新增) 上下文记忆条数设置 -->
+                <div class="form-group">
+                    <label for="context-limit-input">上下文记忆条数</label>
+                    <input type="number" id="context-limit-input" placeholder="">
+                </div>
                 <hr>
                 <h3>全局设置 (待开发)</h3>
                 <p class="placeholder-text">未来可在这里添加全局预设、外观等设置。</p>
@@ -188,7 +193,64 @@
             <div class="modal-footer"><button id="save-profile-button">保存</button></div>
         </div>
     </div> 
-
+        <!-- 【全新】发送语音弹窗 -->
+    <div id="voice-input-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>发送语音</h3>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="voice-text-input">请输入你想说的内容:</label>
+                    <textarea id="voice-text-input" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer-split">
+                <button id="cancel-voice-button" class="modal-button secondary">取消</button>
+                <button id="confirm-voice-button" class="modal-button primary">确定</button>
+            </div>
+        </div>
+    </div>
+    <!-- (新增) AI图片描述弹窗 -->
+    <div id="ai-image-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>照片描述</h3>
+            </div>
+            <div class="modal-body">
+                <p id="ai-image-description-text"></p>
+            </div>
+            <div class="modal-footer">
+                <button id="close-ai-image-modal-button">好的</button>
+            </div>
+        </div>
+    </div>
+<!-- (新增) 用户上传/模拟图片弹窗 -->
+    <div id="image-upload-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="image-upload-title">发送图片</h3>
+            </div>
+            <div class="modal-body">
+                <div class="form-group" id="image-preview-area">
+                    <!-- 修改点1: 下面这行 <label> 已被删除 -->
+                    <div class="image-upload-area" id="user-image-upload-area">
+                        <img id="user-image-preview" class="image-preview" src="">
+                        <span>点击上传</span>
+                    </div>
+                    <input type="file" id="user-image-upload-input" class="hidden-file-input" accept="image/*">
+                </div>
+                <div class="form-group" id="image-description-group">
+                    <!-- 修改点2: 下面这行 <label> 已被删除 -->
+                    <textarea id="image-description-input" rows="3" placeholder="可以对图片进行提问或补充说明..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer-split">
+                <button id="cancel-image-upload-button" class="modal-button secondary">取消</button>
+                <button id="confirm-image-upload-button" class="modal-button primary">发送</button>
+            </div>
+        </div>
+    </div>
     <!-- 底部导航栏 -->
     <div id="app-nav">
         <div class="nav-button active" data-view="chat-list-view">消息</div>
