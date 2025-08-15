@@ -2,116 +2,200 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>通用AI聊天室 Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>LLAP聊天室</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div id="app-container">
-        <!-- 聊天窗口 -->
-        <div id="chat-window" class="view">
+
+        <!-- 视图1: 消息列表 (默认视图) -->
+        <div id="chat-list-view" class="view">
             <div class="header">
-                <div id="chat-header-info">
-                    <span id="message-counter">对话: 0 (记忆: 20)</span>
-                </div>
-                <span id="ai-name-header">AI 聊天助手</span>
-                <button id="toggle-suggestions-button">关闭建议</button>
+                <img id="current-user-avatar" class="avatar-sm clickable" src="">
+                <span>消息</span>
+                <button id="add-contact-button" class="header-button">+</button>
             </div>
-            <div id="message-container"></div>
-            <div id="suggestion-area"></div>
-            <div id="input-area">
-                <textarea id="chat-input" placeholder="输入消息... (回车换行)"></textarea>
-                <button id="send-button">发送</button>
-            </div>
+            <div id="chat-list-container"></div>
         </div>
 
-        <!-- 朋友圈窗口 -->
-        <div id="moments-window" class="view hidden">
-             <div class="header">朋友圈</div>
-             <div id="posts-container"></div>
-        </div>
-        
-        <!-- 设置窗口 -->
-        <div id="settings-window" class="view hidden">
-            <div class="header">通用设置</div>
-            <div id="settings-form">
-                <div class="form-group">
-                    <label for="api-type-select">API 类型</label>
-                    <select id="api-type-select">
-                        <option value="openai_proxy">OpenAI 格式 (推荐)</option>
-                        <option value="gemini_direct">Google Gemini (实验性)</option>
-                    </select>
+        <!-- 视图2: 聊天窗口 -->
+        <div id="chat-window-view" class="view hidden">
+            <div class="header">
+                <div id="chat-header-normal">
+                    <button id="back-to-list-button" class="header-button back-button">&lt;</button>
+                    <div id="chat-header-info" class="clickable">
+                        <span id="chat-ai-name">AI 伙伴</span>
+                        <div id="chat-ai-status-line">
+                            <span class="online-indicator"></span>
+                            <span id="chat-ai-status">在线</span>
+                        </div>
+                    </div>
+                    <button id="chat-settings-button" class="header-button">☰</button>
                 </div>
-                <div class="form-group">
-                    <label for="api-url-input">API 地址 (URL)</label>
-                    <input type="text" id="api-url-input" placeholder="根据所选类型填写">
-                </div>
-                <div class="form-group" id="model-area">
-                    <label>模型名称 (Model)</label>
-                    <div class="model-selection-area">
-                        <select id="api-model-select"></select>
-                        <button id="fetch-models-button">拉取</button>
+                <div id="chat-header-select" class="hidden">
+                    <button id="cancel-select-button" class="header-button-text">取消</button>
+                    <span id="select-count">已选择0项</span>
+                    <div>
+                        <button id="edit-selected-button" class="header-button-text hidden">编辑</button>
+                        <button id="delete-selected-button" class="header-button-text">删除</button>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="api-key-input">API 密钥 (Key)</label>
-                    <input type="password" id="api-key-input" placeholder="粘贴你的密钥">
+            </div>
+            <div id="message-container"></div>
+            <div id="ai-suggestion-panel" class="suggestion-panel hidden"></div>
+            <div class="chat-input-area">
+                <div class="chat-functions-toolbar">
+                    <button id="voice-btn" class="tool-button" title="语音"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg></button>
+                    <button id="image-btn" class="tool-button" title="图片"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></button>
+                    <button id="camera-btn" class="tool-button" title="拍摄"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></button>
+                    <button id="red-packet-btn" class="tool-button" title="红包"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.2c-5.5 0-10 2.4-10 6.8 0 2.4.6 4.6 2.4 6.4 1.8 2 4.2 2.6 4.2 4.6 0 1.1.9 2 2 2h2.8c1.1 0 2-.9 2-2 0-2 2.4-2.6 4.2-4.6 1.8-1.8 2.4-4 2.4-6.4 0-4.4-4.5-6.8-10-6.8z"></path><path d="M12 12.6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg></button>
+                    <button id="emoji-btn" class="tool-button" title="表情"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg></button>
+                    <button id="ai-helper-button" class="tool-button" title="AI帮回"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M20 12h-4"></path><path d="M12 20v-4"></path></svg></button>
+                    <button id="more-functions-button" class="tool-button" title="更多"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
                 </div>
-                <div class="form-group">
-                    <label for="context-length-input">AI记忆条数 (最近N条对话)</label>
-                    <input type="number" id="context-length-input" value="20" min="2" max="100">
+                <div class="input-row">
+                    <textarea id="chat-input" placeholder="输入消息..."></textarea>
+                    <button id="send-button">发送</button>
                 </div>
+            </div>
+        </div>
+        
+        <!-- 视图3: 动态页面 -->
+        <div id="moments-view" class="view hidden">
+            <div class="header">
+                 <button id="back-to-list-from-moments" class="header-button back-button">&lt;</button>
+                <span>动态</span>
+            </div>
+            <div class="moments-container">
+                <div class="moments-header">
+                    <img class="moments-banner" src="https://i.postimg.cc/L8y2zWc2/default-banner.jpg" alt="banner">
+                    <div class="moments-user-info">
+                        <span id="moments-user-name">你的昵称</span>
+                        <img id="moments-user-avatar" class="avatar-lg" src="">
+                    </div>
+                </div>
+                <div class="moments-nav">
+                    <span>相册</span>
+                    <span>说说</span>
+                    <span>装扮</span>
+                    <span>农场</span>
+                </div>
+                <div class="moments-feed"></div>
+                 <button id="create-post-button" class="fab">+</button>
+            </div>
+        </div>
+
+        <!-- 视图4: 设置页面 (通用设置) -->
+        <div id="settings-view" class="view hidden">
+            <div class="header">
+                 <button id="back-to-list-from-settings" class="header-button back-button">&lt;</button>
+                <span>设置</span>
+            </div>
+            <div id="settings-form">
+                <div class="form-group"><label for="api-type-select">API 类型</label><select id="api-type-select"><option value="openai_proxy">OpenAI 格式 (推荐)</option><option value="gemini_direct" disabled>Google Gemini (暂不推荐)</option></select></div>
+                <div class="form-group"><label for="api-url-input">API 地址 (URL)</label><input type="text" id="api-url-input" placeholder="根据所选类型填写"></div>
+                <div class="form-group" id="model-area"><label>模型名称 (Model)</label><div class="model-selection-area"><select id="api-model-select"></select><button id="fetch-models-button">拉取</button></div></div>
+                <div class="form-group"><label for="api-key-input">API 密钥 (Key)</label><input type="password" id="api-key-input" placeholder="粘贴你的密钥"></div>
                 <hr>
-                
-                <!-- 【全新】头像设置 -->
-                <div class="form-group">
-                    <label for="ai-avatar-url-input">AI的头像URL</label>
-                    <input type="text" id="ai-avatar-url-input" placeholder="粘贴图片链接地址">
-                </div>
-                <div class="form-group">
-                    <label for="user-avatar-url-input">你的头像URL</label>
-                    <input type="text" id="user-avatar-url-input" placeholder="粘贴图片链接地址">
-                </div>
-                <hr>
-
-                <div class="form-group">
-                    <label for="ai-persona-input">AI的人设</label>
-                    <textarea id="ai-persona-input" rows="4" placeholder="第一行写AI的名字..."></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="user-persona-input">你的人设 (User)</label>
-                    <textarea id="user-persona-input" rows="4"></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label>AI的专属记忆</label>
-                    <textarea id="character-memory-input" rows="6" placeholder="对话总结将自动保存到这里..."></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label>附加设定 (世界书编辑器)</label>
-                    <div id="world-book-editor"></div>
-                    <button type="button" id="add-world-book-entry-button">添加新条目</button>
-                </div>
-
+                <h3>全局设置 (待开发)</h3>
+                <p class="placeholder-text">未来可在这里添加全局预设、外观等设置。</p>
                 <button id="save-settings-button">保存设置</button>
             </div>
         </div>
-    </div>
 
-    <!-- 导航栏 -->
+        <!-- 视图5: 单个联系人的聊天设置页面 -->
+        <div id="contact-settings-view" class="view hidden">
+            <div class="header">
+                 <button id="back-to-chat-button" class="header-button back-button">&lt;</button>
+                <span>聊天设置</span>
+            </div>
+            <div class="contact-settings-container">
+                <div class="settings-group"><div class="settings-item contact-profile" id="cs-edit-ai-profile"><img id="cs-contact-avatar" class="avatar" src=""><span id="cs-contact-name">BB企鹅</span><span class="arrow">&gt;</span></div></div>
+                <div class="settings-group"><div class="settings-item"><span>设为置顶</span><label class="switch"><input type="checkbox" id="cs-pin-toggle"><span class="slider"></span></label></div><div class="settings-item"><span>导出/导入聊天记录</span><span class="arrow">&gt;</span></div></div>
+                <div class="settings-group"><div class="settings-item"><span>设置AI动态频率</span><span class="arrow">&gt;</span></div><div class="settings-item"><span>设置AI主动消息频率</span><span class="arrow">&gt;</span></div></div>
+                <div class="settings-group"><div class="settings-item"><span>设置聊天背景</span><span class="arrow">&gt;</span></div><div class="settings-item"><span>设置气泡样式</span><span class="arrow">&gt;</span></div><div class="settings-item"><span>设置字体大小</span><span class="arrow">&gt;</span></div></div>
+                <div class="settings-group"><div class="settings-item" id="cs-summarize-chat"><span>总结对话</span><span class="arrow">&gt;</span></div><div class="settings-item" id="cs-clear-history"><span class="danger">清空聊天记录</span></div></div>
+                <div class="settings-group"><div class="settings-item" id="cs-blacklist-contact"><span class="danger">将对方添加至黑名单</span></div></div>
+            </div>
+        </div>
+        
+        <!-- 视图6: AI信息编辑页面 -->
+        <div id="ai-editor-view" class="view hidden">
+            <div class="header">
+                <button id="back-to-contact-settings-button" class="header-button back-button">&lt;</button>
+                <span>编辑AI信息</span>
+            </div>
+            <div id="ai-editor-form">
+                <div class="form-group-horizontal">
+                    <div class="form-group avatar-group">
+                        <label>AI 头像</label>
+                        <div class="image-upload-area avatar-upload" id="avatar-upload-area">
+                            <img id="avatar-preview" class="image-preview" src="">
+                            <span>点击上传</span>
+                        </div>
+                        <input type="file" id="avatar-upload-input" class="hidden-file-input" accept="image/*">
+                    </div>
+                    <div class="form-group photo-group">
+                        <label>AI 照片</label>
+                        <div class="image-upload-area photo-upload" id="photo-upload-area">
+                            <img id="photo-preview" class="image-preview" src="">
+                            <span>点击上传</span>
+                        </div>
+                        <input type="file" id="photo-upload-input" class="hidden-file-input" accept="image/*">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="ai-editor-name">AI 姓名</label>
+                    <input type="text" id="ai-editor-name">
+                </div>
+                <div class="form-group">
+                    <label for="ai-editor-remark">AI 备注</label>
+                    <input type="text" id="ai-editor-remark">
+                </div>
+                <div class="form-group">
+                    <label>AI的人设</label>
+                    <textarea id="ai-editor-persona" rows="5"></textarea>
+                </div>
+                <div class="form-group"><label>AI的专属记忆</label><textarea id="ai-editor-memory" rows="8" placeholder="对话总结等长期记忆..."></textarea></div>
+                <div class="form-group">
+                    <label>世界书</label>
+                    <div id="ai-editor-worldbook"></div>
+                    <button type="button" id="add-worldbook-entry-button">添加新条目</button>
+                </div>
+                <button id="save-ai-profile-button">保存</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 用户信息修改弹窗 -->
+    <div id="user-profile-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header"><h3>修改我的信息</h3><button id="close-modal-button" class="close-button">&times;</button></div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>我的头像</label>
+                    <div class="image-upload-area user-avatar-upload" id="user-avatar-upload-area">
+                        <img id="user-avatar-preview" class="image-preview" src="">
+                        <span>点击上传</span>
+                    </div>
+                    <input type="file" id="user-avatar-upload-input" class="hidden-file-input" accept="image/*">
+                </div>
+                <div class="form-group"><label for="modal-user-name-input">我的昵称</label><input type="text" id="modal-user-name-input"></div>
+                <div class="form-group"><label for="modal-user-persona-input">我的人设</label><textarea id="modal-user-persona-input" rows="4"></textarea></div>
+            </div>
+            <div class="modal-footer"><button id="save-profile-button">保存</button></div>
+        </div>
+    </div> 
+
+    <!-- 底部导航栏 -->
     <div id="app-nav">
-        <div class="nav-button active" data-view="chat-window">聊天</div>
-        <div class="nav-button" data-view="moments-window">朋友圈</div>
-        <div class="nav-button" data-view="settings-window">设置</div>
+        <div class="nav-button active" data-view="chat-list-view">消息</div>
+        <div class="nav-button" data-view="moments-view">动态</div>
+        <div class="nav-button" data-view="settings-view">设置</div>
     </div>
-
-    <!-- 自定义总结弹窗 -->
-    <div id="summary-modal" class="modal-overlay hidden">
-        <!-- ... 弹窗内容与之前一致，此处省略以保持简洁 ... -->
-    </div>
-
+    
     <script src="script.js"></script>
 </body>
 </html>
