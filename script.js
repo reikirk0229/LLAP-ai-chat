@@ -1,7 +1,7 @@
-// script.js (V8.18 - 视觉与体验优化)
+// script.js (V8.25 - 终极修复，干净无错版)
 document.addEventListener('DOMContentLoaded', () => {
 
-    // --- 【全新】 IndexedDB 数据库助手 ---
+    // --- IndexedDB 数据库助手 ---
     const db = {
         _db: null,
         init: function() {
@@ -48,9 +48,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeChatContactId = null;
     let lastReceivedSuggestions = [];
     let stagedUserMessages = [];
+    let imageUploadMode = 'upload'; // 'upload' (真上传) 或 'simulate' (模拟)
+    let stagedImageData = null; // 用于暂存图片的 base64 数据
     let isSelectMode = false;
     let selectedMessages = new Set();
     let longPressTimer;
+    let lastRenderedTimestamp = 0;
     let loadingBubbleElement = null;
 
     // --- 2. 元素获取 ---
@@ -121,10 +124,149 @@ document.addEventListener('DOMContentLoaded', () => {
     const aiEditorWorldbook = document.getElementById('ai-editor-worldbook');
     const addWorldbookEntryButton = document.getElementById('add-worldbook-entry-button');
     const saveAiProfileButton = document.getElementById('save-ai-profile-button');
+    const voiceInputModal = document.getElementById('voice-input-modal');
+    const voiceTextInput = document.getElementById('voice-text-input');
+    const cancelVoiceButton = document.getElementById('cancel-voice-button');
+    const confirmVoiceButton = document.getElementById('confirm-voice-button');
+    const aiImageModal = document.getElementById('ai-image-modal');
+    const aiImageDescriptionText = document.getElementById('ai-image-description-text');
+    const closeAiImageModalButton = document.getElementById('close-ai-image-modal-button');
+    const imageUploadModal = document.getElementById('image-upload-modal');
+    const imageUploadTitle = document.getElementById('image-upload-title');
+    const imagePreviewArea = document.getElementById('image-preview-area');
+    const userImageUploadArea = document.getElementById('user-image-upload-area');
+    const userImagePreview = document.getElementById('user-image-preview');
+    const userImageUploadInput = document.getElementById('user-image-upload-input');
+    const imageDescriptionInput = document.getElementById('image-description-input');
+    const cancelImageUploadButton = document.getElementById('cancel-image-upload-button');
+    const confirmImageUploadButton = document.getElementById('confirm-image-upload-button');
+    const contextLimitInput = document.getElementById('context-limit-input');
 
 
     // --- 3. 核心功能 ---
     const sleep = ms => new Promise(res => setTimeout(res, ms));
+
+    function formatMessageTimestamp(ts) {
+    const date = new Date(ts);
+    const now = new Date();
+    
+    // 获取今天和昨天的起始时间
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today.getTime() - 86400000);
+
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    
+    // 判断是上午、下午还是晚上
+    let timePeriod = '';
+    if (hours < 12) timePeriod = '上午';
+    else if (hours < 18) timePeriod = '下午';
+    else timePeriod = '晚上';
+
+    // 将24小时制转为12小时制用于显示
+    if (hours > 12) hours -= 12;
+    if (hours === 0) hours = 12;
+
+    const timeStr = `${timePeriod} ${hours}:${minutes}`;
+
+    if (date >= today) {
+        return timeStr; // 如果是今天，只显示时间
+    } else if (date >= yesterday) {
+        return `昨天 ${timeStr}`; // 如果是昨天
+    } else {
+        // 更早的消息，显示完整日期和时间
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${minutes}`;
+    }
+}
+    function openAiImageModal(description) {
+        // AI返回的描述里可能有换行符 \n，我们把它替换成HTML的换行标签 <br>
+        aiImageDescriptionText.innerHTML = description.replace(/\n/g, '<br>');
+        aiImageModal.classList.remove('hidden');
+    }
+
+    // 关闭 AI 图片描述弹窗
+    function closeAiImageModal() {
+        aiImageModal.classList.add('hidden');
+    }
+// 打开用户上传/模拟图片弹窗
+    function openImageUploadModal(mode) {
+        imageUploadMode = mode;
+        stagedImageData = null; 
+        imageDescriptionInput.value = ''; 
+        userImagePreview.src = ''; 
+        userImageUploadInput.value = null; 
+        
+        const descriptionGroup = document.getElementById('image-description-group');
+
+        if (mode === 'upload') {
+            imageUploadTitle.textContent = '发送图片';
+            imagePreviewArea.style.display = 'block';
+            descriptionGroup.style.display = 'none'; 
+        } else { // mode === 'simulate'
+            imageUploadTitle.textContent = '发送照片';
+            imagePreviewArea.style.display = 'none';
+            descriptionGroup.style.display = 'block'; 
+            // 修改点: 下面这两行已被删除，因为对应的 HTML 元素已经不存在了
+            imageDescriptionInput.placeholder = '例如：一张德牧小狗的照片，它正好奇地看着镜头...';
+        }
+        imageUploadModal.classList.remove('hidden');
+    }
+
+    // 关闭用户上传/模拟图片弹窗
+    function closeImageUploadModal() {
+        imageUploadModal.classList.add('hidden');
+    }
+    
+    // 当用户选择了图片文件后，进行预览
+    function handleImagePreview(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            stagedImageData = e.target.result; // 读取为 base64 格式
+            userImagePreview.src = stagedImageData;
+        };
+        reader.readAsDataURL(file);
+    }
+    
+    // 用户点击弹窗的“发送”按钮
+    function sendImageMessage() {
+        const description = imageDescriptionInput.value.trim();
+        
+        if (imageUploadMode === 'upload') {
+            if (!stagedImageData) {
+                alert('请先选择一张图片！');
+                return;
+            }
+            // 对于真实图片，描述是可选的
+            const message = {
+                type: 'image',
+                content: description || '图片', // 如果用户没输入，给个默认文字
+                imageData: stagedImageData // 关键：附带图片数据
+            };
+            stagedUserMessages.push(message);
+            displayMessage(message.content, 'user', { isStaged: true, type: 'image', imageData: message.imageData });
+
+        } else { // 'simulate' 模式
+            if (!description) {
+                alert('请填写图片描述！');
+                return;
+            }
+            // 对于模拟图片，描述就是内容，没有图片数据
+            const message = {
+                type: 'image',
+                content: description,
+                imageData: null // 没有真实图片
+            };
+            stagedUserMessages.push(message);
+            // 注意：模拟图片我们也用 'image' 类型，但 imageData 为 null
+            // displayMessage 会根据 imageData 是否存在来决定如何显示
+            displayMessage(message.content, 'user', { isStaged: true, type: 'image', imageData: null });
+        }
+        
+        closeImageUploadModal();
+    }
 
     async function initialize() {
         await db.init();
@@ -138,27 +280,29 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function loadAppData() {
         const savedData = localStorage.getItem('myAiChatApp_V8_Data');
-        if (savedData) { appData = JSON.parse(savedData); } 
-        else {
+        if (savedData) { 
+            appData = JSON.parse(savedData); 
+            if (!appData.currentUser) {
+                appData.currentUser = { name: '你', persona: '我是一个充满好奇心的人。' };
+            }
+        } else {
              appData = {
                 currentUser: { name: '你', persona: '我是一个充满好奇心的人。' },
-                aiContacts: [{ 
-                    id: Date.now(), 
-                    name: 'AI伙伴', // 真实姓名
-                    remark: 'AI伙伴', // 备注名
-                    persona: 'AI伙伴\n你是一个乐于助人的AI。', 
-                    worldBook: [], 
-                    memory: '', 
-                    chatHistory: [], 
-                    moments: [] 
-                }],
+                aiContacts: [], 
                 appSettings: { apiType: 'openai_proxy', apiUrl: '', apiKey: '', apiModel: '' }
             };
         }
-                appData.aiContacts.forEach(c => {
+        if (!appData.appSettings) { appData.appSettings = { apiType: 'openai_proxy', apiUrl: '', apiKey: '', apiModel: '', contextLimit: 20 }; }
+        // 同时，确保老用户也有默认值
+        if (appData.appSettings.contextLimit === undefined) {
+            appData.appSettings.contextLimit = 50; // 默认记忆50条
+        }
+        if (!appData.aiContacts) { appData.aiContacts = []; }
+
+        appData.aiContacts.forEach(c => {
             if (!c.remark) c.remark = c.name;
+            if (c.isPinned === undefined) c.isPinned = false;
         });
-        if (!appData.appSettings.apiType) { appData.appSettings.apiType = 'openai_proxy'; }
         saveAppData();
     }
 
@@ -187,12 +331,16 @@ document.addEventListener('DOMContentLoaded', () => {
             chatListContainer.innerHTML = '<p style="text-align:center; color:#999; margin-top:20px;">点击右上角+号添加AI联系人</p>';
             return; 
         }
-        for (const contact of appData.aiContacts) {
+        const sortedContacts = [...appData.aiContacts].sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
+        for (const contact of sortedContacts) {
             const avatarBlob = await db.getImage(`${contact.id}_avatar`);
             const avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
             const lastMessage = contact.chatHistory[contact.chatHistory.length - 1] || { content: '...' };
             const item = document.createElement('div');
             item.className = 'chat-list-item';
+            if (contact.isPinned) {
+                item.classList.add('pinned');
+            }
             item.dataset.contactId = contact.id;
             item.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="avatar"><div class="chat-list-item-info"><div class="chat-list-item-top"><span class="chat-list-item-name">${contact.remark}</span><span class="chat-list-item-time">昨天</span></div><div class="chat-list-item-msg">${lastMessage.content}</div></div>`;
             item.addEventListener('click', () => openChat(contact.id));
@@ -211,6 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
             apiModelSelect.innerHTML = '';
         }
         updateSettingsUI();
+        contextLimitInput.value = settings.contextLimit;
     }
 
     function updateSettingsUI() {
@@ -229,6 +378,7 @@ document.addEventListener('DOMContentLoaded', () => {
         exitSelectMode();
         lastReceivedSuggestions = [];
         stagedUserMessages = [];
+        lastRenderedTimestamp = 0;
         aiSuggestionPanel.classList.add('hidden'); 
         const contact = appData.aiContacts.find(c => c.id === contactId);
         if (!contact) return;
@@ -243,16 +393,30 @@ document.addEventListener('DOMContentLoaded', () => {
         messageContainer.innerHTML = '';
         contact.chatHistory.forEach((msg, index) => {
             msg.id = msg.id || `${Date.now()}-${index}`;
-            displayMessage(msg.content, msg.role, { isNew: false, isLoading: true, type: msg.type || 'text', id: msg.id });
+            // --- 核心修复！我们把历史消息的所有属性 (...msg) 都传递过去 ---
+            displayMessage(msg.content, msg.role, { isNew: false, ...msg });
         });
         
         switchToView('chat-window-view');
     }
     
     function displayMessage(text, role, options = {}) {
-        const { isNew = false, isLoading = false, type = 'text', isStaged = false, id = null } = options;
+        const { isNew = false, isLoading = false, type = 'text', isStaged = false, id = null, timestamp = null, imageData = null } = options;
         
         const messageId = id || `${Date.now()}-${Math.random()}`;
+        const currentTimestamp = timestamp || Date.now();
+        const TIME_GAP = 3 * 60 * 1000;
+
+        if (!isStaged && !isLoading && (lastRenderedTimestamp === 0 || currentTimestamp - lastRenderedTimestamp > TIME_GAP)) {
+            const timestampDiv = document.createElement('div');
+            timestampDiv.className = 'timestamp-display';
+            timestampDiv.textContent = formatMessageTimestamp(currentTimestamp);
+            messageContainer.appendChild(timestampDiv);
+        }
+        
+        if (!isStaged && !isLoading) {
+            lastRenderedTimestamp = currentTimestamp;
+        }
 
         const messageRow = document.createElement('div');
         messageRow.className = `message-row ${role}-row`;
@@ -269,26 +433,83 @@ document.addEventListener('DOMContentLoaded', () => {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         const avatarUrl = role === 'user' ? appData.currentUser.avatarUrl : (contact ? contact.avatarUrl : '');
 
-        let messageHTML;
+        let messageContentHTML;
         switch(type) {
-            case 'voice': messageHTML = `<div class="message message-voice">🔊 ${text}</div>`; break;
-            case 'image': messageHTML = `<div class="message message-image">🖼️ [图片] ${text}</div>`; break;
-            case 'red-packet': messageHTML = `<div class="message message-red-packet">🧧 ${text}</div>`; break;
-            default: messageHTML = `<div class="message">${text}</div>`;
+            case 'image':
+                if (role === 'user') {
+                    if (imageData) {
+                        messageContentHTML = `<div class="message message-image-user"><img src="${imageData}" alt="${text}"></div>`;
+                    } else {
+                        messageContentHTML = `<div class="message">🖼️ [图片] ${text}</div>`;
+                    }
+                } else { // AI 发送的图片 (新样式)
+                    // --- 核心修复1：改用 data-description 属性来安全地存储描述文本 ---
+                    const escapedDescription = text.replace(/"/g, '&quot;');
+                    messageContentHTML = `
+                        <div class="message message-image-ai-direct" data-description="${escapedDescription}">
+                            <img src="https://i.postimg.cc/vTdmV48q/a31b84cf45ff18f18b320470292a02c8.jpg" alt="AI生成的图片">
+                        </div>`;
+                }
+                break;
+            case 'voice':
+                const duration = Math.max(1, Math.round(text.length / 4));
+                let waveBarsHTML = Array.from({length: 15}, () => `<div class="wave-bar" style="height: ${Math.random() * 80 + 20}%;"></div>`).join('');
+                messageContentHTML = `
+                    <div class="message message-voice">
+                        <div class="play-icon-container">
+                            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>
+                        </div>
+                        <div class="sound-wave">${waveBarsHTML}</div>
+                        <span class="voice-duration">${duration}"</span>
+                    </div>
+                    <div class="voice-text-content">${text}</div>
+                `;
+                break;
+            case 'red-packet': 
+                messageContentHTML = `<div class="message message-red-packet">🧧 ${text}</div>`; 
+                break;
+            default: 
+                messageContentHTML = `<div class="message">${text}</div>`;
         }
         
         messageRow.innerHTML = `
             <div class="select-checkbox hidden"></div>
             <img class="avatar" src="${avatarUrl}">
-            <div class="message-content">${messageHTML}</div>
+            <div class="message-content">${messageContentHTML}</div>
         `;
         
         addSelectListeners(messageRow);
+        
+        if (type === 'voice') {
+            const voiceBubble = messageRow.querySelector('.message-voice');
+            const voiceTextContent = messageRow.querySelector('.voice-text-content');
+            
+            setTimeout(() => voiceBubble.classList.add('playing'), 100);
+            
+            voiceBubble.addEventListener('click', () => {
+                const isHidden = voiceTextContent.style.display === 'none' || voiceTextContent.style.display === '';
+                voiceTextContent.style.display = isHidden ? 'block' : 'none';
+            });
+        }
+        
         messageContainer.appendChild(messageRow);
-        messageContainer.scrollTop = messageContainer.scrollHeight;
+
+        // --- 核心修复2：在这里动态添加点击事件，而不是写在HTML里 ---
+        const aiImageBubble = messageRow.querySelector('.message-image-ai-direct');
+        if (aiImageBubble) {
+            aiImageBubble.addEventListener('click', () => {
+                // 从 data-description 属性安全地取回描述文本
+                const description = aiImageBubble.dataset.description;
+                openAiImageModal(description);
+            });
+        }
+        
+        if (!isLoading) {
+            messageContainer.scrollTop = messageContainer.scrollHeight;
+        }
 
         if (isNew && !isLoading && !isStaged && contact) {
-            contact.chatHistory.push({ id: messageId, role, content: text, type });
+            contact.chatHistory.push({ id: messageId, role, content: text, type, timestamp: currentTimestamp, imageData: imageData });
             saveAppData();
             renderChatList();
         }
@@ -316,7 +537,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (stagedUserMessages.length === 0) return;
         document.querySelectorAll('[data-staged="true"]').forEach(el => el.remove());
         stagedUserMessages.forEach(msg => {
-            displayMessage(msg.content, 'user', { isNew: true, type: msg.type });
+            // 修复！我们把暂存消息的所有属性（...msg）都传递过去
+            // 这样无论是 type 还是 imageData 都不会丢失了
+            displayMessage(msg.content, 'user', { isNew: true, ...msg });
         });
         stagedUserMessages = [];
         getAiResponse();
@@ -335,14 +558,41 @@ document.addEventListener('DOMContentLoaded', () => {
             ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n')
             : '无';
         
-        const recentHistory = contact.chatHistory.slice(-20);
-
+        // --- 核心改造开始：构建支持图片的消息历史 ---
+        const contextLimit = appData.appSettings.contextLimit || 50; // 从设置中读取条数
+        const recentHistory = contact.chatHistory.slice(-contextLimit); // 使用设置的条数
+        const messagesForApi = recentHistory.map(msg => {
+            const role = msg.role === 'user' ? 'user' : 'assistant';
+            
+            // 如果是用户的图片消息，并且有真实的图片数据
+            if (msg.role === 'user' && msg.type === 'image' && msg.imageData) {
+                return {
+                    role: role,
+                    content: [
+                        { type: "text", text: msg.content },
+                        { type: "image_url", image_url: { url: msg.imageData } }
+                    ]
+                };
+            }
+            
+            // 其他所有普通消息 (文字、语音、模拟图片等)
+            return {
+                role: role,
+                content: `${msg.type === 'voice' ? '[语音]' : ''}${msg.content}`
+            };
+        });
+        
+        // --- Prompt 大升级：告诉 AI 它现在能看图和发图了 ---
         const finalPrompt = `# 你的双重任务
 ## 任务1: 扮演AI助手
 - 你的名字是"${contact.name}"，人设(包括记忆)是：${contact.persona}\n\n${contact.memory}
 - **重要背景**: 你正在通过聊天软件与用户【线上对话】。当前时间: ${new Date().toLocaleString('zh-CN')}。
 - **行为准则1**: 你的回复必须模拟真实聊天，将一个完整的思想拆分成【一句或多句】独立的短消息。
 - **行为准则2**: 【绝对不能】包含任何括号内的动作、神态描写。
+- **行为准则3 (新)**: 如果用户的消息包含图片，你【必须】先针对图片内容进行回应，然后再进行其他对话。
+- **行为准则4 (新)**: 你可以发送【图片】。如果你想发图片，请使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送它。例如：\`[IMAGE: 一只可爱的金色小猫懒洋
+懒地躺在洒满阳光的窗台上。]\`
+- **行为准则5 (新)**: 你可以像真人一样发送【语音消息】。如果你的某条回复更适合用语音表达（例如：唱歌、叹气、笑声、语气词），请在回复前加上 \`[voice]\` 标签。例如： \`[voice]嗯...让我想想。\`
 - 附加设定(世界书)：${worldBookString}
 - 请根据对话历史，回应用户。
 
@@ -352,9 +602,6 @@ document.addEventListener('DOMContentLoaded', () => {
 - **建议3 (中立探索)**: 设计一条【中立或疑问】的回答。
 - **建议4 (挑战/负面)**: 设计一条【带有挑战性或负面情绪】的回答，但要符合恋爱逻辑。
 
-# 对话历史
-${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${msg.content}`).join('\n')}
-
 # 输出格式要求
 你的回复【必须】是一个能被JSON解析的对象，"reply"的值是一个【数组】：
 {
@@ -362,6 +609,12 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
   "suggestions": ["最期望的回答", "另一条温和的回答", "中立的回答", "挑战性的回答"]
 }`;
 
+        // 将系统指令和对话历史结合
+        const finalMessagesForApi = [
+            { role: "system", content: finalPrompt },
+            ...messagesForApi
+        ];
+        
         try {
             let requestUrl = appData.appSettings.apiUrl;
             if (!requestUrl.endsWith('/chat/completions')) {
@@ -371,9 +624,12 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
             const response = await fetch(requestUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
-                body: JSON.stringify({ model: appData.appSettings.apiModel, messages: [{ role: 'user', content: finalPrompt }] })
+                // --- 关键：使用改造后的消息体 ---
+                body: JSON.stringify({ model: appData.appSettings.apiModel, messages: finalMessagesForApi })
             });
             
+            removeLoadingBubble();
+
             if (!response.ok) throw new Error(`HTTP 错误 ${response.status}: ${await response.text()}`);
             const data = await response.json();
             if (data.error) throw new Error(`API返回错误: ${data.error.message}`);
@@ -382,8 +638,6 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
             const responseText = data.choices[0].message.content;
             const jsonMatch = responseText.match(/{[\s\S]*}/);
             
-            removeLoadingBubble();
-
             if (!jsonMatch) {
                  displayMessage(`(AI未能返回标准格式): ${responseText}`, 'assistant', { isNew: true });
             } else {
@@ -393,12 +647,21 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
                 }
                 if (Array.isArray(responseData.reply)) {
                     for (const msg of responseData.reply) {
-                        if (msg) displayMessage(msg, 'assistant', { isNew: true });
-                        await sleep(Math.random() * 400 + 300);
+                        if (msg) {
+                            if (msg.startsWith('[voice]')) {
+                                const voiceContent = msg.replace('[voice]', '').trim();
+                                displayMessage(voiceContent, 'assistant', { isNew: true, type: 'voice' });
+                            } else if (msg.startsWith('[IMAGE:')) {
+                                // --- 新增：解析 AI 发送的图片 ---
+                                const imageContent = msg.substring(7, msg.length - 1).trim();
+                                displayMessage(imageContent, 'assistant', { isNew: true, type: 'image' });
+                            } else {
+                                displayMessage(msg, 'assistant', { isNew: true, type: 'text' });
+                            }
+                            await sleep(Math.random() * 400 + 300);
+                        }
                     }
-                } else if (responseData.reply) {
-                    displayMessage(responseData.reply, 'assistant', { isNew: true });
-                }
+                } // ... (后面的 else if 部分保持不变) ...
             }
         } catch (error) {
             console.error('API调用失败:', error);
@@ -470,6 +733,31 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
         userProfileModal.classList.add('hidden');
     }
 
+    function openVoiceModal() {
+        voiceTextInput.value = '';
+        voiceInputModal.classList.remove('hidden');
+        voiceTextInput.focus();
+    }
+
+    function closeVoiceModal() {
+        voiceInputModal.classList.add('hidden');
+    }
+
+    function sendVoiceMessage() {
+        const text = voiceTextInput.value.trim();
+        if (!text) {
+            alert("请输入语音内容！");
+            return;
+        }
+        // 1. 将语音消息添加到暂存数组
+        stagedUserMessages.push({ content: text, type: 'voice' });
+        // 2. 在界面上显示这个“暂存”的语音消息
+        displayMessage(text, 'user', { isStaged: true, type: 'voice' });
+        // 3. 关闭弹窗
+        closeVoiceModal();
+        // 4. 不再调用 getAiResponse()，等待用户点击“发送”按钮
+    }
+
     async function openContactSettings() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
@@ -483,17 +771,14 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
     async function openAiEditor() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
-
-        aiEditorName.value = contact.name;
-        aiEditorRemark.value = contact.remark;
-        aiEditorPersona.value = contact.persona;
-        aiEditorMemory.value = contact.memory;
         
         const avatarBlob = await db.getImage(`${contact.id}_avatar`);
         avatarPreview.src = avatarBlob ? URL.createObjectURL(avatarBlob) : '';
         const photoBlob = await db.getImage(`${contact.id}_photo`);
         photoPreview.src = photoBlob ? URL.createObjectURL(photoBlob) : '';
-
+        
+        aiEditorName.value = contact.name;
+        aiEditorRemark.value = contact.remark;
         aiEditorPersona.value = contact.persona;
         aiEditorMemory.value = contact.memory;
         aiEditorWorldbook.innerHTML = '';
@@ -545,9 +830,6 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
         contact.remark = aiEditorRemark.value.trim() || contact.name;
         contact.persona = aiEditorPersona.value;
         contact.memory = aiEditorMemory.value;
-        contact.persona = aiEditorPersona.value;
-        contact.name = contact.persona.split('\n')[0].trim() || 'AI伙伴';
-        contact.memory = aiEditorMemory.value;
         contact.worldBook = [];
         aiEditorWorldbook.querySelectorAll('.worldbook-entry').forEach(entryDiv => {
             const key = entryDiv.querySelector('.worldbook-key').value.trim();
@@ -561,6 +843,27 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
         renderChatList();
         alert('AI信息已保存！');
         switchToView('contact-settings-view');
+    }
+    
+    function clearActiveChatHistory() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+        const isConfirmed = confirm(`确定要清空与 ${contact.remark} 的所有聊天记录吗？\n此操作无法撤销。`);
+        if (isConfirmed) {
+            contact.chatHistory = [];
+            saveAppData();
+            messageContainer.innerHTML = '';
+            renderChatList();
+            alert('聊天记录已清空。');
+        }
+    }
+
+    function togglePinActiveChat() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+        contact.isPinned = csPinToggle.checked;
+        saveAppData();
+        renderChatList();
     }
 
     function addSelectListeners(element) {
@@ -664,6 +967,26 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
         exitSelectMode();
         renderChatList();
     }
+    
+    function addNewContact() {
+        const newContactId = Date.now();
+        const newContact = {
+            id: newContactId,
+            name: `新伙伴 ${newContactId.toString().slice(-4)}`,
+            remark: `新伙伴 ${newContactId.toString().slice(-4)}`,
+            persona: `新伙伴 ${newContactId.toString().slice(-4)}\n这是一个新创建的AI伙伴，等待你为TA注入灵魂。`,
+            worldBook: [],
+            memory: '',
+            chatHistory: [],
+            moments: [],
+            isPinned: false
+        };
+        appData.aiContacts.push(newContact);
+        saveAppData();
+        renderChatList();
+        activeChatContactId = newContactId;
+        openContactSettings();
+    }
 
     function bindEventListeners() {
         navButtons.forEach(button => button.addEventListener('click', () => switchToView(button.dataset.view)));
@@ -684,6 +1007,7 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
             appData.appSettings.apiUrl = apiUrlInput.value.trim();
             appData.appSettings.apiKey = apiKeyInput.value.trim();
             appData.appSettings.apiModel = apiModelSelect.value;
+            appData.appSettings.contextLimit = parseInt(contextLimitInput.value) || 50;
             saveAppData();
             alert('设置已保存！');
         });
@@ -703,7 +1027,7 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
         userAvatarUploadInput.addEventListener('change', (e) => {
             handleImageUpload(e.target.files[0], 'user_avatar', userAvatarPreview);
         });
-        addContactButton.addEventListener('click', () => alert('“添加联系人”功能将在后续版本中实现！'));
+        addContactButton.addEventListener('click', addNewContact);
         chatSettingsButton.addEventListener('click', openContactSettings);
         backToChatButton.addEventListener('click', () => switchToView('chat-window-view'));
         csEditAiProfile.addEventListener('click', openAiEditor);
@@ -711,21 +1035,24 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
         addWorldbookEntryButton.addEventListener('click', () => renderWorldbookEntry());
         saveAiProfileButton.addEventListener('click', saveAiProfile);
         chatHeaderInfo.addEventListener('click', openAiEditor);
-        voiceBtn.addEventListener('click', () => {
-            const text = prompt("模拟语音输入：");
-            if (text) displayMessage(text, 'user', { isNew: true, type: 'voice' });
-        });
-        imageBtn.addEventListener('click', () => {
-            const text = prompt("模拟发送图片URL或描述：");
-            if (text) displayMessage(text, 'user', { isNew: true, type: 'image' });
-        });
-        cameraBtn.addEventListener('click', () => {
-            const text = prompt("模拟拍照发送，请描述内容：");
-            if (text) displayMessage(text, 'user', { isNew: true, type: 'image' });
-        });
+        
+        // --- 语音按钮 (这个是正常的) ---
+        voiceBtn.addEventListener('click', openVoiceModal);
+        cancelVoiceButton.addEventListener('click', closeVoiceModal);
+        confirmVoiceButton.addEventListener('click', sendVoiceMessage);
+
+        // --- 图片和相机按钮 (使用我们最新的弹窗逻辑) ---
+        imageBtn.addEventListener('click', () => openImageUploadModal('upload'));
+        cameraBtn.addEventListener('click', () => openImageUploadModal('simulate'));
+        
+        // --- (恢复) 其他被误删的按钮事件 ---
         redPacketBtn.addEventListener('click', () => {
             const text = prompt("模拟发红包，请输入祝福语：", "恭喜发财");
-            if (text) displayMessage(text, 'user', { isNew: true, type: 'red-packet' });
+            if (text) {
+                // 修改为暂存模式
+                stagedUserMessages.push({ content: text, type: 'red-packet' });
+                displayMessage(text, 'user', { isStaged: true, type: 'red-packet' });
+            }
         });
         emojiBtn.addEventListener('click', () => alert("开发中！"));
         moreFunctionsButton.addEventListener('click', () => alert("开发中！"));
@@ -736,10 +1063,13 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
                 aiSuggestionPanel.classList.add('hidden');
             }
         });
+
+        // --- (恢复) 选择模式的按钮事件 ---
         cancelSelectButton.addEventListener('click', exitSelectMode);
         editSelectedButton.addEventListener('click', editSelectedMessage);
         deleteSelectedButton.addEventListener('click', deleteSelectedMessages);
         
+        // --- (恢复) AI编辑器和头像上传的事件 ---
         avatarUploadArea.addEventListener('click', () => avatarUploadInput.click());
         avatarUploadInput.addEventListener('change', (e) => {
             handleImageUpload(e.target.files[0], `${activeChatContactId}_avatar`, avatarPreview);
@@ -748,20 +1078,25 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? '用户' : contact.name}: ${
         photoUploadInput.addEventListener('change', (e) => {
             handleImageUpload(e.target.files[0], `${activeChatContactId}_photo`, photoPreview);
         });
-
+        
+        // --- (恢复) 聊天设置页面的事件 ---
         contactSettingsView.querySelectorAll('.settings-item').forEach(item => {
             if (item.id !== 'cs-edit-ai-profile' && item.id !== 'cs-clear-history' && !item.querySelector('.switch')) {
                 item.addEventListener('click', () => alert('功能开发中，敬请期待！'));
             }
         });
-        csClearHistory.addEventListener('click', () => {
-            alert('“清空聊天记录”功能开发中...');
-        });
-        csPinToggle.parentElement.addEventListener('click', (e) => {
-            e.stopPropagation(); 
-            csPinToggle.checked = !csPinToggle.checked;
-            alert('“设为置顶”功能开发中...');
-        });
+        csClearHistory.addEventListener('click', clearActiveChatHistory);
+        csPinToggle.addEventListener('change', togglePinActiveChat);
+
+        // --- (新增) 绑定我们新添加的图片弹窗的按钮事件 ---
+        userImageUploadArea.addEventListener('click', () => userImageUploadInput.click());
+        userImageUploadInput.addEventListener('change', handleImagePreview);
+        cancelImageUploadButton.addEventListener('click', closeImageUploadModal);
+        confirmImageUploadButton.addEventListener('click', sendImageMessage);
+        // (注意：ai-image-modal 的关闭按钮可能在早期版本中未添加，这里补上)
+        if(closeAiImageModalButton) {
+            closeAiImageModalButton.addEventListener('click', closeAiImageModal);
+        }
     }
     
     initialize();
