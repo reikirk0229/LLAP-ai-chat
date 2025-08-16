@@ -40,6 +40,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 request.onsuccess = (event) => resolve(event.target.result);
                 request.onerror = (event) => reject("图片读取失败: " + event.target.errorCode);
             });
+        },
+        // --- (核心修改) 这里是新增的 deleteImage 函数 ---
+        deleteImage: function(key) {
+            return new Promise((resolve, reject) => {
+                if (!this._db) return reject("数据库未初始化");
+                const transaction = this._db.transaction(['images'], 'readwrite');
+                const store = transaction.objectStore('images');
+                store.delete(key);
+                transaction.oncomplete = () => resolve();
+                transaction.onerror = (event) => reject("图片删除失败: " + event.target.errorCode);
+            });
         }
     };
 
@@ -61,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const appNav = document.getElementById('app-nav');
     const views = document.querySelectorAll('.view');
     const navButtons = document.querySelectorAll('.nav-button');
-    const currentUserAvatar = document.getElementById('current-user-avatar');
+    const csEditMyProfile = document.getElementById('cs-edit-my-profile');
     const addContactButton = document.getElementById('add-contact-button');
     const chatListContainer = document.getElementById('chat-list-container');
     const backToListButton = document.getElementById('back-to-list-button');
@@ -82,6 +93,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const aiHelperButton = document.getElementById('ai-helper-button');
     const moreFunctionsButton = document.getElementById('more-functions-button');
     const aiSuggestionPanel = document.getElementById('ai-suggestion-panel');
+    const refreshSuggestionsContainer = document.getElementById('refresh-suggestions-container'); // <--- 核心修复：补上这一行
+    const refreshSuggestionsBtn = document.getElementById('refresh-suggestions-btn'); // <--- 核心修复：补上这一行
     const apiTypeSelect = document.getElementById('api-type-select');
     const apiUrlInput = document.getElementById('api-url-input');
     const apiModelSelect = document.getElementById('api-model-select');
@@ -106,9 +119,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const backToChatButton = document.getElementById('back-to-chat-button');
     const csContactAvatar = document.getElementById('cs-contact-avatar');
     const csContactName = document.getElementById('cs-contact-name');
+    const csMyAvatar = document.getElementById('cs-my-avatar');
     const csEditAiProfile = document.getElementById('cs-edit-ai-profile');
     const csPinToggle = document.getElementById('cs-pin-toggle');
     const csClearHistory = document.getElementById('cs-clear-history');
+    const csDeleteContact = document.getElementById('cs-delete-contact');
     const aiEditorView = document.getElementById('ai-editor-view');
     const backToContactSettingsButton = document.getElementById('back-to-contact-settings-button');
     const avatarUploadArea = document.getElementById('avatar-upload-area');
@@ -141,7 +156,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const cancelImageUploadButton = document.getElementById('cancel-image-upload-button');
     const confirmImageUploadButton = document.getElementById('confirm-image-upload-button');
     const contextLimitInput = document.getElementById('context-limit-input');
-
+    const customConfirmModal = document.getElementById('custom-confirm-modal');
+    const customConfirmTitle = document.getElementById('custom-confirm-title');
+    const customConfirmText = document.getElementById('custom-confirm-text');
+    const customConfirmCancelBtn = document.getElementById('custom-confirm-cancel-btn');
+    const customConfirmOkBtn = document.getElementById('custom-confirm-ok-btn');
+    const customAlertModal = document.getElementById('custom-alert-modal');
+    const customAlertTitle = document.getElementById('custom-alert-title');
+    const customAlertText = document.getElementById('custom-alert-text');
+    const customAlertOkBtn = document.getElementById('custom-alert-ok-btn');
 
     // --- 3. 核心功能 ---
     const sleep = ms => new Promise(res => setTimeout(res, ms));
@@ -273,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadAppData();
         await renderChatList();
         renderSettingsUI();
-        await renderCurrentUserUI();
+        // await renderCurrentUserUI(); // <--- 核心修复：这行已被删除
         bindEventListeners();
         switchToView('chat-list-view');
     }
@@ -282,26 +305,39 @@ document.addEventListener('DOMContentLoaded', () => {
         const savedData = localStorage.getItem('myAiChatApp_V8_Data');
         if (savedData) { 
             appData = JSON.parse(savedData); 
-            if (!appData.currentUser) {
-                appData.currentUser = { name: '你', persona: '我是一个充满好奇心的人。' };
-            }
         } else {
              appData = {
-                currentUser: { name: '你', persona: '我是一个充满好奇心的人。' },
                 aiContacts: [], 
-                appSettings: { apiType: 'openai_proxy', apiUrl: '', apiKey: '', apiModel: '' }
+                appSettings: { apiType: 'openai_proxy', apiUrl: '', apiKey: '', apiModel: '', contextLimit: 20 }
             };
         }
+
+        // --- (核心) 数据迁移与验证逻辑 ---
+        if (appData.currentUser) {
+            appData.aiContacts.forEach(contact => {
+                if (!contact.userProfile) {
+                    contact.userProfile = appData.currentUser;
+                }
+            });
+            delete appData.currentUser; 
+        }
+        
         if (!appData.appSettings) { appData.appSettings = { apiType: 'openai_proxy', apiUrl: '', apiKey: '', apiModel: '', contextLimit: 20 }; }
-        // 同时，确保老用户也有默认值
         if (appData.appSettings.contextLimit === undefined) {
-            appData.appSettings.contextLimit = 50; // 默认记忆50条
+            appData.appSettings.contextLimit = 20;
         }
         if (!appData.aiContacts) { appData.aiContacts = []; }
 
         appData.aiContacts.forEach(c => {
             if (!c.remark) c.remark = c.name;
             if (c.isPinned === undefined) c.isPinned = false;
+            if (!c.userProfile) {
+                c.userProfile = { name: '你', persona: '我是一个充满好奇心的人。' };
+            }
+            // --- (核心新增) 确保每个角色都有一个聊天记录数组 ---
+            if (!c.chatHistory) {
+                c.chatHistory = [];
+            }
         });
         saveAppData();
     }
@@ -335,7 +371,10 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const contact of sortedContacts) {
             const avatarBlob = await db.getImage(`${contact.id}_avatar`);
             const avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
-            const lastMessage = contact.chatHistory[contact.chatHistory.length - 1] || { content: '...' };
+            // --- (核心修复) 使用更安全的方式获取最后一条消息 ---
+            const lastMessage = (contact.chatHistory && contact.chatHistory.length > 0) 
+                ? contact.chatHistory[contact.chatHistory.length - 1] 
+                : { content: '...' };
             const item = document.createElement('div');
             item.className = 'chat-list-item';
             if (contact.isPinned) {
@@ -367,12 +406,6 @@ document.addEventListener('DOMContentLoaded', () => {
         modelArea.style.display = apiTypeSelect.value === 'gemini_direct' ? 'none' : 'block';
     }
 
-    async function renderCurrentUserUI() {
-        const userAvatarBlob = await db.getImage('user_avatar');
-        const userAvatarUrl = userAvatarBlob ? URL.createObjectURL(userAvatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg';
-        currentUserAvatar.src = userAvatarUrl;
-    }
-
     async function openChat(contactId) {
         activeChatContactId = contactId;
         exitSelectMode();
@@ -386,8 +419,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const avatarBlob = await db.getImage(`${contact.id}_avatar`);
         contact.avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
 
-        const userAvatarBlob = await db.getImage('user_avatar');
-        appData.currentUser.avatarUrl = userAvatarBlob ? URL.createObjectURL(userAvatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg';
+        const userAvatarBlob = await db.getImage(`${contact.id}_user_avatar`);
+        // 并将其临时存储在 contact 对象上，方便 displayMessage 函数快速调用
+        contact.userAvatarUrl = userAvatarBlob ? URL.createObjectURL(userAvatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg';
         
         chatAiName.textContent = contact.remark;
         messageContainer.innerHTML = '';
@@ -398,6 +432,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         switchToView('chat-window-view');
+        // --- (核心新增) 渲染完所有消息后，立刻滚动到底部 ---
+        messageContainer.scrollTop = messageContainer.scrollHeight;
     }
     
     function displayMessage(text, role, options = {}) {
@@ -407,11 +443,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentTimestamp = timestamp || Date.now();
         const TIME_GAP = 3 * 60 * 1000;
 
+        let timestampDiv = null; // --- 核心修改1：先创建一个空的“托盘位” ---
+
         if (!isStaged && !isLoading && (lastRenderedTimestamp === 0 || currentTimestamp - lastRenderedTimestamp > TIME_GAP)) {
-            const timestampDiv = document.createElement('div');
+            // 只创建，不添加
+            timestampDiv = document.createElement('div');
             timestampDiv.className = 'timestamp-display';
             timestampDiv.textContent = formatMessageTimestamp(currentTimestamp);
-            messageContainer.appendChild(timestampDiv);
         }
         
         if (!isStaged && !isLoading) {
@@ -431,9 +469,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        const avatarUrl = role === 'user' ? appData.currentUser.avatarUrl : (contact ? contact.avatarUrl : '');
+        const avatarUrl = role === 'user' 
+            ? (contact ? contact.userAvatarUrl : 'https://i.postimg.cc/cLPP10Vm/4.jpg') 
+            : (contact ? contact.avatarUrl : '');
 
         let messageContentHTML;
+        // ... (switch 语句和之前一样，无需改动)
         switch(type) {
             case 'image':
                 if (role === 'user') {
@@ -442,8 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         messageContentHTML = `<div class="message">🖼️ [图片] ${text}</div>`;
                     }
-                } else { // AI 发送的图片 (新样式)
-                    // --- 核心修复1：改用 data-description 属性来安全地存储描述文本 ---
+                } else { 
                     const escapedDescription = text.replace(/"/g, '&quot;');
                     messageContentHTML = `
                         <div class="message message-image-ai-direct" data-description="${escapedDescription}">
@@ -492,13 +532,16 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         
-        messageContainer.appendChild(messageRow);
+        // --- 核心修改2：在这里“打包”添加到页面 ---
+        if (timestampDiv) {
+            messageContainer.append(timestampDiv, messageRow); // 如果有时间戳，就一起添加
+        } else {
+            messageContainer.append(messageRow); // 否则只添加消息
+        }
 
-        // --- 核心修复2：在这里动态添加点击事件，而不是写在HTML里 ---
         const aiImageBubble = messageRow.querySelector('.message-image-ai-direct');
         if (aiImageBubble) {
             aiImageBubble.addEventListener('click', () => {
-                // 从 data-description 属性安全地取回描述文本
                 const description = aiImageBubble.dataset.description;
                 openAiImageModal(description);
             });
@@ -525,6 +568,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function stageUserMessage() {
         const text = chatInput.value.trim();
         if (text === '') return;
+
+        // --- (核心升级) 在这里添加智能判断逻辑 ---
+        const TIME_GAP = 3 * 60 * 1000; // 3分钟间隔
+        
+        // 条件1: 这是第一条被暂存的消息吗? (stagedUserMessages 数组现在还是空的)
+        // 条件2: 距离上次真正显示的消息，时间是否超过了3分钟?
+        if (stagedUserMessages.length === 0 && (Date.now() - lastRenderedTimestamp > TIME_GAP)) {
+            // 如果都满足，就立即创建并显示时间戳
+            const timestampDiv = document.createElement('div');
+            timestampDiv.className = 'timestamp-display';
+            timestampDiv.textContent = formatMessageTimestamp(Date.now());
+            messageContainer.appendChild(timestampDiv);
+            
+            // 关键一步：立即更新“最后显示时间戳”的记录
+            // 这就相当于一个“我已经显示过了”的信号，防止后面重复显示
+            lastRenderedTimestamp = Date.now(); 
+        }
+        // --- 升级逻辑结束 ---
+
         stagedUserMessages.push({ content: text, type: 'text' });
         displayMessage(text, 'user', { isStaged: true, type: 'text' });
         chatInput.value = '';
@@ -597,7 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
 - 请根据对话历史，回应用户。
 
 ## 任务2: 生成【恋爱导向型】回复建议
-- 根据你的回复，为用户（人设：${appData.currentUser.persona}）生成4条【风格各异】的建议。
+- 根据你的回复，为用户（人设：${contact.userProfile.persona}）生成4条【风格各异】的建议。
 - **建议1 & 2 (温和正面)**: 设计两条【温和或积极】的回答。其中一条【必须】是你最期望听到的、能让关系升温的回答。
 - **建议3 (中立探索)**: 设计一条【中立或疑问】的回答。
 - **建议4 (挑战/负面)**: 设计一条【带有挑战性或负面情绪】的回答，但要符合恋爱逻辑。
@@ -644,6 +706,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const responseData = JSON.parse(jsonMatch[0]);
                 if (responseData.suggestions && responseData.suggestions.length > 0) {
                     lastReceivedSuggestions = responseData.suggestions;
+                    // displaySuggestions(); // <--- (核心修复) 删除这一行！！！
+                } else {
+                    lastReceivedSuggestions = [];
                 }
                 if (Array.isArray(responseData.reply)) {
                     for (const msg of responseData.reply) {
@@ -669,11 +734,92 @@ document.addEventListener('DOMContentLoaded', () => {
             displayMessage(`(｡•́︿•̀｡) 哎呀，出错了: ${error.message}`, 'assistant', { isNew: true });
         }
     }
+    async function refreshSuggestions() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return; // 稍微修改了判断条件
+
+        refreshSuggestionsBtn.classList.add('spinning');
+        refreshSuggestionsBtn.disabled = true;
+
+        const lastAiReplies = [];
+        for (let i = contact.chatHistory.length - 1; i >= 0; i--) {
+            if (contact.chatHistory[i].role === 'assistant') {
+                lastAiReplies.unshift(contact.chatHistory[i].content);
+            } else if (contact.chatHistory[i].role === 'user') {
+                break; 
+            }
+        }
+        if (lastAiReplies.length === 0) {
+            refreshSuggestionsBtn.classList.remove('spinning');
+            refreshSuggestionsBtn.disabled = false;
+            return;
+        }
+
+        const refreshPrompt = `
+# 你的任务
+- 你是 AI 助手 "${contact.name}"。
+- 你刚刚发送了以下消息: "${lastAiReplies.join(' ')}"
+- 现在，请**只**为用户（人设：${contact.userProfile.persona}）生成一套**全新的、与上次不同**的4条回复建议。
+- **建议1 & 2 (温和正面)**: 设计两条【温和或积极】的回答。其中一条【必须】是你最期望听到的、能让关系升温的回答。
+- **建议3 (中立探索)**: 设计一条【中立或疑问】的回答。
+- **建议4 (挑战/负面)**: 设计一条【带有挑战性或负面情绪】的回答，但要符合恋爱逻辑。
+
+# 输出格式要求
+你的回复【必须】是一个能被JSON解析的对象，并且【只包含 suggestions 字段】:
+{
+  "suggestions": ["全新的建议1", "全新的建议2", "全新的建议3", "全新的建议4"]
+}`;
+        
+        try {
+            const requestUrl = appData.appSettings.apiUrl.endsWith('/chat/completions') 
+                ? appData.appSettings.apiUrl 
+                : appData.appSettings.apiUrl + '/chat/completions';
+
+            const response = await fetch(requestUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
+                body: JSON.stringify({ model: appData.appSettings.apiModel, messages: [{ role: 'user', content: refreshPrompt }] })
+            });
+
+            if (!response.ok) throw new Error(`HTTP 错误 ${response.status}`);
+            const data = await response.json();
+            if (!data.choices || data.choices.length === 0) throw new Error("API返回了无效的数据。");
+
+            const responseText = data.choices[0].message.content;
+            const jsonMatch = responseText.match(/{[\s\S]*}/);
+            
+            if (jsonMatch) {
+                const responseData = JSON.parse(jsonMatch[0]);
+                if (responseData.suggestions && responseData.suggestions.length > 0) {
+                    lastReceivedSuggestions = responseData.suggestions;
+                    // --- (核心修改) 不再主动调用显示，只是默默更新数据 ---
+                    // displaySuggestions(); // <--- 注释掉或删除这一行
+                } else {
+                    // 如果AI这次没有返回建议，清空旧的建议
+                    lastReceivedSuggestions = [];
+                }
+            } else {
+                throw new Error("返回的建议格式不正确。");
+            }
+
+        } catch (error) {
+            console.error('刷新建议失败:', error);
+            alert('刷新建议失败，请稍后再试。');
+        } finally {
+            refreshSuggestionsBtn.classList.remove('spinning');
+            refreshSuggestionsBtn.disabled = false;
+        }
+    }
     
     function displaySuggestions() {
-        aiSuggestionPanel.innerHTML = '';
+        aiSuggestionPanel.innerHTML = ''; // 每次都彻底清空
+
+        const buttonsContainer = document.createElement('div');
+        buttonsContainer.className = 'suggestion-buttons-container';
+
         if (lastReceivedSuggestions.length === 0) {
-            aiSuggestionPanel.innerHTML = `<span style="color:#999;font-size:12px;">暂时没有建议哦~</span>`;
+            buttonsContainer.innerHTML = `<span style="color:#999;font-size:12px;">暂时没有建议哦~</span>`;
+            aiSuggestionPanel.appendChild(buttonsContainer);
         } else {
             lastReceivedSuggestions.forEach(text => {
                 const button = document.createElement('button');
@@ -681,12 +827,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 button.textContent = text;
                 button.onclick = () => {
                     chatInput.value = text;
-                    aiSuggestionPanel.classList.add('hidden');
+                    aiSuggestionPanel.classList.add('hidden'); // 点击后直接隐藏
                 };
-                aiSuggestionPanel.appendChild(button);
+                buttonsContainer.appendChild(button);
             });
+            
+            // (核心修改) 刷新按钮现在也由这里创建，并直接添加到面板里
+            const refreshButton = document.createElement('button');
+            refreshButton.id = 'refresh-suggestions-btn';
+            refreshButton.title = '换一批';
+            refreshButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>`;
+            refreshButton.addEventListener('click', refreshSuggestions);
+            
+            aiSuggestionPanel.appendChild(buttonsContainer);
+
+            // 只有在有建议时才添加刷新按钮
+            aiSuggestionPanel.appendChild(refreshButton);
         }
+        
         aiSuggestionPanel.classList.remove('hidden');
+    }
+
+    function showSuggestionUI() {
+        aiSuggestionPanel.classList.remove('hidden');
+        refreshSuggestionsContainer.classList.remove('hidden');
+    }
+
+    function hideSuggestionUI() {
+        aiSuggestionPanel.classList.add('hidden');
+        refreshSuggestionsContainer.classList.add('hidden');
     }
 
     async function fetchModels() {
@@ -722,9 +891,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function openProfileModal() {
-        modalUserNameInput.value = appData.currentUser.name;
-        modalUserPersonaInput.value = appData.currentUser.persona;
-        const userAvatarBlob = await db.getImage('user_avatar');
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+
+        modalUserNameInput.value = contact.userProfile.name;
+        modalUserPersonaInput.value = contact.userProfile.persona;
+        // --- 核心修改：读取与当前AI角色绑定的用户头像 ---
+        const userAvatarBlob = await db.getImage(`${activeChatContactId}_user_avatar`);
         userAvatarPreview.src = userAvatarBlob ? URL.createObjectURL(userAvatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg';
         userProfileModal.classList.remove('hidden');
     }
@@ -761,9 +934,19 @@ document.addEventListener('DOMContentLoaded', () => {
     async function openContactSettings() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
-        const avatarBlob = await db.getImage(`${contact.id}_avatar`);
-        csContactAvatar.src = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
-        csContactName.textContent = contact.remark;
+        
+        // 【终极修复】在切换视图前，立刻将设置页面的滚动条重置到顶部
+        document.querySelector('.contact-settings-container').scrollTop = 0;
+
+        // 加载并显示 AI 的头像
+        const aiAvatarBlob = await db.getImage(`${contact.id}_avatar`);
+        csContactAvatar.src = aiAvatarBlob ? URL.createObjectURL(aiAvatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
+        
+        // --- (核心新增) 加载并显示“我”的头像 ---
+        const myAvatarBlob = await db.getImage(`${contact.id}_user_avatar`);
+        csMyAvatar.src = myAvatarBlob ? URL.createObjectURL(myAvatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg'; // 使用一个默认头像
+
+        // csContactName.textContent = contact.remark; // 这行代码已被删除
         csPinToggle.checked = contact.isPinned || false;
         switchToView('contact-settings-view');
     }
@@ -967,6 +1150,53 @@ document.addEventListener('DOMContentLoaded', () => {
         exitSelectMode();
         renderChatList();
     }
+    // --- (全新) 自定义弹窗的核心逻辑 ---
+    let confirmCallback = null;
+
+    function showCustomConfirm(title, text, onConfirm) {
+        customConfirmTitle.textContent = title;
+        customConfirmText.textContent = text;
+        confirmCallback = onConfirm;
+        customConfirmModal.classList.remove('hidden');
+    }
+
+    function closeCustomConfirm() {
+        customConfirmModal.classList.add('hidden');
+        confirmCallback = null;
+    }
+
+    function showCustomAlert(title, text) {
+        customAlertTitle.textContent = title;
+        customAlertText.textContent = text;
+        customAlertModal.classList.remove('hidden');
+    }
+
+    function closeCustomAlert() {
+        customAlertModal.classList.add('hidden');
+    }
+    function deleteActiveContact() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+        
+        // --- 核心修改：调用全新的自定义确认弹窗 ---
+        showCustomConfirm(
+            '删除确认',
+            `真的要删除角色 "${contact.remark}" 吗？\n\n与TA的所有聊天记录和设定都将被永久清除，此操作无法撤销！`,
+            () => { // 这个函数会在用户点击“确定”后执行
+                appData.aiContacts = appData.aiContacts.filter(c => c.id !== activeChatContactId);
+                saveAppData();
+
+                db.deleteImage(`${activeChatContactId}_avatar`);
+                db.deleteImage(`${activeChatContactId}_user_avatar`);
+                db.deleteImage(`${activeChatContactId}_photo`);
+
+                showCustomAlert('删除成功', `角色 "${contact.remark}" 已被删除。`);
+                
+                switchToView('chat-list-view');
+                renderChatList();
+            }
+        );
+    }
     
     function addNewContact() {
         const newContactId = Date.now();
@@ -975,6 +1205,11 @@ document.addEventListener('DOMContentLoaded', () => {
             name: `新伙伴 ${newContactId.toString().slice(-4)}`,
             remark: `新伙伴 ${newContactId.toString().slice(-4)}`,
             persona: `新伙伴 ${newContactId.toString().slice(-4)}\n这是一个新创建的AI伙伴，等待你为TA注入灵魂。`,
+            // --- 核心修复：在创建新角色时，就给他一套独立的、全新的用户信息 ---
+            userProfile: {
+                name: '你',
+                persona: '我是一个充满好奇心的人。'
+            },
             worldBook: [],
             memory: '',
             chatHistory: [],
@@ -1013,19 +1248,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         apiTypeSelect.addEventListener('change', updateSettingsUI);
         fetchModelsButton.addEventListener('click', fetchModels);
-        currentUserAvatar.addEventListener('click', openProfileModal);
+        csEditMyProfile.addEventListener('click', openProfileModal);
         closeModalButton.addEventListener('click', closeProfileModal);
-        saveProfileButton.addEventListener('click', () => {
-            appData.currentUser.name = modalUserNameInput.value.trim();
-            appData.currentUser.persona = modalUserPersonaInput.value;
+        saveProfileButton.addEventListener('click', async () => {
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!contact) return;
+            
+            contact.userProfile.name = modalUserNameInput.value.trim();
+            contact.userProfile.persona = modalUserPersonaInput.value;
             saveAppData();
-            renderCurrentUserUI();
+
+            const myAvatarBlob = await db.getImage(`${contact.id}_user_avatar`);
+            csMyAvatar.src = myAvatarBlob ? URL.createObjectURL(myAvatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg';
+
             closeProfileModal();
-            alert('用户信息已保存！');
+            alert('此对话中的身份已保存！');
         });
         userAvatarUploadArea.addEventListener('click', () => userAvatarUploadInput.click());
         userAvatarUploadInput.addEventListener('change', (e) => {
-            handleImageUpload(e.target.files[0], 'user_avatar', userAvatarPreview);
+            handleImageUpload(e.target.files[0], `${activeChatContactId}_user_avatar`, userAvatarPreview);
         });
         addContactButton.addEventListener('click', addNewContact);
         chatSettingsButton.addEventListener('click', openContactSettings);
@@ -1036,40 +1277,36 @@ document.addEventListener('DOMContentLoaded', () => {
         saveAiProfileButton.addEventListener('click', saveAiProfile);
         chatHeaderInfo.addEventListener('click', openAiEditor);
         
-        // --- 语音按钮 (这个是正常的) ---
         voiceBtn.addEventListener('click', openVoiceModal);
         cancelVoiceButton.addEventListener('click', closeVoiceModal);
         confirmVoiceButton.addEventListener('click', sendVoiceMessage);
 
-        // --- 图片和相机按钮 (使用我们最新的弹窗逻辑) ---
         imageBtn.addEventListener('click', () => openImageUploadModal('upload'));
         cameraBtn.addEventListener('click', () => openImageUploadModal('simulate'));
         
-        // --- (恢复) 其他被误删的按钮事件 ---
         redPacketBtn.addEventListener('click', () => {
             const text = prompt("模拟发红包，请输入祝福语：", "恭喜发财");
             if (text) {
-                // 修改为暂存模式
                 stagedUserMessages.push({ content: text, type: 'red-packet' });
                 displayMessage(text, 'user', { isStaged: true, type: 'red-packet' });
             }
         });
         emojiBtn.addEventListener('click', () => alert("开发中！"));
         moreFunctionsButton.addEventListener('click', () => alert("开发中！"));
+        
+        // --- (核心修复) ---
         aiHelperButton.addEventListener('click', () => {
             if (aiSuggestionPanel.classList.contains('hidden')) {
-                displaySuggestions();
+                displaySuggestions(); // 调用它来构建内容并显示
             } else {
-                aiSuggestionPanel.classList.add('hidden');
+                hideSuggestionUI();   // 调用辅助函数来隐藏所有相关UI
             }
         });
 
-        // --- (恢复) 选择模式的按钮事件 ---
         cancelSelectButton.addEventListener('click', exitSelectMode);
         editSelectedButton.addEventListener('click', editSelectedMessage);
         deleteSelectedButton.addEventListener('click', deleteSelectedMessages);
         
-        // --- (恢复) AI编辑器和头像上传的事件 ---
         avatarUploadArea.addEventListener('click', () => avatarUploadInput.click());
         avatarUploadInput.addEventListener('change', (e) => {
             handleImageUpload(e.target.files[0], `${activeChatContactId}_avatar`, avatarPreview);
@@ -1079,24 +1316,35 @@ document.addEventListener('DOMContentLoaded', () => {
             handleImageUpload(e.target.files[0], `${activeChatContactId}_photo`, photoPreview);
         });
         
-        // --- (恢复) 聊天设置页面的事件 ---
         contactSettingsView.querySelectorAll('.settings-item').forEach(item => {
-            if (item.id !== 'cs-edit-ai-profile' && item.id !== 'cs-clear-history' && !item.querySelector('.switch')) {
+            // --- 核心修复：在这里也排除掉 "删除" 按钮 ---
+            if (item.id !== 'cs-edit-ai-profile' && item.id !== 'cs-edit-my-profile' && item.id !== 'cs-clear-history' && item.id !== 'cs-delete-contact' && !item.querySelector('.switch')) {
                 item.addEventListener('click', () => alert('功能开发中，敬请期待！'));
             }
         });
         csClearHistory.addEventListener('click', clearActiveChatHistory);
+        csDeleteContact.addEventListener('click', deleteActiveContact);
         csPinToggle.addEventListener('change', togglePinActiveChat);
 
-        // --- (新增) 绑定我们新添加的图片弹窗的按钮事件 ---
+        // --- (新增) 绑定所有自定义弹窗的按钮事件 ---
+        customConfirmCancelBtn.addEventListener('click', closeCustomConfirm);
+        customAlertOkBtn.addEventListener('click', closeCustomAlert);
+        customConfirmOkBtn.addEventListener('click', () => {
+            if (confirmCallback) {
+                confirmCallback(); // 执行确认后该做的事
+            }
+            closeCustomConfirm(); // 然后关闭弹窗
+        });
+
         userImageUploadArea.addEventListener('click', () => userImageUploadInput.click());
         userImageUploadInput.addEventListener('change', handleImagePreview);
         cancelImageUploadButton.addEventListener('click', closeImageUploadModal);
         confirmImageUploadButton.addEventListener('click', sendImageMessage);
-        // (注意：ai-image-modal 的关闭按钮可能在早期版本中未添加，这里补上)
+        
         if(closeAiImageModalButton) {
             closeAiImageModalButton.addEventListener('click', closeAiImageModal);
         }
+        refreshSuggestionsBtn.addEventListener('click', refreshSuggestions);
     }
     
     initialize();
