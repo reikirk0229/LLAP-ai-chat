@@ -1,4 +1,9 @@
 /* style.css (V8.18 - 视觉与体验优化) */
+/* 【终极修复】为所有元素设置正确的盒子模型，防止padding撑大布局 */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
 :root {
     --primary-color: #007bff;
     --background-light: #f0f2f5;
@@ -338,27 +343,35 @@ input:checked + .slider:before { transform: translateX(20px); }
 
 /* --- 视图6: AI信息编辑页面 --- */
 #ai-editor-form { flex-grow: 1; overflow-y: auto; padding: 20px; background-color: white; }
+
+/* 步骤1: 明确定义水平容器的行为 */
 .form-group-horizontal {
-    display: flex;
-    gap: 15px; /* 减小间距 */
-    margin-bottom: 20px;
-    align-items: flex-end; /* 底部对齐 */
+    display: flex;           /* 启用 Flexbox 布局 */
+    flex-direction: row;     /* 强制水平排列 (虽然是默认值，但写上更保险) */
+    flex-wrap: nowrap;       /* 强制不换行 */
+    align-items: flex-end;   /* 保持原有的底部对齐 */
+    gap: 15px;               /* 保持间距 */
+    margin-bottom: 20px;     /* 保持外边距 */
 }
-/* 【新增】为头像和照片组分别设定宽度 */
+
+/* 步骤2: 用最严格的方式定义“AI头像”区域 */
 .form-group.avatar-group {
-    flex-basis: 90px; /* 头像区域固定宽度 */
-    flex-shrink: 0;
+    flex: 0 0 90px; /* 终极咒语1: 不准变大(0)，不准变小(0)，固定宽度90px */
 }
+
+/* 步骤3: 用最严格的方式定义“AI照片”区域，并加入解决问题的关键代码 */
 .form-group.photo-group {
-    flex-grow: 1; /* 照片区域占据剩余空间 */
+    flex: 1 1 auto; /* 终极咒语2: 可以变大(1)，可以变小(1)，尺寸随内容自适应 */
+    min-width: 0;   /* 关键代码！解除内部内容的宽度限制，允许它被正确压缩 */
 }
-/* 【新增】头像上传区域样式 */
+
+/* 【新增】头像上传区域样式 (这部分无需改动，保持原样) */
 .image-upload-area.avatar-upload {
     width: 90px;
     height: 90px;
     border-radius: 50%; /* 圆形 */
 }
-/* 【新增】照片上传区域样式 */
+/* 【新增】照片上传区域样式 (这部分无需改动，保持原样) */
 .image-upload-area.photo-upload {
     width: 100%;
     height: 120px; /* 4:3 比例的高度 */
@@ -372,7 +385,7 @@ input:checked + .slider:before { transform: translateX(20px); }
     font-size: 14px;
     box-sizing: border-box;
 }
-.form-group-horizontal .form-group { flex: 1; margin-bottom: 0; }
+/* 上面那行 .form-group-horizontal .form-group { ... } 已被彻底删除 */
 .image-upload-area { width: 100%; height: 120px; border: 2px dashed var(--border-color); border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; background-color: #f9f9f9; position: relative; overflow: hidden; }
 .image-upload-area:hover { border-color: var(--qq-blue); background-color: #f0f8ff; }
 .image-upload-area span { color: var(--text-secondary); font-size: 14px; }
@@ -516,4 +529,108 @@ input:checked + .slider:before { transform: translateX(20px); }
     /* 箭头颜色应与聊天背景色一致，或白色 */
     border-color: transparent var(--background-white) transparent transparent; 
     z-index: 1;
+}
+/* --- (新增) 聊天设置页图标占位符样式 --- */
+.settings-item-icon-placeholder {
+    width: 40px;  /* 尺寸与聊天头像保持一致 */
+    height: 40px; /* 尺寸与聊天头像保持一致 */
+    flex-shrink: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    color: var(--qq-blue);
+    background-color: #f0f2f5;
+    border-radius: 50%; /* 核心修改：50% 即可变成完美的圆形 */
+    /* margin-right: 12px; (这个间距由父元素的 gap 控制，可以省略) */
+}
+/* --- (全新) AI帮回/建议面板样式最终版 V4 --- */
+
+/* (核心修改1) 给建议面板增加右内边距，为刷新按钮“预留”空间 */
+#ai-suggestion-panel {
+    padding: 10px 15px; /* (核心修复) 恢复左右对称的内边距 */
+    background-color: var(--background-light);
+    border-top: 1px solid var(--border-color);
+    position: relative; 
+}
+
+.suggestion-buttons-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* 刷新按钮容器不再需要，可以删除其样式 */
+/* #refresh-suggestions-container { ... } */
+
+#refresh-suggestions-btn {
+    position: absolute;
+    bottom: 12px;         /* (核心修改) 从 top 改为 bottom */
+    right: 12px;
+    
+    width: 28px;
+    height: 28px;
+    border: none;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background-color 0.3s ease, opacity 0.3s ease;
+    opacity: 0.5;
+}
+/* (核心修改3) 鼠标悬停或点击时，完全不透明 */
+#ai-suggestion-panel:hover #refresh-suggestions-btn,
+#refresh-suggestions-btn:active {
+    opacity: 1;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+#refresh-suggestions-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke: white; /* 图标改为白色，在深色背景上更清晰 */
+    stroke-width: 2.5;
+}
+
+#refresh-suggestions-btn.spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+/* --- (新增) 删除按钮及自定义弹窗样式 --- */
+
+/* 步骤1: 定义通用的危险文字样式（比如“清空聊天记录”），让它保持红色文字 */
+.settings-item .danger {
+    color: #e53935;
+    width: 100%;
+    text-align: center;
+}
+
+/* 步骤2: 专门为“删除角色”按钮本身设置红色的背景 */
+#cs-delete-contact {
+    background-color: #e53935; /* 核心修改：背景变为红色 */
+    transition: background-color 0.2s; /* 让颜色变化更平滑 */
+}
+
+/* 步骤3: 覆盖“删除角色”按钮内部的文字颜色，让它变成白色 */
+#cs-delete-contact .danger {
+    color: white; /* 核心修改：文字变为白色 */
+    font-weight: bold; /* 加粗文字，更醒目 */
+}
+
+/* (可选) 步骤4: 添加一个漂亮的鼠标悬停效果 */
+#cs-delete-contact:hover {
+    background-color: #d32f2f; /* 鼠标放上去时，背景变成更深的红色 */
+}
+
+/* 自定义弹窗内的文本样式 */
+#custom-confirm-text, #custom-alert-text {
+    line-height: 1.6;
+    font-size: 15px;
+    white-space: pre-wrap;
 }
