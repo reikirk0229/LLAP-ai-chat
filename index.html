@@ -13,7 +13,7 @@
         <!-- 视图1: 消息列表 (默认视图) -->
         <div id="chat-list-view" class="view">
             <div class="header">
-                <img id="current-user-avatar" class="avatar-sm clickable" src="">
+                <!-- 修改点: 整个用户头像的 img 标签被彻底删除 -->
                 <span>消息</span>
                 <button id="add-contact-button" class="header-button">+</button>
             </div>
@@ -44,8 +44,18 @@
                 </div>
             </div>
             <div id="message-container"></div>
-            <div id="ai-suggestion-panel" class="suggestion-panel hidden"></div>
+            
+            <!-- (核心修改) 回归单一容器结构 -->
+            <div id="ai-suggestion-panel" class="suggestion-panel hidden">
+                <!-- 内部将由JS动态填充 -->
+            </div>
+
             <div class="chat-input-area">
+                <!-- (核心修改) 将刷新按钮容器“植入”输入区域顶部 -->
+                <div id="refresh-suggestions-container" class="hidden">
+                    <button id="refresh-suggestions-btn" title="换一批"></button>
+                </div>
+
                 <div class="chat-functions-toolbar">
                     <button id="voice-btn" class="tool-button" title="语音"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg></button>
                     <button id="image-btn" class="tool-button" title="图片"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></button>
@@ -117,12 +127,52 @@
                 <span>聊天设置</span>
             </div>
             <div class="contact-settings-container">
-                <div class="settings-group"><div class="settings-item contact-profile" id="cs-edit-ai-profile"><img id="cs-contact-avatar" class="avatar" src=""><span id="cs-contact-name">BB企鹅</span><span class="arrow">&gt;</span></div></div>
-                <div class="settings-group"><div class="settings-item"><span>设为置顶</span><label class="switch"><input type="checkbox" id="cs-pin-toggle"><span class="slider"></span></label></div><div class="settings-item"><span>导出/导入聊天记录</span><span class="arrow">&gt;</span></div></div>
-                <div class="settings-group"><div class="settings-item"><span>设置AI动态频率</span><span class="arrow">&gt;</span></div><div class="settings-item"><span>设置AI主动消息频率</span><span class="arrow">&gt;</span></div></div>
-                <div class="settings-group"><div class="settings-item"><span>设置聊天背景</span><span class="arrow">&gt;</span></div><div class="settings-item"><span>设置气泡样式</span><span class="arrow">&gt;</span></div><div class="settings-item"><span>设置字体大小</span><span class="arrow">&gt;</span></div></div>
-                <div class="settings-group"><div class="settings-item" id="cs-summarize-chat"><span>总结对话</span><span class="arrow">&gt;</span></div><div class="settings-item" id="cs-clear-history"><span class="danger">清空聊天记录</span></div></div>
-                <div class="settings-group"><div class="settings-item" id="cs-blacklist-contact"><span class="danger">将对方添加至黑名单</span></div></div>
+
+                <!-- (核心修改) 用户身份 和 AI信息 入口并排显示 -->
+                <div class="settings-group">
+                    <!-- 入口1: 修改 AI 信息 -->
+                    <div class="settings-item contact-profile" id="cs-edit-ai-profile">
+                        <img id="cs-contact-avatar" class="avatar" src="">
+                        <span>对方信息</span>
+                        <span class="arrow">&gt;</span>
+                    </div>
+                    <!-- 入口2: 修改“我”的对话身份 -->
+                    <!-- 核心修改1: 添加了 contact-profile 类，确保样式对齐 -->
+                    <div class="settings-item contact-profile" id="cs-edit-my-profile">
+                        <!-- 核心修改2: 将占位符 div 换成了真正的 img 标签 -->
+                        <img id="cs-my-avatar" class="avatar" src="">
+                        <span>我的身份</span>
+                        <span class="arrow">&gt;</span>
+                    </div>
+                </div>
+
+                <!-- (保留) 功能设置区域 -->
+                <div class="settings-group">
+                    <div class="settings-item"><span>设为置顶</span><label class="switch"><input type="checkbox" id="cs-pin-toggle"><span class="slider"></span></label></div>
+                    <div class="settings-item"><span>导出/导入聊天记录</span><span class="arrow">&gt;</span></div>
+                </div>
+                <div class="settings-group">
+                    <div class="settings-item"><span>设置AI动态频率</span><span class="arrow">&gt;</span></div>
+                    <div class="settings-item"><span>设置AI主动消息频率</span><span class="arrow">&gt;</span></div>
+                </div>
+                <div class="settings-group">
+                    <div class="settings-item"><span>设置聊天背景</span><span class="arrow">&gt;</span></div>
+                    <div class="settings-item"><span>设置气泡样式</span><span class="arrow">&gt;</span></div>
+                    <div class="settings-item"><span>设置字体大小</span><span class="arrow">&gt;</span></div>
+                </div>
+                <div class="settings-group">
+                    <div class="settings-item" id="cs-summarize-chat"><span>总结对话</span><span class="arrow">&gt;</span></div>
+                    <div class="settings-item" id="cs-clear-history"><span class="danger">清空聊天记录</span></div>
+                </div>
+                <div class="settings-group">
+                    <div class="settings-item" id="cs-blacklist-contact"><span class="danger">将对方添加至黑名单</span></div>
+                </div>
+                <!-- (新增) 删除角色功能 -->
+                <div class="settings-group">
+                    <div class="settings-item" id="cs-delete-contact">
+                        <span class="danger">删除该角色</span>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -251,6 +301,37 @@
             </div>
         </div>
     </div>
+    <!-- (全新) 自定义确认弹窗 -->
+    <div id="custom-confirm-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="custom-confirm-title">确认操作</h3>
+            </div>
+            <div class="modal-body">
+                <p id="custom-confirm-text"></p>
+            </div>
+            <div class="modal-footer-split">
+                <button id="custom-confirm-cancel-btn" class="modal-button secondary">取消</button>
+                <button id="custom-confirm-ok-btn" class="modal-button primary">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- (全新) 自定义提示弹窗 -->
+    <div id="custom-alert-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="custom-alert-title">提示</h3>
+            </div>
+            <div class="modal-body">
+                <p id="custom-alert-text"></p>
+            </div>
+            <div class="modal-footer">
+                <button id="custom-alert-ok-btn">确定</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 底部导航栏 -->
     <div id="app-nav">
         <div class="nav-button active" data-view="chat-list-view">消息</div>
