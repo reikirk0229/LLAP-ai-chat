@@ -209,6 +209,7 @@ body {
     display: flex;
     align-items: flex-end; /* 让柱子底部对齐 */
     gap: 2px;
+    min-width: 30px; /* 【核心修复】确保声波区域至少有30px宽度，绝不会消失 */
 }
 .wave-bar {
     flex-grow: 1; /* 让柱子自动填满空间 */
@@ -218,7 +219,7 @@ body {
     animation-timing-function: ease-in-out;
 }
 .user-row .wave-bar { background-color: white; }
-.assistant-row .wave-bar { background-color: #333; }
+.assistant-row .wave-bar { background-color: #dcdcdc; }
 .voice-duration {
     flex-shrink: 0;
     font-size: 14px;
@@ -565,11 +566,10 @@ input:checked + .slider:before { transform: translateX(20px); }
 
 #refresh-suggestions-btn {
     position: absolute;
-    bottom: 12px;         /* (核心修改) 从 top 改为 bottom */
-    right: 12px;
-    
-    width: 28px;
-    height: 28px;
+    bottom: 10px; /* 微调位置 */
+    right: 10px;  /* 微调位置 */
+    width: 36px;  /* 放大按钮 */
+    height: 36px; /* 放大按钮 */
     border: none;
     background-color: rgba(0, 0, 0, 0.1);
     border-radius: 50%;
@@ -588,8 +588,8 @@ input:checked + .slider:before { transform: translateX(20px); }
 }
 
 #refresh-suggestions-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 20px;  /* 放大图标 */
+    height: 20px; /* 放大图标 */
     stroke: white; /* 图标改为白色，在深色背景上更清晰 */
     stroke-width: 2.5;
 }
