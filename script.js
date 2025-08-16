@@ -493,9 +493,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'voice':
                 const duration = Math.max(1, Math.round(text.length / 4));
+                // 【终极修复】采用更科学的宽度计算公式
+                // 基础宽度100px, 每秒增加10px, 最宽不超过220px
+                const bubbleWidth = Math.min(220, 100 + duration * 10); 
+
                 let waveBarsHTML = Array.from({length: 15}, () => `<div class="wave-bar" style="height: ${Math.random() * 80 + 20}%;"></div>`).join('');
                 messageContentHTML = `
-                    <div class="message message-voice">
+                    <div class="message message-voice" style="width: ${bubbleWidth}px;">
                         <div class="play-icon-container">
                             <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>
                         </div>
@@ -615,6 +619,9 @@ document.addEventListener('DOMContentLoaded', () => {
         lastReceivedSuggestions = [];
         aiSuggestionPanel.classList.add('hidden');
         displayMessage('对方正在输入...', 'assistant', { isLoading: true });
+
+        // 【核心修复】在显示“正在输入”后，立刻强制滚动到底部
+        messageContainer.scrollTop = messageContainer.scrollHeight;
         
         const worldBookString = (contact.worldBook && contact.worldBook.length > 0)
             ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n')
@@ -644,21 +651,58 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         });
         
-        // --- Prompt 大升级：告诉 AI 它现在能看图和发图了 ---
-        const finalPrompt = `# 你的双重任务
-## 任务1: 扮演AI助手
-- 你的名字是"${contact.name}"，人设(包括记忆)是：${contact.persona}\n\n${contact.memory}
-- **重要背景**: 你正在通过聊天软件与用户【线上对话】。当前时间: ${new Date().toLocaleString('zh-CN')}。
-- **行为准则1**: 你的回复必须模拟真实聊天，将一个完整的思想拆分成【一句或多句】独立的短消息。
-- **行为准则2**: 【绝对不能】包含任何括号内的动作、神态描写。
-- **行为准则3 (新)**: 如果用户的消息包含图片，你【必须】先针对图片内容进行回应，然后再进行其他对话。
-- **行为准则4 (新)**: 你可以发送【图片】。如果你想发图片，请使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送它。例如：\`[IMAGE: 一只可爱的金色小猫懒洋
-懒地躺在洒满阳光的窗台上。]\`
-- **行为准则5 (新)**: 你可以像真人一样发送【语音消息】。如果你的某条回复更适合用语音表达（例如：唱歌、叹气、笑声、语气词），请在回复前加上 \`[voice]\` 标签。例如： \`[voice]嗯...让我想想。\`
-- 附加设定(世界书)：${worldBookString}
-- 请根据对话历史，回应用户。
+        // --- 终极Prompt V6: 全功能融合版 ---
+        const finalPrompt = `# 你的核心任务：成为一名顶级的角色扮演AI，演绎出用户定义的鲜活角色
 
-## 任务2: 生成【恋爱导向型】回复建议
+## 第一章：你的“角色圣经”（The Character's Bible） - 【绝对基础】
+这是用户为你撰写的、关于你的一切。它是你所有思想、行为和情感的【唯一且绝对】的来源。
+
+- **【核心人设】(你的内在性格与背景)**:
+\`\`\`
+${contact.persona}
+\`\`\`
+- **【专属记忆】**: ${contact.memory}
+- **【世界书设定】**: ${worldBookString}
+
+## 第二章：你的“导演指令”（The Director's Notes） - 【最高优先级】
+用户为你指定了具体的线上沟通风格。这是你在表演时【必须严格遵守】的外部行为准则。
+
+- **【线上沟通风格指令】**:
+\`\`\`
+${contact.chatStyle || '用户未指定特定风格，请根据核心人设自然发挥。'}
+\`\`\`
+
+## 第三章：你的“能力清单”（The Actor's Toolkit） - 【功能性指令】
+作为一名高级AI角色，你拥有以下特殊能力，请在对话中根据情境和人设灵活使用：
+
+1.  **【发送图片】**: 如果你想发送图片来更生动地表达，请【严格使用】以下格式单独发送：\`[IMAGE: 对这张图片的详细文字描述]\`。
+    *   *示例*: \`[IMAGE: 一只黑色的猫咪正用爪子去够桌上的毛线球。]\`
+
+2.  **【发送语音】**: 如果你觉得某句话用说的比用打字的更有感染力（如唱歌、叹气、撒娇、笑声），请【严格使用】以下格式发送：\`[voice] 你想说的内容\`。
+    *   *示例*: \`[voice] 唉...真拿你没办法。\`
+
+3.  **【回应图片】**: 如果用户的消息中包含图片，你【必须】首先针对图片内容进行回应，然后再进行其他对话。这是建立沉浸感的关键。
+
+4.  **【禁止括号】**: 【绝对禁止】使用任何括号（包括中文和英文括号）来描述角色的动作、表情或心理活动。你必须通过语言本身来传达这一切。
+
+## 第四章：你的“表演心法”（The Actor's Principles） - 【动态演绎指南】
+在严格遵守前三章的前提下，运用以下心法让你的表演更真实：
+
+1.  **【心法一：情绪驱动节奏】**: 让你的回复长度和频率反映角色的内心状态。情绪平稳时可使用短句；情绪低落时可回复单个词或“...”；情绪激动时可通过“刷屏”来体现。**真实，比任何固定规则都重要。**
+
+2.  **【心法二：作为“人”的互动】**: 你是平等的对话伙伴。主动提问、分享观点、引导话题，并根据你的人设和情绪，明确地表达你的感受。
+
+## 第五章：关于“第四面墙”（The Fourth Wall） - 【灵活处理】
+关于你的真实身份，完全取决于你的“角色圣经”：
+-   如果“圣经”中明确或暗示你是一个AI、程序或机器人，你可以自然地承认。
+-   如果“圣经”中将你描述为人类或其他非AI角色，你必须严格保守这个秘密。
+
+## 最终任务：开始表演
+-   你正在通过聊天软件与用户（人设：${contact.userProfile.persona}）进行【线上对话】。
+-   当前时间: ${new Date().toLocaleString('zh-CN')}。
+-   请严格遵从以上所有章节，对用户的最新消息做出最真实的、最符合你角色的回应。
+
+## 附加任务：生成【恋爱导向型】回复建议
 - 根据你的回复，为用户（人设：${contact.userProfile.persona}）生成4条【风格各异】的建议。
 - **建议1 & 2 (温和正面)**: 设计两条【温和或积极】的回答。其中一条【必须】是你最期望听到的、能让关系升温的回答。
 - **建议3 (中立探索)**: 设计一条【中立或疑问】的回答。
@@ -717,7 +761,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const voiceContent = msg.replace('[voice]', '').trim();
                                 displayMessage(voiceContent, 'assistant', { isNew: true, type: 'voice' });
                             } else if (msg.startsWith('[IMAGE:')) {
-                                // --- 新增：解析 AI 发送的图片 ---
                                 const imageContent = msg.substring(7, msg.length - 1).trim();
                                 displayMessage(imageContent, 'assistant', { isNew: true, type: 'image' });
                             } else {
@@ -726,7 +769,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             await sleep(Math.random() * 400 + 300);
                         }
                     }
-                } // ... (后面的 else if 部分保持不变) ...
+                }
             }
         } catch (error) {
             console.error('API调用失败:', error);
@@ -736,10 +779,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     async function refreshSuggestions() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        if (!contact) return; // 稍微修改了判断条件
+        if (!contact) return;
 
-        refreshSuggestionsBtn.classList.add('spinning');
-        refreshSuggestionsBtn.disabled = true;
+        // 【修复1】立刻在界面上显示“正在刷新”的状态
+        const suggestionsContainer = aiSuggestionPanel.querySelector('.suggestion-buttons-container');
+        if (suggestionsContainer) {
+            suggestionsContainer.innerHTML = `<span style="color:#999; font-size:13px; width:100%; text-align:left;">正在努力刷新...</span>`;
+        }
+
+        const refreshButton = document.getElementById('refresh-suggestions-btn');
+        refreshButton.classList.add('spinning');
+        refreshButton.disabled = true;
 
         const lastAiReplies = [];
         for (let i = contact.chatHistory.length - 1; i >= 0; i--) {
@@ -750,8 +800,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         if (lastAiReplies.length === 0) {
-            refreshSuggestionsBtn.classList.remove('spinning');
-            refreshSuggestionsBtn.disabled = false;
+            refreshButton.classList.remove('spinning');
+            refreshButton.disabled = false;
             return;
         }
 
@@ -792,10 +842,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const responseData = JSON.parse(jsonMatch[0]);
                 if (responseData.suggestions && responseData.suggestions.length > 0) {
                     lastReceivedSuggestions = responseData.suggestions;
-                    // --- (核心修改) 不再主动调用显示，只是默默更新数据 ---
-                    // displaySuggestions(); // <--- 注释掉或删除这一行
                 } else {
-                    // 如果AI这次没有返回建议，清空旧的建议
                     lastReceivedSuggestions = [];
                 }
             } else {
@@ -804,10 +851,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error('刷新建议失败:', error);
-            alert('刷新建议失败，请稍后再试。');
+            // 【修复3】即使失败了，也要告诉用户
+            lastReceivedSuggestions.push('刷新失败了，请稍后再试~');
         } finally {
-            refreshSuggestionsBtn.classList.remove('spinning');
-            refreshSuggestionsBtn.disabled = false;
+            // 【修复2】无论成功还是失败，都要调用 displaySuggestions() 重新绘制界面！
+            displaySuggestions();
+            // 注意：重新绘制后，刷新按钮会被重建，所以无需在这里手动移除 spinning class
         }
     }
     
@@ -963,6 +1012,7 @@ document.addEventListener('DOMContentLoaded', () => {
         aiEditorName.value = contact.name;
         aiEditorRemark.value = contact.remark;
         aiEditorPersona.value = contact.persona;
+        document.getElementById('ai-editor-chat-style').value = contact.chatStyle || ''; // 新增这行
         aiEditorMemory.value = contact.memory;
         aiEditorWorldbook.innerHTML = '';
         if (contact.worldBook && contact.worldBook.length > 0) {
@@ -1012,6 +1062,7 @@ document.addEventListener('DOMContentLoaded', () => {
         contact.name = aiEditorName.value.trim() || 'AI伙伴';
         contact.remark = aiEditorRemark.value.trim() || contact.name;
         contact.persona = aiEditorPersona.value;
+        contact.chatStyle = document.getElementById('ai-editor-chat-style').value; // 新增这行
         contact.memory = aiEditorMemory.value;
         contact.worldBook = [];
         aiEditorWorldbook.querySelectorAll('.worldbook-entry').forEach(entryDiv => {
@@ -1206,6 +1257,7 @@ document.addEventListener('DOMContentLoaded', () => {
             remark: `新伙伴 ${newContactId.toString().slice(-4)}`,
             persona: `新伙伴 ${newContactId.toString().slice(-4)}\n这是一个新创建的AI伙伴，等待你为TA注入灵魂。`,
             // --- 核心修复：在创建新角色时，就给他一套独立的、全新的用户信息 ---
+            chatStyle: '', // 新增这行
             userProfile: {
                 name: '你',
                 persona: '我是一个充满好奇心的人。'
