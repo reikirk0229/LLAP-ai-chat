@@ -8,6 +8,11 @@
 </head>
 <body>
 
+    <!-- 【【【全新：全局Toast提示】】】 -->
+    <div id="global-toast" class="hidden">
+        <span id="global-toast-text"></span>
+    </div>
+    
     <div id="app-container">
 
         <!-- 视图1: 消息列表 (默认视图) -->
@@ -185,7 +190,7 @@
                         </div>
                     </div>
                     <div class="settings-item" id="cs-summarize-chat">
-                        <span>手动总结当前对话</span>
+                        <span>手动总结</span>
                         <span class="arrow">&gt;</span>
                     </div>
                 </div>
@@ -501,7 +506,25 @@
             </div>
         </div>
     </div>
-
+    <!-- 【【【全新：手动总结范围设置弹窗】】】 -->
+    <div id="summary-range-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>手动总结设置</h3>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="summary-range-input">要总结最近的多少条消息？</label>
+                    <input type="number" id="summary-range-input" placeholder="例如: 100">
+                    <p style="font-size:12px; color:#999; margin-top:5px;">(不填则默认总结全部新消息)</p>
+                </div>
+            </div>
+            <div class="modal-footer-split">
+                <button id="cancel-summary-range-btn" class="modal-button secondary">取消</button>
+                <button id="confirm-summary-range-btn" class="modal-button primary">下一步</button>
+            </div>
+        </div>
+    </div>
     <!-- 底部导航栏 -->
     <div id="app-nav">
         <div class="nav-button active" data-view="chat-list-view">消息</div>
