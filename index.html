@@ -324,6 +324,25 @@
         </div>
     </div>
 
+    <!-- (全新) 红包详情弹窗 -->
+    <div id="red-packet-modal" class="modal-overlay hidden">
+        <div class="red-packet-content">
+            <button id="close-rp-modal-button" class="close-button">&times;</button>
+            <div class="rp-header">
+                <img id="rp-sender-avatar" class="avatar" src="">
+                <p id="rp-sender-name"></p>
+                <p id="rp-blessing"></p>
+                <div class="rp-amount-line">
+                    <span class="rp-currency">¥</span>
+                    <span id="rp-amount">0.00</span>
+                </div>
+                <p class="rp-status-text">收到的红包已存入余额</p>
+            </div>
+            <div class="rp-footer">
+                <div id="rp-receiver-list"></div>
+            </div>
+        </div>
+    </div>
     <!-- (全新) 自定义提示弹窗 -->
     <div id="custom-alert-modal" class="modal-overlay hidden">
         <div class="modal-content">
@@ -338,6 +357,28 @@
             </div>
         </div>
     </div>
+    <!-- 【【【核心新增：发送红包弹窗】】】 -->
+    <div id="red-packet-input-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>发送红包</h3>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="rp-input-blessing">祝福语</label>
+                    <input type="text" id="rp-input-blessing" value="恭喜发财">
+                </div>
+                <div class="form-group">
+                    <label for="rp-input-amount">金额 (元)</label>
+                    <input type="number" id="rp-input-amount" placeholder="0.00" step="0.01">
+                </div>
+            </div>
+            <div class="modal-footer-split">
+                <button id="cancel-rp-input-btn" class="modal-button secondary">取消</button>
+                <button id="confirm-rp-input-btn" class="modal-button primary">塞钱进红包</button>
+            </div>
+        </div>
+    </div>
 
     <!-- 底部导航栏 -->
     <div id="app-nav">
@@ -347,5 +388,6 @@
     </div>
     
     <script src="script.js"></script>
+
 </body>
 </html>
