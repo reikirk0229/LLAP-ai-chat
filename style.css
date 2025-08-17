@@ -937,3 +937,283 @@ input:checked + .slider:before { transform: translateX(20px); }
     font-size: 30px;
     color: var(--text-secondary);
 }
+/* --- (全新) AI表情包管理页面样式 --- */
+#sticker-manager-container {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 15px;
+    background-color: var(--background-light);
+}
+.sticker-group-card {
+    background-color: white;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.sticker-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    border-bottom: 1px solid #f0f0f0;
+}
+.sticker-group-header h4 {
+    margin: 0;
+    font-size: 16px;
+}
+.sticker-group-header .header-actions button {
+    background: none;
+    border: 1px solid var(--border-color);
+    padding: 4px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-left: 8px;
+    font-size: 13px;
+}
+.sticker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+    gap: 10px;
+    padding: 15px;
+}
+.sticker-manager-item {
+    position: relative;
+    width: 70px;
+    height: 70px;
+    background-color: #f0f2f5;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 5px;
+}
+.sticker-manager-item img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+.sticker-delete-btn {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 20px;
+    height: 20px;
+    background-color: #e53935;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 20px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.sticker-manager-item:hover .sticker-delete-btn {
+    opacity: 1;
+}
+.sticker-add-placeholder {
+    border: 2px dashed var(--border-color);
+    cursor: pointer;
+    font-size: 24px;
+    color: var(--text-secondary);
+}
+.button-like-label {
+    display: inline-block;
+    padding: 10px 15px;
+    background-color: var(--qq-blue);
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: center;
+}
+.sticker-preview-area {
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 15px;
+}
+/* --- (全新) AI信息页-表情包分组选择样式 --- */
+#ai-sticker-groups-container {
+    display: flex;
+    flex-direction: column; /* 让每个条目竖直排列 */
+    gap: 12px; /* 增加条目之间的间距 */
+}
+
+.checkbox-item {
+    display: flex; /* 启用flex布局，这是对齐的关键 */
+    align-items: center; /* 垂直居中对齐 */
+    cursor: pointer;
+}
+
+.checkbox-item input[type="checkbox"] {
+    width: 20px; /* 放大复选框 */
+    height: 20px; /* 放大复选框 */
+    margin-right: 10px; /* 让复选框和文字之间有空隙 */
+}
+
+.checkbox-item label {
+    font-size: 16px; /* 调整文字大小 */
+}
+/* --- (终极修复) AI信息页-表情包分组选择样式 --- */
+#ai-sticker-groups-container {
+    display: flex;
+    flex-direction: column; 
+    gap: 15px; /* 增加条目之间的上下间距 */
+}
+
+.checkbox-item {
+    display: flex; 
+    align-items: center; /* 垂直居中对齐 */
+    cursor: pointer;
+}
+
+.checkbox-item input[type="checkbox"] {
+    /* 重置默认样式，确保它不影响布局 */
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
+
+    /* 手动绘制方框 */
+    width: 20px;
+    height: 20px;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+    
+    /* 关键：让它在flex容器中能完美对齐 */
+    position: relative; 
+    flex-shrink: 0; /* 防止被压缩 */
+    margin-right: 12px; /* 与文字的间距 */
+    cursor: pointer;
+}
+
+/* 绘制“打勾”后的样式 */
+.checkbox-item input[type="checkbox"]:checked {
+    background-color: var(--qq-blue);
+    border-color: var(--qq-blue);
+}
+
+/* 用伪元素绘制那个“√”号 */
+.checkbox-item input[type="checkbox"]:checked::before {
+    content: '✔';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.checkbox-item label {
+    font-size: 16px;
+    /* 确保label本身没有多余的边距影响对齐 */
+    margin: 0; 
+    padding: 0;
+}
+/* --- (全新) AI实时状态显示样式 (V2 - 修复版) --- */
+/* 步骤1: 让整行状态文字（包括“在线”和新状态）都变成普通字体 */
+#chat-ai-status-line {
+    font-weight: normal; 
+}
+
+/* 步骤2: 精细调整新状态的样式 */
+#chat-ai-activity-status {
+    font-size: 12px;     /* 保持你设置的小字号 */
+    margin-left: 1px;    /* 采用你调整的间距 */
+    opacity: 0.9;        
+}
+
+/* 步骤3: 保留自动添加“-”的小魔法 */
+#chat-ai-activity-status:not(:empty)::before {
+    content: "- ";
+    margin-right: 2px;
+}
+/* --- (全新) 记忆总结功能区样式 --- */
+.auto-summary-setting {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+#cs-auto-summary-threshold {
+    width: 60px;
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    text-align: center;
+}
+#cs-message-count {
+    font-weight: bold;
+    color: var(--qq-blue);
+}
+
+/* --- (全新) 记忆总结弹窗样式 --- */
+.modal-content.modal-lg {
+    max-width: 340px; /* 让弹窗更宽一点 */
+}
+#summary-editor-textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font-family: 'Courier New', Courier, monospace; /* 使用等宽字体，方便看YAML */
+    font-size: 13px;
+    line-height: 1.6;
+    resize: vertical;
+}
+.summary-status {
+    font-size: 13px;
+    color: #4CAF50;
+    text-align: center;
+    height: 15px; /* 预留高度防止跳动 */
+    margin-top: 5px;
+}
+/* --- (全新) 自动总结UI交互样式 --- */
+.summary-threshold-display {
+    padding: 4px 12px;
+    border: 1px solid transparent; /* 占位边框 */
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    color: var(--qq-blue);
+    background-color: #f0f2f5;
+}
+.summary-threshold-display:hover {
+    border-color: var(--border-color);
+}
+.summary-threshold-input {
+    width: 60px;
+    padding: 4px 8px;
+    border: 1px solid var(--qq-blue); /* 显示时用醒目边框 */
+    border-radius: 5px;
+    text-align: center;
+    -moz-appearance: textfield; /* 隐藏数字输入框的上下箭头 */
+}
+.summary-threshold-input::-webkit-outer-spin-button,
+.summary-threshold-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* --- (全新) 模式选择弹窗样式 --- */
+.mode-select-buttons {
+    display: flex;
+    flex-direction: column; /* 按钮竖直排列 */
+    gap: 10px; /* 按钮之间的间距 */
+    margin-top: 15px;
+}
+.mode-select-buttons .modal-button {
+    width: 100%;
+    padding: 12px;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    font-weight: bold;
+}
+.mode-select-buttons .modal-button.primary {
+    background-color: var(--qq-blue);
+    color: white;
+    border-color: var(--qq-blue);
+}
+.mode-select-buttons .modal-button.secondary {
+    background-color: white;
+    color: #333;
+}
