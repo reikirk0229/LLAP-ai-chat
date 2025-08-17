@@ -870,3 +870,70 @@ input:checked + .slider:before { transform: translateX(20px); }
     padding: 8px 0;
     width: 100%;
 }
+/* --- 【【【核心新增：表情包系统样式】】】 --- */
+
+/* 聊天气泡中的表情包消息样式 */
+.message-sticker {
+    padding: 0 !important; /* 无内边距 */
+    background-color: transparent !important; /* 背景透明 */
+    box-shadow: none !important; /* 无阴影 */
+    max-width: 120px; /* 限制最大宽度 */
+    overflow: hidden;
+}
+.message-sticker img {
+    width: 100%;
+    display: block;
+}
+.user-row .message-sticker::after, .assistant-row .message-sticker::before {
+    display: none; /* 表情包消息不需要聊天箭头 */
+}
+
+/* 底部滑出的表情包面板 */
+.sticker-panel {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 220px; /* 面板高度 */
+    background-color: #f0f2f5;
+    border-top: 1px solid var(--border-color);
+    overflow-y: auto;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); /* 响应式网格布局 */
+    gap: 10px;
+    z-index: 50;
+    transition: transform 0.3s ease-in-out;
+    transform: translateY(100%); /* 【修改1】默认状态就是隐藏在屏幕下方 */
+}
+
+/* 【修改2】新增一个 .is-open 类，当拥有它时，面板就会滑上来 */
+.sticker-panel.is-open {
+    transform: translateY(0);
+}
+
+/* 网格中的单个表情包样式 */
+.sticker-item {
+    width: 70px;
+    height: 70px;
+    background-color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 5px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.sticker-item img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+/* 网格中的“添加”按钮 */
+.sticker-add-btn {
+    border: 2px dashed var(--border-color);
+    background-color: #fafafa;
+    font-size: 30px;
+    color: var(--text-secondary);
+}
