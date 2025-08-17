@@ -1359,6 +1359,8 @@ ${availableStickersPrompt}
         if (!contact) return;
         showCustomConfirm(`清空确认`, `确定要清空与 ${contact.remark} 的所有聊天记录吗？\n此操作无法撤销。`, () => {
             contact.chatHistory = [];
+            // 【【【核心新增：重置AI状态】】】
+            contact.activityStatus = ''; 
             saveAppData();
             messageContainer.innerHTML = '';
             renderChatList();
@@ -1651,7 +1653,7 @@ ${availableStickersPrompt}
         photoUploadInput.addEventListener('change', (e) => handleImageUpload(e.target.files[0], `${activeChatContactId}_photo`, photoPreview));
         
         contactSettingsView.querySelectorAll('.settings-item').forEach(item => {
-            if (item.id !== 'cs-edit-ai-profile' && item.id !== 'cs-edit-my-profile' && item.id !== 'cs-summarize-chat' && item.id !== 'cs-clear-history' && item.id !== 'cs-delete-contact' && !item.querySelector('.switch')) {
+            if (item.id !== 'cs-message-count-item' && item.id !== 'cs-edit-ai-profile' && item.id !== 'cs-edit-my-profile' && item.id !== 'cs-summarize-chat' && item.id !== 'cs-clear-history' && item.id !== 'cs-delete-contact' && !item.querySelector('.switch')) {
                 item.addEventListener('click', () => alert('功能开发中，敬请期待！'));
             }
         });
