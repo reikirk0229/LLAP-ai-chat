@@ -25,11 +25,12 @@
             <div class="header">
                 <div id="chat-header-normal">
                     <button id="back-to-list-button" class="header-button back-button">&lt;</button>
-                    <div id="chat-header-info" class="clickable">
-                        <span id="chat-ai-name">AI 伙伴</span>
+                    <div id="chat-header-info">
+                        <span id="chat-ai-name" class="clickable">AI 伙伴</span>
                         <div id="chat-ai-status-line">
                             <span class="online-indicator"></span>
                             <span id="chat-ai-status">在线</span>
+                            <span id="chat-ai-activity-status"></span>
                         </div>
                     </div>
                     <button id="chat-settings-button" class="header-button">☰</button>
@@ -167,8 +168,30 @@
                     <div class="settings-item"><span>设置气泡样式</span><span class="arrow">&gt;</span></div>
                     <div class="settings-item"><span>设置字体大小</span><span class="arrow">&gt;</span></div>
                 </div>
+                <!-- ▼▼▼ 全新的“记忆管理”功能区 ▼▼▼ -->
                 <div class="settings-group">
-                    <div class="settings-item" id="cs-summarize-chat"><span>总结对话</span><span class="arrow">&gt;</span></div>
+                    <div class="settings-item">
+                        <span>当前对话条数</span>
+                        <span id="cs-message-count">0</span>
+                    </div>
+                    <div class="settings-item">
+                        <span>自动总结</span>
+                        <div class="auto-summary-setting">
+                            <!-- ▼▼▼ 全新的UI交互结构 ▼▼▼ -->
+                            <div id="cs-auto-summary-display" class="summary-threshold-display">未设置</div>
+                            <input type="number" id="cs-auto-summary-input" class="summary-threshold-input hidden" min="50">
+                            <!-- ▲▲▲ 结构结束 ▲▲▲ -->
+                            <label class="switch"><input type="checkbox" id="cs-auto-summary-toggle"><span class="slider"></span></label>
+                        </div>
+                    </div>
+                    <div class="settings-item" id="cs-summarize-chat">
+                        <span>手动总结当前对话</span>
+                        <span class="arrow">&gt;</span>
+                    </div>
+                </div>
+                <!-- ▲▲▲ 记忆管理功能区结束 ▲▲▲ -->
+
+                <div class="settings-group">
                     <div class="settings-item" id="cs-clear-history"><span class="danger">清空聊天记录</span></div>
                 </div>
                 <div class="settings-group">
@@ -244,6 +267,19 @@
                 <button id="save-ai-profile-button">保存</button>
             </div>
         </div>
+        <!-- ▼▼▼ 代码块1: 全新的“AI表情包管理”页面 ▼▼▼ -->
+        <!-- 视图7: AI表情包管理页面 -->
+        <div id="ai-sticker-manager-view" class="view hidden">
+            <div class="header">
+                <button id="back-to-settings-from-sticker-btn" class="header-button back-button">&lt;</button>
+                <span>AI表情包管理</span>
+            </div>
+            <div id="sticker-manager-container">
+                <!-- 分组和表情包将由JS动态生成 -->
+            </div>
+            <button id="add-sticker-group-btn" class="fab">+</button>
+        </div>
+        <!-- ▲▲▲ 代码块1结束 ▲▲▲ -->
     </div>
     
     <!-- 用户信息修改弹窗 -->
@@ -265,6 +301,42 @@
             <div class="modal-footer"><button id="save-profile-button">保存</button></div>
         </div>
     </div> 
+
+    <!-- ▼▼▼ 代码块2: 全新的“表情包上传”弹窗 ▼▼▼ -->
+    <!-- (全新) 表情包上传弹窗 -->
+    <div id="sticker-upload-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="sticker-upload-title">添加表情包</h3>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>表情预览</label>
+                    <div class="image-upload-area sticker-preview-area">
+                        <img id="sticker-upload-preview" class="image-preview" src="">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="sticker-upload-url-input">图片地址 (URL)</label>
+                    <input type="text" id="sticker-upload-url-input" placeholder="粘贴URL或选择本地文件">
+                </div>
+                 <div class="form-group">
+                    <label for="sticker-upload-file-input" class="button-like-label">从本地上传</label>
+                    <input type="file" id="sticker-upload-file-input" class="hidden-file-input" accept="image/*">
+                </div>
+                <div class="form-group">
+                    <label for="sticker-upload-desc-input">表情描述 (给AI看)</label>
+                    <textarea id="sticker-upload-desc-input" rows="3" placeholder="例如：一只微笑的柴犬"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer-split">
+                <button id="cancel-sticker-upload-btn" class="modal-button secondary">取消</button>
+                <button id="confirm-sticker-upload-btn" class="modal-button primary">保存</button>
+            </div>
+        </div>
+    </div>
+    <!-- ▲▲▲ 代码块2结束 ▲▲▲ -->
+     
         <!-- 【全新】发送语音弹窗 -->
     <div id="voice-input-modal" class="modal-overlay hidden">
         <div class="modal-content">
@@ -391,6 +463,41 @@
             <div class="modal-footer-split">
                 <button id="cancel-rp-input-btn" class="modal-button secondary">取消</button>
                 <button id="confirm-rp-input-btn" class="modal-button primary">塞钱进红包</button>
+            </div>
+        </div>
+    </div>
+    <!-- 【【【全新：记忆总结编辑弹窗】】】 -->
+    <div id="summary-editor-modal" class="modal-overlay hidden">
+        <div class="modal-content modal-lg"> <!-- 使用一个更大的弹窗样式 -->
+            <div class="modal-header">
+                <h3>编辑记忆总结</h3>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>AI总结的记忆草稿 (YAML格式):</label>
+                    <textarea id="summary-editor-textarea" rows="12"></textarea>
+                </div>
+                <p id="summary-status-text" class="summary-status"></p>
+            </div>
+            <div class="modal-footer-split">
+                <button id="cancel-summary-btn" class="modal-button secondary">取消</button>
+                <button id="copy-summary-btn" class="modal-button secondary">复制到剪贴板</button>
+                <button id="save-summary-btn" class="modal-button primary">存入AI记忆</button>
+            </div>
+        </div>
+    </div>
+    <!-- 【【【全新：总结模式选择弹窗】】】 -->
+    <div id="mode-select-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>请选择总结模式</h3>
+            </div>
+            <div class="modal-body">
+                <p>AI将根据你选择的模式，采用不同的侧重点来总结你们的对话。</p>
+                <div class="mode-select-buttons">
+                    <button id="mode-online-btn" class="modal-button primary">线上闲聊模式</button>
+                    <button id="mode-offline-btn" class="modal-button secondary">线下剧情模式</button>
+                </div>
             </div>
         </div>
     </div>
