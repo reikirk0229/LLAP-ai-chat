@@ -852,7 +852,32 @@ ${availableStickersPrompt}
                         }
                         continue; // 处理完指令后跳过
                     } else if (msg.trim() === '[ACCEPT_REDPACKET]') {
-                        // ... (接受红包的代码保持不变)
+                        // 【终极修复】在这里执行领取红包的完整逻辑
+                        // 1. 从后往前，找到用户发的最后一个、还没被领取的红包
+                        const userRedPacketMsg = [...contact.chatHistory].reverse().find(
+                            m => m.role === 'user' && m.type === 'red-packet' && m.redPacketData && !m.redPacketData.isOpened
+                        );
+
+                        // 2. 如果找到了这个红包
+                        if (userRedPacketMsg) {
+                            // 2a. 在数据层面，把它标记为“已打开”
+                            userRedPacketMsg.redPacketData.isOpened = true;
+
+                            // 2b. 在界面层面，找到那个红包气泡并更新它的样式
+                            const messageRow = document.querySelector(`[data-message-id="${userRedPacketMsg.id}"]`);
+                            if (messageRow) {
+                                const bubble = messageRow.querySelector('.message-red-packet');
+                                bubble.classList.add('opened');
+                                bubble.querySelector('.rp-bubble-info span').textContent = '已被领取';
+                            }
+
+                            // 2c. 显示“xx已领取你的红包”的系统提示消息
+                            displayMessage(`${contact.name} 领取了你的红包`, 'system', { isNew: true, type: 'system' });
+                        }
+                        
+                        // 3. 这是一个“听而不闻”的静默指令，直接跳过，不要显示它
+                        continue; 
+                        
                     } else {
                         displayMessage(msg, 'assistant', { isNew: true, type: 'text' });
                     }
