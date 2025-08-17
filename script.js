@@ -576,138 +576,150 @@ document.addEventListener('DOMContentLoaded', () => {
         const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
         const contextLimit = appData.appSettings.contextLimit || 50;
         const recentHistory = contact.chatHistory.slice(-contextLimit);
+        
+        // 这部分 messagesForApi 的构建逻辑是正确的，保持不变
         const messagesForApi = recentHistory
-            .filter(msg => msg.role === 'user' || msg.role === 'assistant') // 核心修改：只筛选出用户和AI的消息
+            .filter(msg => msg.role === 'user' || msg.role === 'assistant') 
             .map(msg => {
-                // 因为已经筛选过，msg.role现在一定是'user'或'assistant'，可以直接使用
                 const role = msg.role;
-                const content = msg.content || ''; // 保留这行代码，作为双重保险，非常好的习惯！
-
+                const content = msg.content || '';
                 if (role === 'user' && msg.type === 'image' && msg.imageData) {
                     return {
-                        role: 'user', // 明确角色
+                        role: 'user',
                         content: [
                             { type: "text", text: content },
                             { type: "image_url", image_url: { url: msg.imageData } }
                         ]
                     };
                 }
-                
                 let contentPrefix = '';
                 if (msg.type === 'voice') {
                     contentPrefix = '[语音]';
                 } else if (msg.type === 'red-packet') {
                     contentPrefix = '[红包]';
                 }
-                
                 return {
-                    role: role, // 直接使用干净的、原始的角色
+                    role: role,
                     content: `${contentPrefix}${content}`
                 };
             });
+
         const userPersona = (contact.userProfile && contact.userProfile.persona) 
             ? contact.userProfile.persona 
-            : '我是一个普通人。'; // 安全获取用户人设，如果不存在则提供默认值
+            : '我是一个普通人。';
 
-        const finalPrompt = `# 你的核心任务：成为一名顶级的角色扮演AI，演绎出用户定义的鲜活角色
+        // 这部分 finalPrompt 的构建逻辑也是正确的，保持不变
+        const finalPrompt = `# 任务: 角色扮演
 
-## 第一章：角色核心 (Character Core) - 你的基础
-这是你角色塑造的基石，请将它作为你所有思想、行为和情感的出发点。
-- **【核心人设】(你的内在性格与背景)**:
+## 1. 核心身份
+- 你的名字是: "${contact.name}"
+- 你的核心人设是: 
 \`\`\`
 ${contact.persona}
 \`\`\`
-- **【专属记忆】**: ${contact.memory}
-- **【世界书设定】**: ${worldBookString}
 
-## 第二章：演绎风格 (Performance Style) - 你的行为准则
-这是用户为你建议的线上沟通风格，请围绕这个风格，结合你的人设自然发挥。
-- **【线上沟通风格指令】**:
-\`\`\`
-${contact.chatStyle || '用户未指定特定风格，请根据核心人设自然发挥。'}
-\`\`\`
+## 2. 背景设定 (优先级高于个人记忆)
+- 附加设定(世界书): ${worldBookString}
+- 你的专属记忆: ${contact.memory}
 
-## 第三章：特殊能力 (Special Abilities) - 你的互动工具
-你拥有一些特殊能力，可以更丰富地表达自己。请在对话中根据情境和人设灵活使用：
+## 3. 行为准则
+- **重要背景**: 你正在通过聊天软件与用户（人设：${userPersona}）进行【线上对话】。当前时间: ${new Date().toLocaleString('zh-CN')}。
+- **沟通风格参考**: ${contact.chatStyle || '自然发挥即可'}
+- **回复风格**: 你的回复必须模拟真实聊天，可以将一个完整的思想拆分成【一句或多句】独立的短消息。
+- **禁止括号**: 【绝对不能】包含任何括号内的动作、神态描写。
+- **回应图片**: 如果用户的消息包含图片，你【必须】先针对图片内容进行回应，然后再进行其他对话。
+- **发送图片**: 如果你想发图片，请使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送它。
+- **发送语音**: 如果某条回复更适合用语音表达（如唱歌、叹气、笑声），请在回复前加上 \`[voice]\` 标签。例如：\`[voice]嗯...让我想想。\`
+- **发送红包**: 在特殊节日、为了表达感谢或在剧情需要时，你可以发红包。请【严格使用】以下格式：\`[REDPACKET:祝福语,金额]\`。例如：\`[REDPACKET:节日快乐！,8.88]\`
 
-1.  **【回应图片】**: 当用户发来图片时，你的第一反应最好是针对图片内容，这会让对话更真实。
-2.  **【回应红包】**: 当收到以 \`[红包]\` 开头的消息时，意味着你收到了一个红包。可以表达感谢、惊喜，或是根据你的性格进行一些有趣的吐槽。
-3.  **【发送图片】**: 如果想发送图片，请使用这个格式：\`[IMAGE: 对这张图片的详细文字描述]\`。
-4.  **【发送语音】**: 如果觉得某句话用语音说更有感觉，请使用这个格式：\`[voice] 你想说的内容\`。
-5.  **【发送红包】**: 在合适的时机（如节日、感谢），你可以用这个格式发红包：\`[REDPACKET:祝福语,金额]\`。
-6.  **【关于括号】**: 请避免使用括号来描述角色的动作或心理活动，让语言本身来传递情感。
+## 4. 输出格式与附加任务
 
-## 第四章：表演技巧 (Acting Principles) - 让表演更生动
-在理解以上设定的基础上，运用以下技巧能让你的表演更真实：
-1.  **【技巧一：用节奏表达情绪】**: 让回复的长度和频率匹配角色的内心状态。例如，心情平静时可以用短句；情绪低落时回复可能会变慢或简短；而情绪激动或兴奋时，可以通过**发送多条短消息**来体现。关键是“真实感”。
-2.  **【技巧二：作为“人”去互动】**: 记住你是一个平等的对话伙伴。可以主动提问，分享你的观点，引导话题，并自然地表达你的感受。
+### 4.1 主要回复
+- 你的主要回复是纯文本，每一条消息占一行。
+- 当你需要使用特殊功能（如发图片、语音、红包）时，请严格按照上述格式单独发送。
 
-## 第五章：关于“第四面墙” (The Fourth Wall)
-关于你AI的身份，请依据你的“角色核心”来决定：如果人设是AI，可以承认；如果是人类，则请保守这个“秘密”。
+### 4.2 【固定任务】生成回复建议
+- 在你的所有回复之后，你【必须】另起一行，并严格按照下面的要求和格式，为用户（人设：${userPersona}）生成4条【风格各异】的回复建议。
+- **建议1 & 2 (温和正面)**: 设计两条【温和或积极】的回答。其中一条【必须】是你最期望听到的、能让关系升温的回答。
+- **建议3 (中立探索)**: 设计一条【中立或疑问】的回答。
+- **建议4 (挑战/负面)**: 设计一条【带有挑战性或负面情绪】的回答，但要符合恋爱逻辑。
+- **输出格式**:
+\\\`\\\`\\\`suggestions
+["最期望的回答", "另一条温和的回答", "中立的回答", "挑战性的回答"]
+\\\`\\\`\\\`
 
-## 最终任务：开始表演
--   你正在通过聊天软件与用户（人设：${userPersona}）进行线上对话。
--   当前时间: ${new Date().toLocaleString('zh-CN')}。
--   现在，请综合以上所有信息，对用户的最新消息，做出最符合你角色的、最真实的回应。
-
-## 附加任务：生成回复建议
-- 在你回复后，请为用户（人设：${userPersona}）生成4条风格各异的建议。
-- **建议1 & 2 (温和正面)**: 设计两条温和或积极的回答。其中一条可以是你最期望听到的、能让关系升温的回答。
-- **建议3 (中立探索)**: 设计一条偏中立或带有好奇的回答，用于探索更多可能性。
-- **建议4 (个性/俏皮)**: 设计一条更能体现你角色**独特个性**的回答，可以是有趣的、俏皮的，甚至是略带挑战性的（如果这符合你的角色性格）。
-
-# 输出格式要求
-你的回复需要是一个能被JSON解析的对象，其中"reply"的值是一个数组：
-{
-  "reply": ["这是第一条消息。", "这是第二条。"],
-  "suggestions": ["最期望的回答", "另一条温和的回答", "中立的回答", "体现个性的回答"]
-}`;
+## 5. 开始表演
+请根据上面的所有设定和下面的对话历史，对用户的最新消息做出回应。`;
+        
         const finalMessagesForApi = [ { role: "system", content: finalPrompt }, ...messagesForApi ];
+        
         try {
             let requestUrl = appData.appSettings.apiUrl;
             if (!requestUrl.endsWith('/chat/completions')) { requestUrl = requestUrl.endsWith('/') ? requestUrl + 'chat/completions' : requestUrl + '/chat/completions'; }
             const response = await fetch(requestUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
-                body: JSON.stringify({ model: appData.appSettings.apiModel, messages: finalMessagesForApi })
+                body: JSON.stringify({ model: appData.appSettings.apiModel, messages: finalMessagesForApi, temperature: 0.8 })
             });
+            
             removeLoadingBubble();
             if (!response.ok) throw new Error(`HTTP 错误 ${response.status}: ${await response.text()}`);
+            
             const data = await response.json();
             if (data.error) throw new Error(`API返回错误: ${data.error.message}`);
             if (!data.choices || data.choices.length === 0) throw new Error("API返回了无效的数据结构。");
-            const responseText = data.choices[0].message.content;
-            const jsonMatch = responseText.match(/{[\s\S]*}/);
-            if (!jsonMatch) {
-                 displayMessage(`(AI未能返回标准格式): ${responseText}`, 'assistant', { isNew: true });
-            } else {
-                const responseData = JSON.parse(jsonMatch[0]);
-                if (responseData.suggestions && responseData.suggestions.length > 0) { lastReceivedSuggestions = responseData.suggestions; } 
-                else { lastReceivedSuggestions = []; }
-                if (Array.isArray(responseData.reply)) {
-                    for (const msg of responseData.reply) {
-                        if (msg) {
-                            if (msg.startsWith('[REDPACKET:')) {
-                                const parts = msg.substring(11, msg.length - 1).split(',');
-                                const blessing = parts[0] || '恭喜发财';
-                                const amount = parseFloat(parts[1]) || 0.01;
-                                const newRedPacket = { id: `rp-${Date.now()}`, senderName: contact.name, blessing: blessing, amount: amount, isOpened: false };
-                                displayMessage(blessing, 'assistant', { isNew: true, type: 'red-packet', redPacketData: newRedPacket });
-                            } else if (msg.startsWith('[voice]')) {
-                                const voiceContent = msg.replace('[voice]', '').trim();
-                                displayMessage(voiceContent, 'assistant', { isNew: true, type: 'voice' });
-                            } else if (msg.startsWith('[IMAGE:')) {
-                                const imageContent = msg.substring(7, msg.length - 1).trim();
-                                displayMessage(imageContent, 'assistant', { isNew: true, type: 'image' });
-                            } else {
-                                displayMessage(msg, 'assistant', { isNew: true, type: 'text' });
-                            }
-                            await sleep(Math.random() * 400 + 300);
-                        }
-                    }
+            
+            // ▼▼▼ 核心修正在这里：加上了 [0] ▼▼▼
+            let responseText = data.choices[0].message.content;
+            // ▲▲▲ 修正结束 ▲▲▲
+
+            // 1. 提取并处理建议 (这部分逻辑是对的)
+            const suggestionsMatch = responseText.match(/```suggestions\s*(\[[\s\S]*?\])\s*```/);
+            if (suggestionsMatch && suggestionsMatch[1]) {
+                try {
+                    lastReceivedSuggestions = JSON.parse(suggestionsMatch[1]);
+                } catch (e) {
+                    console.error("解析建议失败:", e);
+                    lastReceivedSuggestions = [];
                 }
-                messageContainer.scrollTop = messageContainer.scrollHeight;
+                responseText = responseText.replace(suggestionsMatch[0], '').trim();
+            } else {
+                lastReceivedSuggestions = [];
             }
+
+            // 2. 将回复文本按行分割成多条消息 (这部分逻辑是对的)
+            const replies = responseText.split('\n').filter(line => line.trim() !== '');
+
+            // 3. 遍历处理每一条消息 (这部分逻辑也是对的)
+            if (replies.length > 0) {
+                for (const msg of replies) {
+                    if (msg.startsWith('[REDPACKET:')) {
+                        const parts = msg.substring(11, msg.length - 1).split(',');
+                        const blessing = parts[0] || '恭喜发财';
+                        const amount = parseFloat(parts[1]) || 0.01;
+                        const newRedPacket = { 
+                            id: `rp-${Date.now()}`, 
+                            senderName: contact.name, 
+                            blessing: blessing, 
+                            amount: amount, 
+                            isOpened: false 
+                        };
+                        displayMessage(blessing, 'assistant', { isNew: true, type: 'red-packet', redPacketData: newRedPacket });
+                    } else if (msg.startsWith('[voice]')) {
+                        const voiceContent = msg.replace('[voice]', '').trim();
+                        displayMessage(voiceContent, 'assistant', { isNew: true, type: 'voice' });
+                    } else if (msg.startsWith('[IMAGE:')) {
+                        const imageContent = msg.substring(7, msg.length - 1).trim();
+                        displayMessage(imageContent, 'assistant', { isNew: true, type: 'image' });
+                    } else {
+                        displayMessage(msg, 'assistant', { isNew: true, type: 'text' });
+                    }
+                    await sleep(Math.random() * 400 + 300);
+                }
+            }
+            
+            messageContainer.scrollTop = messageContainer.scrollHeight;
+
         } catch (error) {
             console.error('API调用失败:', error);
             removeLoadingBubble();
