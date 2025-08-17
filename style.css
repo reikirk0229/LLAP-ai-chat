@@ -1217,3 +1217,30 @@ input:checked + .slider:before { transform: translateX(20px); }
     background-color: white;
     color: #333;
 }
+/* --- (全新) 全局Toast提示样式 --- */
+#global-toast {
+    position: fixed; /* 固定在屏幕上 */
+    top: 0;
+    left: 50%;
+    transform: translate(-50%, -100%); /* 默认藏在屏幕顶上 */
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 0 0 15px 15px; /* 底部圆角 */
+    z-index: 9999; /* 确保在最顶层 */
+    font-size: 14px;
+    transition: transform 0.4s ease-in-out;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+
+#global-toast.show {
+    transform: translate(-50%, 20px); /* 滑入到屏幕内 */
+}
+
+#global-toast.success {
+    background-color: #4CAF50; /* 成功状态是绿色 */
+}
+
+#global-toast.error {
+    background-color: #f44336; /* 失败状态是红色 */
+}
