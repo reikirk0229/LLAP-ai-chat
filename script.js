@@ -185,6 +185,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const modeOfflineBtn = document.getElementById('mode-offline-btn');
 
     // --- 3. 核心功能 ---
+        // --- 【全新】全局Toast提示助手 ---
+    let toastTimer;
+    function showToast(message, type = 'info', duration = 3000) {
+        const toast = document.getElementById('global-toast');
+        const toastText = document.getElementById('global-toast-text');
+
+        clearTimeout(toastTimer); // 清除上一个计时器
+
+        toastText.textContent = message;
+        toast.className = ''; // 重置类
+        toast.classList.add('show');
+        
+        if (type === 'success') {
+            toast.classList.add('success');
+        } else if (type === 'error') {
+            toast.classList.add('error');
+        }
+        
+        // 在指定时间后自动隐藏
+        if (duration > 0) {
+            toastTimer = setTimeout(() => {
+                toast.classList.remove('show');
+            }, duration);
+        }
+    }
     const sleep = ms => new Promise(res => setTimeout(res, ms));
 
     function formatMessageTimestamp(ts) {
@@ -897,15 +922,38 @@ ${availableStickersPrompt}
             }
 
 
-            // 3. 遍历处理每一条消息 (这部分逻辑也是对的)
+            // 3. 遍历处理每一条消息
             if (replies.length > 0) {
                 for (const msg of replies) {
                     if (msg.startsWith('[REDPACKET:')) {
-                        // ... (发送红包的代码保持不变)
+                        try {
+                            const data = msg.substring(11, msg.length - 1).split(',');
+                            const blessing = data[0].trim();
+                            const amount = parseFloat(data[1]);
+                            if (blessing && !isNaN(amount)) {
+                                const redPacketData = {
+                                    id: `rp-ai-${Date.now()}`,
+                                    senderName: contact.name,
+                                    blessing: blessing,
+                                    amount: amount,
+                                    isOpened: false
+                                };
+                                displayMessage(blessing, 'assistant', { isNew: true, type: 'red-packet', redPacketData: redPacketData });
+                            }
+                        } catch (e) { console.error("解析红包指令失败", e); }
+                        continue; 
                     } else if (msg.startsWith('[voice]')) {
-                        // ... (发送语音的代码保持不变)
+                        const voiceText = msg.substring(7).trim();
+                        if (voiceText) {
+                            displayMessage(voiceText, 'assistant', { isNew: true, type: 'voice' });
+                        }
+                        continue;
                     } else if (msg.startsWith('[IMAGE:')) {
-                        // ... (发送图片的代码保持不变)
+                        const description = msg.substring(7, msg.length - 1).trim();
+                        if (description) {
+                            displayMessage(description, 'assistant', { isNew: true, type: 'image' });
+                        }
+                        continue;
                     } else if (msg.trim().startsWith('[STICKER:')) {
                         // 【核心新增】处理AI发送表情包的指令
                         const stickerId = msg.trim().substring(9, msg.length - 1);
@@ -1789,19 +1837,63 @@ ${availableStickersPrompt}
      * 手动总结功能的入口处理函数
      */
     async function handleManualSummary() {
-        // 【核心修改】使用我们全新的自定义弹窗
-        showModeSelectModal(async (isOnlineMode) => {
-            summaryEditorTextarea.value = 'AI正在努力回忆中，请稍候...';
-            summaryStatusText.textContent = '';
-            summaryEditorModal.classList.remove('hidden');
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
 
-            try {
-                const summary = await generateSummary(isOnlineMode);
-                summaryEditorTextarea.value = summary;
-            } catch (error) {
-                summaryEditorTextarea.value = `哎呀，总结失败了 T_T\n\n错误信息:\n${error.message}`;
+        const rangeModal = document.getElementById('summary-range-modal');
+        const rangeInput = document.getElementById('summary-range-input');
+        const cancelBtn = document.getElementById('cancel-summary-range-btn');
+        const confirmBtn = document.getElementById('confirm-summary-range-btn');
+
+        rangeInput.value = '';
+        rangeModal.classList.remove('hidden');
+
+        const onConfirm = () => {
+            rangeModal.classList.add('hidden');
+            let messagesToSummarize;
+            const range = parseInt(rangeInput.value);
+
+            if (!isNaN(range) && range > 0) {
+                messagesToSummarize = contact.chatHistory.slice(-range);
+            } else {
+                // 如果不填，则总结自上次自动总结以来的所有新消息
+                const lastSummaryCount = contact.lastSummaryAtCount || 0;
+                messagesToSummarize = contact.chatHistory.slice(lastSummaryCount);
             }
-        });
+
+            if (messagesToSummarize.length === 0) {
+                showCustomAlert('提示', '没有新的聊天记录需要总结。');
+                return;
+            }
+            
+            showModeSelectModal(async (isOnlineMode) => {
+                summaryEditorTextarea.value = 'AI正在努力回忆中，请稍候...';
+                summaryStatusText.textContent = '';
+                summaryEditorModal.classList.remove('hidden');
+                try {
+                    const summary = await generateSummary(isOnlineMode, messagesToSummarize);
+                    summaryEditorTextarea.value = summary;
+                } catch (error) {
+                    summaryEditorTextarea.value = `哎呀，总结失败了 T_T\n\n错误信息:\n${error.message}`;
+                }
+            });
+            // 移除监听器，防止重复绑定
+            confirmBtn.removeEventListener('click', onConfirm);
+            cancelBtn.removeEventListener('click', onCancel);
+        };
+
+        const onCancel = () => {
+            rangeModal.classList.add('hidden');
+             // 移除监听器
+            confirmBtn.removeEventListener('click', onConfirm);
+            cancelBtn.removeEventListener('click', onCancel);
+        };
+        
+        // 先移除旧的监听器，再添加新的，确保万无一失
+        confirmBtn.removeEventListener('click', onConfirm);
+        cancelBtn.removeEventListener('click', onCancel);
+        confirmBtn.addEventListener('click', onConfirm);
+        cancelBtn.addEventListener('click', onCancel);
     }
 
     /**
@@ -1809,15 +1901,13 @@ ${availableStickersPrompt}
      * @param {boolean} isOnlineMode - true为线上闲聊模式, false为线下剧情模式
      * @returns {Promise<string>} 返回AI生成的YAML格式总结
      */
-    async function generateSummary(isOnlineMode) {
+    async function generateSummary(isOnlineMode, messagesToSummarize) {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        if (!contact || contact.chatHistory.length === 0) {
+        if (!contact || !messagesToSummarize || messagesToSummarize.length === 0) {
             return "# 没有任何聊天记录可以总结。";
         }
-        
-        // 我们只总结最近的N条记录，防止超出API限制，这里暂定500条
-        const recentHistory = contact.chatHistory.slice(-500); 
-        const chatLogForApi = recentHistory.map(msg => {
+
+        const chatLogForApi = messagesToSummarize.map(msg => {
             const roleName = msg.role === 'user' ? (contact.userProfile.name || '用户') : (contact.name || 'AI');
             // 【优化】为每一条消息都加上时间戳，让AI更好地理解上下文
             const time = new Date(msg.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
@@ -2021,9 +2111,14 @@ ${chatLog}
         // 核心判断：当前消息数 - 上次总结时的消息数 >= 阈值
         if ((currentCount - lastSummaryCount) >= threshold) {
             console.log(`自动总结触发！当前: ${currentCount}, 上次: ${lastSummaryCount}, 阈值: ${threshold}`);
+            showToast('正在自动总结新消息...', 'info', 0); // 显示“正在进行”提示，且不自动消失
+
+            // 准备要总结的消息：从上次总结的位置切到当前位置
+            const messagesToSummarize = contact.chatHistory.slice(lastSummaryCount, currentCount);
+
             try {
-                // 自动总结默认使用【线上闲聊】模式
-                const summary = await generateSummary(true);
+                // 自动总结默认使用【线上闲聊】模式，并传入精确的消息包
+                const summary = await generateSummary(true, messagesToSummarize);
                 
                 // 静默保存到记忆中
                 if (contact.memory.trim() !== '') {
@@ -2035,9 +2130,11 @@ ${chatLog}
                 contact.lastSummaryAtCount = currentCount;
                 saveAppData();
                 console.log("自动总结成功并已存入记忆。");
+                showToast('自动总结成功！', 'success', 2000); // 显示成功提示，2秒后消失
 
             } catch (error) {
                 console.error("自动总结失败:", error);
+                showToast('自动总结失败，请检查网络或API设置', 'error', 4000); // 显示失败提示，4秒后消失
             }
         }
     }
