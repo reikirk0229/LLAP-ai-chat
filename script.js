@@ -162,6 +162,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const customAlertTitle = document.getElementById('custom-alert-title');
     const customAlertText = document.getElementById('custom-alert-text');
     const customAlertOkBtn = document.getElementById('custom-alert-ok-btn');
+    const redPacketInputModal = document.getElementById('red-packet-input-modal');
+    const rpInputBlessing = document.getElementById('rp-input-blessing');
+    const rpInputAmount = document.getElementById('rp-input-amount');
+    const cancelRpInputBtn = document.getElementById('cancel-rp-input-btn');
+    const confirmRpInputBtn = document.getElementById('confirm-rp-input-btn');
 
     // --- 3. 核心功能 ---
     const sleep = ms => new Promise(res => setTimeout(res, ms));
@@ -254,24 +259,78 @@ document.addEventListener('DOMContentLoaded', () => {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
 
-        const message = contact.chatHistory.find(msg => msg.id === messageId);
+        // 【核心修改】先去“聊天记录”里找
+        let message = contact.chatHistory.find(msg => msg.id === messageId);
+        
+        // 【核心修改】如果没找到，就去“待发消息”列表里再找一次！
+        if (!message) {
+            message = stagedUserMessages.find(msg => msg.id === messageId);
+        }
+
+        // 现在，无论红包在哪，我们都能找到了
         if (!message || !message.redPacketData) return;
+
         const packet = message.redPacketData;
+
+        // 如果已经领过了，就只显示详情，不执行领取逻辑
         if (packet.isOpened) {
-            showCustomAlert('提示', '你已经领过这个红包啦~');
+            showRedPacketDetails(packet, message.role);
             return;
         }
-        packet.isOpened = true;
+
+        // --- 执行领取逻辑 ---
+        packet.isOpened = true; // 标记为已领取
+
+        // 1. 显示红包详情模态框
+        showRedPacketDetails(packet, message.role);
+
+        // 2. 在聊天界面中插入“领取”的系统消息 (参考图4)
+        // 【核心修改1】修正了消息文本的逻辑
+        const systemMessageContent = (message.role === 'user') 
+            ? `${contact.name} 领取了你的红包` // 当用户发的红包被领取时，显示AI的名字
+            : `你领取了 ${packet.senderName} 的红包`; // 当AI发的红包被领取时，显示“你”
+
+        // 【核心修改2】在调用时，明确告诉displayMessage这是一个“system”类型的消息
+        displayMessage(systemMessageContent, 'system', { isNew: true, type: 'system' });
+        
+        // 3. 将聊天气泡变为“已领取”状态
+        const messageRow = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (messageRow) {
+            const bubble = messageRow.querySelector('.message-red-packet');
+            bubble.classList.add('opened');
+            // 【核心修改】我们不再移除点击功能，以便用户可以随时查看详情
+            bubble.querySelector('.rp-bubble-info span').textContent = '已被领取';
+        }
+
+        // 4. 保存数据
+        saveAppData();
+    }
+    /**
+     * 【全新辅助函数】用于显示红包详情模态框
+     * @param {object} packet - 红包数据对象
+     * @param {string} senderRole - 发送者的角色 ('user' 或 'assistant')
+     */
+    function showRedPacketDetails(packet, senderRole) {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
 
         const modal = document.getElementById('red-packet-modal');
-        modal.querySelector('#rp-sender-avatar').src = (message.role === 'user') ? contact.userAvatarUrl : contact.avatarUrl;
-        modal.querySelector('#rp-sender-name').textContent = `${packet.senderName}发送的红包`;
+        
+        // 根据发送者角色，决定头像和名字
+        const senderAvatar = (senderRole === 'user') ? contact.userAvatarUrl : contact.avatarUrl;
+        const senderName = packet.senderName;
+        
+        // 填充模态框内容
+        modal.querySelector('#rp-sender-avatar').src = senderAvatar;
+        modal.querySelector('#rp-sender-name').textContent = `${senderName}发送的红包`;
         modal.querySelector('#rp-blessing').textContent = packet.blessing;
         modal.querySelector('#rp-amount').textContent = packet.amount.toFixed(2);
         
+        // 填充领取人列表（在这个版本中，只有一个人）
         const receiverList = modal.querySelector('#rp-receiver-list');
-        const receiverName = (message.role === 'user') ? contact.name : contact.userProfile.name;
-        const receiverAvatar = (message.role === 'user') ? contact.avatarUrl : contact.userAvatarUrl;
+        const receiverName = (senderRole === 'user') ? contact.name : contact.userProfile.name;
+        const receiverAvatar = (senderRole === 'user') ? contact.avatarUrl : contact.userAvatarUrl;
+        
         receiverList.innerHTML = `
             <div class="receiver-item">
                 <img src="${receiverAvatar}" class="avatar">
@@ -282,19 +341,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="receiver-amount">${packet.amount.toFixed(2)}元</span>
             </div>
         `;
-        modal.classList.remove('hidden');
 
-        const systemMessageContent = (message.role === 'user') ? `你领取了 ${packet.senderName} 的红包` : `${contact.userProfile.name} 领取了你的红包`;
-        displayMessage(systemMessageContent, 'system', { isNew: true });
-        
-        const messageRow = document.querySelector(`.message-row[data-message-id="${messageId}"]`);
-        if (messageRow) {
-            const bubble = messageRow.querySelector('.message-red-packet');
-            bubble.classList.add('opened');
-            bubble.removeAttribute('onclick');
-            bubble.querySelector('.rp-bubble-info span').textContent = '已被领取';
-        }
-        saveAppData();
+        // 显示模态框
+        modal.classList.remove('hidden');
     }
 
     async function initialize() {
@@ -476,9 +525,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const packet = options.redPacketData || {};
                 const isOpened = packet.isOpened || false;
                 const bubbleClass = isOpened ? 'message-red-packet opened' : 'message-red-packet';
-                const onClickAction = isOpened ? '' : `onclick="openRedPacket('${messageId}')"`;
+                
+                // 【核心修改】我们把 onclick 事件的绑定交还给JS，而不是写在HTML里
+                messageRow.dataset.action = 'open-red-packet';
+                messageRow.dataset.messageId = messageId;
+                
                 messageContentHTML = `
-                    <div class="${bubbleClass}" ${onClickAction}>
+                    <div class="${bubbleClass}">
                         <div class="rp-bubble-content">
                             <span class="rp-bubble-icon">🧧</span>
                             <div class="rp-bubble-info">
@@ -631,6 +684,10 @@ ${contact.persona}
 - **发送图片**: 如果你想发图片，请使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送它。
 - **发送语音**: 如果某条回复更适合用语音表达（如唱歌、叹气、笑声），请在回复前加上 \`[voice]\` 标签。例如：\`[voice]嗯...让我想想。\`
 - **发送红包**: 在特殊节日、为了表达感谢或在剧情需要时，你可以发红包。请【严格使用】以下格式：\`[REDPACKET:祝福语,金额]\`。例如：\`[REDPACKET:节日快乐！,8.88]\`
+- **【【【核心规则：领取红包】】】**: 当用户给你发红包后，你【必须自己决定】是否领取。如果你决定领取，你的回复中【必须】单独包含一行暗号 \`[ACCEPT_REDPACKET]\`。你可以把感谢的话和这个暗号分开说。例如：
+  \`[ACCEPT_REDPACKET]\`
+  \`谢谢你的红包，我收下啦！\`
+  如果你决定不领取，就【绝对不要】发送这个暗号，直接说出你拒绝的理由即可。
 
 ## 4. 输出格式与附加任务
 
@@ -694,6 +751,7 @@ ${contact.persona}
             if (replies.length > 0) {
                 for (const msg of replies) {
                     if (msg.startsWith('[REDPACKET:')) {
+                        // ... (发送红包的代码保持不变)
                         const parts = msg.substring(11, msg.length - 1).split(',');
                         const blessing = parts[0] || '恭喜发财';
                         const amount = parseFloat(parts[1]) || 0.01;
@@ -705,12 +763,40 @@ ${contact.persona}
                             isOpened: false 
                         };
                         displayMessage(blessing, 'assistant', { isNew: true, type: 'red-packet', redPacketData: newRedPacket });
+
                     } else if (msg.startsWith('[voice]')) {
+                        // ... (发送语音的代码保持不变)
                         const voiceContent = msg.replace('[voice]', '').trim();
                         displayMessage(voiceContent, 'assistant', { isNew: true, type: 'voice' });
+
                     } else if (msg.startsWith('[IMAGE:')) {
+                        // ... (发送图片的代码保持不变)
                         const imageContent = msg.substring(7, msg.length - 1).trim();
                         displayMessage(imageContent, 'assistant', { isNew: true, type: 'image' });
+
+                    } else if (msg.trim() === '[ACCEPT_REDPACKET]') {
+                        // 【核心修改】 这里是新增的“仆人”逻辑，专门处理领红包暗号
+                        // 1. 找到用户发的最后一个未领取的红包
+                        const lastUserMessage = contact.chatHistory.slice().reverse().find(m => m.role === 'user' && m.type === 'red-packet' && !m.redPacketData.isOpened);
+                        
+                        if (lastUserMessage) {
+                            // 2. 执行所有领取操作
+                            lastUserMessage.redPacketData.isOpened = true;
+                            const systemMessageContent = `${contact.name} 领取了你的红包`;
+                            displayMessage(systemMessageContent, 'system', { isNew: true, type: 'system' });
+
+                            const messageRow = document.querySelector(`[data-message-id="${lastUserMessage.id}"]`);
+                            if (messageRow) {
+                                const bubble = messageRow.querySelector('.message-red-packet');
+                                bubble.classList.add('opened');
+                                // 【核心修改】我们不再移除点击功能，以便用户可以随时查看详情
+                                bubble.querySelector('.rp-bubble-info span').textContent = '已被领取';
+                            }
+                            saveAppData();
+                        }
+                        // 3. 处理完暗号后，直接进行下一次循环，不要把暗号本身显示出来
+                        continue; 
+
                     } else {
                         displayMessage(msg, 'assistant', { isNew: true, type: 'text' });
                     }
@@ -1116,6 +1202,14 @@ ${contact.persona}
     }
 
     function bindEventListeners() {
+    // 【全新】使用事件委托处理红包点击
+    messageContainer.addEventListener('click', (e) => {
+            const targetRow = e.target.closest('.message-row[data-action="open-red-packet"]');
+            if (targetRow) {
+                openRedPacket(targetRow.dataset.messageId);
+            }
+        });
+
         navButtons.forEach(button => button.addEventListener('click', () => switchToView(button.dataset.view)));
         backToListButton.addEventListener('click', () => switchToView('chat-list-view'));
         backFromMomentsBtn.addEventListener('click', () => switchToView('chat-list-view'));
@@ -1161,17 +1255,47 @@ ${contact.persona}
         confirmVoiceButton.addEventListener('click', sendVoiceMessage);
         imageBtn.addEventListener('click', () => openImageUploadModal('upload'));
         cameraBtn.addEventListener('click', () => openImageUploadModal('simulate'));
-        redPacketBtn.addEventListener('click', () => {
-            const blessing = prompt("请输入红包祝福语：", "恭喜发财");
-            if (!blessing) return;
-            const amountStr = prompt("请输入红包金额（元）：", "1.00");
-            const amount = parseFloat(amountStr);
-            if (isNaN(amount) || amount <= 0) { alert('请输入有效的金额！'); return; }
+        // 【核心修改】将所有红包相关的逻辑，都移到我们的新弹窗里
+        function openRedPacketInputModal() {
+            rpInputBlessing.value = '恭喜发财'; // 每次打开都重置为默认祝福语
+            rpInputAmount.value = ''; // 清空上次输入的金额
+            redPacketInputModal.classList.remove('hidden');
+            rpInputBlessing.focus(); // 自动聚焦到祝福语输入框
+        }
+
+        function closeRedPacketInputModal() {
+            redPacketInputModal.classList.add('hidden');
+        }
+
+        function handleConfirmRedPacket() {
+            const blessing = rpInputBlessing.value.trim();
+            const amount = parseFloat(rpInputAmount.value);
+
+            if (!blessing) {
+                showCustomAlert('提示', '请输入红包祝福语！');
+                return;
+            }
+            if (isNaN(amount) || amount <= 0) {
+                showCustomAlert('提示', '请输入有效的金额！');
+                return;
+            }
+
             const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            const tempMessageId = `staged-${Date.now()}-${Math.random()}`;
             const newRedPacket = { id: `rp-${Date.now()}`, senderName: contact.userProfile.name, blessing: blessing, amount: amount, isOpened: false };
-            stagedUserMessages.push({ content: blessing, type: 'red-packet', redPacketData: newRedPacket });
-            displayMessage(blessing, 'user', { isStaged: true, type: 'red-packet', redPacketData: newRedPacket });
-        });
+            
+            stagedUserMessages.push({ id: tempMessageId, content: blessing, type: 'red-packet', redPacketData: newRedPacket });
+            displayMessage(blessing, 'user', { isStaged: true, type: 'red-packet', redPacketData: newRedPacket, id: tempMessageId });
+            
+            closeRedPacketInputModal(); // 完成后关闭弹窗
+        }
+
+        // 现在，点击红包图标只会打开我们漂亮的弹窗
+        redPacketBtn.addEventListener('click', openRedPacketInputModal);
+
+        // 为新弹窗的按钮绑定功能
+        cancelRpInputBtn.addEventListener('click', closeRedPacketInputModal);
+        confirmRpInputBtn.addEventListener('click', handleConfirmRedPacket);
         emojiBtn.addEventListener('click', () => alert("开发中！"));
         moreFunctionsButton.addEventListener('click', () => alert("开发中！"));
         aiHelperButton.addEventListener('click', () => {
