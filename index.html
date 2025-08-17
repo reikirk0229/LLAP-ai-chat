@@ -70,7 +70,14 @@
                     <button id="send-button">发送</button>
                 </div>
             </div>
-        </div>
+
+            <!-- 【【【核心修正：表情包面板被移到了正确的位置】】】 -->
+            <div id="user-sticker-panel" class="sticker-panel">
+                <!-- 表情包内容将由JS动态生成 -->
+            </div>
+
+        </div> <!-- 这是 id="chat-window-view" 的结束标签 -->
+        
         
         <!-- 视图3: 动态页面 -->
         <div id="moments-view" class="view hidden">
@@ -225,6 +232,14 @@
                     <label>世界书</label>
                     <div id="ai-editor-worldbook"></div>
                     <button type="button" id="add-worldbook-entry-button">添加新条目</button>
+                </div>
+                <!-- 【【【核心新增：AI表情包分组选择】】】 -->
+                <div class="form-group">
+                    <label>可用表情包分组</label>
+                    <div id="ai-sticker-groups-container">
+                        <!-- 分组复选框将由JS动态生成 -->
+                        <p class="placeholder-text">请先在 全局设置 -> AI表情包管理 中添加分组</p>
+                    </div>
                 </div>
                 <button id="save-ai-profile-button">保存</button>
             </div>
