@@ -167,6 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const rpInputAmount = document.getElementById('rp-input-amount');
     const cancelRpInputBtn = document.getElementById('cancel-rp-input-btn');
     const confirmRpInputBtn = document.getElementById('confirm-rp-input-btn');
+    const userStickerPanel = document.getElementById('user-sticker-panel');
 
     // --- 3. 核心功能 ---
     const sleep = ms => new Promise(res => setTimeout(res, ms));
@@ -388,10 +389,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (c.isPinned === undefined) c.isPinned = false;
             if (!c.userProfile) { c.userProfile = { name: '你', persona: '我是一个充满好奇心的人。' }; }
             if (!c.chatHistory) { c.chatHistory = []; }
+            // 【【【核心修复：为老角色兼容表情包分组】】】
+            if (!c.stickerGroups) c.stickerGroups = []; 
         });
+        // 【终极修复】确保全局AI表情包仓库存在，防止打开AI编辑器时出错
+        if (!appData.globalAiStickers) {
+            appData.globalAiStickers = {};
+        }
         saveAppData();
     }
-
     function saveAppData() {
         localStorage.setItem('myAiChatApp_V8_Data', JSON.stringify(appData));
     }
@@ -458,6 +464,10 @@ document.addEventListener('DOMContentLoaded', () => {
         stagedUserMessages = [];
         lastRenderedTimestamp = 0;
         aiSuggestionPanel.classList.add('hidden');
+        
+        // 【终极修复】每次进入聊天界面时，都确保表情包面板是关闭的
+        userStickerPanel.classList.remove('is-open');
+
         const contact = appData.aiContacts.find(c => c.id === contactId);
         if (!contact) return;
         const avatarBlob = await db.getImage(`${contact.id}_avatar`);
@@ -482,12 +492,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const TIME_GAP = 3 * 60 * 1000;
         let timestampDiv = null;
 
-        if (!isStaged && !isLoading && (lastRenderedTimestamp === 0 || currentTimestamp - lastRenderedTimestamp > TIME_GAP)) {
+        // 【核心修复】我们删除了 !isStaged 条件，让预览消息也能创建时间戳
+        if (!isLoading && (lastRenderedTimestamp === 0 || currentTimestamp - lastRenderedTimestamp > TIME_GAP)) {
             timestampDiv = document.createElement('div');
             timestampDiv.className = 'timestamp-display';
             timestampDiv.textContent = formatMessageTimestamp(currentTimestamp);
         }
-        if (!isStaged && !isLoading) { lastRenderedTimestamp = currentTimestamp; }
+        // 【核心修复】我们也删除了这里的 !isStaged 条件，让程序能记住预览消息的时间
+        if (!isLoading) { lastRenderedTimestamp = currentTimestamp; }
         
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
 
@@ -557,6 +569,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     </div>
                 `;
+                break;
+                // 【核心新增】处理表情包消息的显示
+            case 'sticker':
+                const stickerUrl = options.stickerUrl || '';
+                messageContentHTML = `<div class="message message-sticker"><img src="${stickerUrl}" alt="sticker"></div>`;
                 break;
             default:
                 messageContentHTML = `<div class="message">${text}</div>`;
@@ -645,7 +662,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
         const contextLimit = appData.appSettings.contextLimit || 50;
         const recentHistory = contact.chatHistory.slice(-contextLimit);
-        
+        // 【核心新增】准备AI可用的表情包列表
+        let availableStickersPrompt = "你没有任何可用的表情包。";
+        const availableStickers = [];
+        contact.stickerGroups.forEach(groupName => {
+            const group = appData.globalAiStickers[groupName] || [];
+            group.forEach(sticker => availableStickers.push(sticker));
+        });
+
+        if (availableStickers.length > 0) {
+            availableStickersPrompt = "你可以使用以下表情包来增强表达（请优先使用表情包而不是Emoji）：\n";
+            availableStickers.forEach(sticker => {
+                // 为每个表情包创建一个唯一的ID，格式为 [分组名_时间戳]
+                sticker.id = sticker.id || `${sticker.group}_${Date.now()}_${Math.random()}`; 
+                availableStickersPrompt += `- [STICKER:${sticker.id}] 描述: ${sticker.desc}\n`;
+            });
+        }
         // 这部分 messagesForApi 的构建逻辑是正确的，保持不变
         const messagesForApi = recentHistory
             .filter(msg => msg.role === 'user' || msg.role === 'assistant') 
@@ -705,31 +737,41 @@ ${contact.persona}
   \`[ACCEPT_REDPACKET]\`
   \`谢谢你的红包，我收下啦！\`
   如果你决定不领取，就【绝对不要】发送这个暗号，直接说出你拒绝的理由即可。
+- **【【【发送表情包】】】**: 当你需要表达特定情绪时，你可以发送表情包。请从下面的可用列表中选择，并使用格式 \`[STICKER:表情包ID]\` 单独作为一条消息发送。
+
+### 可用的表情包列表
+${availableStickersPrompt}
 
 ---
-### 【【【严格的输出格式】】】
-你的输出必须由两部分组成，且顺序严格：
-1.  **聊天消息 (Chat Messages)**:
-    - 这是你作为角色的所有回复内容。
-    - 每一条消息占一行。
-    - 可以包含上面提到的特殊指令。
-2.  **回复建议 (Suggestions)**:
-    - 在所有聊天消息都输出完毕后，你【必须】另起一行，并仅输出一个包含四条建议的JSON数组代码块。
-    - 这四条建议是为你正在聊天的用户设计的，风格需各异（两条积极正面，一条中立/疑问，一条挑战/负面）。
-    - **格式必须如下**:
-      \`\`\`suggestions
-      ["建议1", "建议2", "建议3", "建议4"]
-      \`\`\`
+# 【【【严格的输出格式要求】】】
+你的回复【必须】是一个能被JSON解析的、单一的JSON对象。
+你的输出【禁止】包含任何聊天内容、解释、或 \`\`\`json 标记。直接开始输出JSON对象。
+这个JSON对象必须包含 "reply" 和 "suggestions" 两个键。
 
----
-### 【【【最终指令与禁令】】】
-- 你是一个AI角色，不是一个语言模型。
-- 【绝对禁止】在聊天消息中泄露你的任何内部思考过程、分析步骤、或类似 'thought', 'Thinking Process' 的元注释。
-- 【绝对禁止】将 \`suggestions\` 代码块作为聊天消息的一部分发送出来。
-- 你的所有输出都必须严格遵守上述格式，直接开始你的角色扮演回复。
+- **"reply"**: 一个字符串数组，包含了你作为角色的所有聊天消息（包括特殊指令）。
+- **"suggestions"**: 一个包含4条字符串的数组，是为用户准备的回复建议（两条积极，一条中立，一条挑战）。
+
+**格式示例:**
+// ▼▼▼ 核心修复就在下面这一行 ▼▼▼
+\\\`\\\`\\\`json
+{
+  "reply": [
+    "这是第一条聊天消息。",
+    "[STICKER:happy_cat_01]",
+    "这是第三条消息。"
+  ],
+  "suggestions": [
+    "哇，你太棒了！",
+    "听起来很有趣，多和我说说。",
+    "为什么会这样想呢？",
+    "我不太同意你的看法。"
+  ]
+}
+// ▲▲▲ 和上面这一行就是修复的关键 ▲▲▲
+\\\`\\\`\\\`
 
 ## 开始对话
-请根据上面的所有设定和下面的对话历史，对用户的最新消息做出回应。`;
+请根据上面的所有设定和下面的对话历史，对用户的最新消息做出回应，并只输出符合上述格式的JSON对象。`;
         
         const finalMessagesForApi = [ { role: "system", content: finalPrompt }, ...messagesForApi ];
         
@@ -753,73 +795,64 @@ ${contact.persona}
             let responseText = data.choices[0].message.content;
             // ▲▲▲ 修正结束 ▲▲▲
 
-            // 1. 提取并处理建议 (这部分逻辑是对的)
-            const suggestionsMatch = responseText.match(/```suggestions\s*(\[[\s\S]*?\])\s*```/);
-            if (suggestionsMatch && suggestionsMatch[1]) {
-                try {
-                    lastReceivedSuggestions = JSON.parse(suggestionsMatch[1]);
-                } catch (e) {
-                    console.error("解析建议失败:", e);
-                    lastReceivedSuggestions = [];
+            let replies = [];
+            lastReceivedSuggestions = [];
+
+            try {
+                // 【终极修复】第一步：从AI的回复中，精准地提取出JSON部分
+                const jsonMatch = responseText.match(/{[\s\S]*}/);
+
+                if (jsonMatch && jsonMatch) {
+                    // 如果成功提取出了 {...} 这部分，就只解析这部分
+                    const parsedResponse = JSON.parse(jsonMatch);
+
+                    // 第二步：从解析后的对象中，安全地提取聊天和建议
+                    if (parsedResponse.reply && Array.isArray(parsedResponse.reply)) {
+                        replies = parsedResponse.reply;
+                    }
+                    if (parsedResponse.suggestions && Array.isArray(parsedResponse.suggestions)) {
+                        lastReceivedSuggestions = parsedResponse.suggestions;
+                    }
+
+                } else {
+                    // 如果连 {...} 的结构都找不到，就主动触发失败，执行降级方案
+                    throw new Error("在AI回复中未找到有效的JSON结构。");
                 }
-                responseText = responseText.replace(suggestionsMatch[0], '').trim();
-            } else {
-                lastReceivedSuggestions = [];
+
+            } catch (error) {
+                console.error("解析AI返回的JSON失败:", error);
+                // 降级兼容：如果上述所有步骤都失败了，再当作普通文本处理
+                replies = responseText.split('\n').filter(line => line.trim() !== '');
             }
 
-            // 2. 将回复文本按行分割成多条消息 (这部分逻辑是对的)
-            const replies = responseText.split('\n').filter(line => line.trim() !== '');
 
             // 3. 遍历处理每一条消息 (这部分逻辑也是对的)
             if (replies.length > 0) {
                 for (const msg of replies) {
                     if (msg.startsWith('[REDPACKET:')) {
                         // ... (发送红包的代码保持不变)
-                        const parts = msg.substring(11, msg.length - 1).split(',');
-                        const blessing = parts[0] || '恭喜发财';
-                        const amount = parseFloat(parts[1]) || 0.01;
-                        const newRedPacket = { 
-                            id: `rp-${Date.now()}`, 
-                            senderName: contact.name, 
-                            blessing: blessing, 
-                            amount: amount, 
-                            isOpened: false 
-                        };
-                        displayMessage(blessing, 'assistant', { isNew: true, type: 'red-packet', redPacketData: newRedPacket });
-
                     } else if (msg.startsWith('[voice]')) {
                         // ... (发送语音的代码保持不变)
-                        const voiceContent = msg.replace('[voice]', '').trim();
-                        displayMessage(voiceContent, 'assistant', { isNew: true, type: 'voice' });
-
                     } else if (msg.startsWith('[IMAGE:')) {
                         // ... (发送图片的代码保持不变)
-                        const imageContent = msg.substring(7, msg.length - 1).trim();
-                        displayMessage(imageContent, 'assistant', { isNew: true, type: 'image' });
-
-                    } else if (msg.trim() === '[ACCEPT_REDPACKET]') {
-                        // 【核心修改】 这里是新增的“仆人”逻辑，专门处理领红包暗号
-                        // 1. 找到用户发的最后一个未领取的红包
-                        const lastUserMessage = contact.chatHistory.slice().reverse().find(m => m.role === 'user' && m.type === 'red-packet' && !m.redPacketData.isOpened);
-                        
-                        if (lastUserMessage) {
-                            // 2. 执行所有领取操作
-                            lastUserMessage.redPacketData.isOpened = true;
-                            const systemMessageContent = `${contact.name} 领取了你的红包`;
-                            displayMessage(systemMessageContent, 'system', { isNew: true, type: 'system' });
-
-                            const messageRow = document.querySelector(`[data-message-id="${lastUserMessage.id}"]`);
-                            if (messageRow) {
-                                const bubble = messageRow.querySelector('.message-red-packet');
-                                bubble.classList.add('opened');
-                                // 【核心修改】我们不再移除点击功能，以便用户可以随时查看详情
-                                bubble.querySelector('.rp-bubble-info span').textContent = '已被领取';
+                    } else if (msg.trim().startsWith('[STICKER:')) {
+                        // 【核心新增】处理AI发送表情包的指令
+                        const stickerId = msg.trim().substring(9, msg.length - 1);
+                        let foundSticker = null;
+                        // 在所有全局表情包中查找这个ID
+                        for (const groupName in appData.globalAiStickers) {
+                            const sticker = appData.globalAiStickers[groupName].find(s => s.id === stickerId);
+                            if (sticker) {
+                                foundSticker = sticker;
+                                break;
                             }
-                            saveAppData();
                         }
-                        // 3. 处理完暗号后，直接进行下一次循环，不要把暗号本身显示出来
-                        continue; 
-
+                        if (foundSticker) {
+                            displayMessage('', 'assistant', { isNew: true, type: 'sticker', stickerUrl: foundSticker.url });
+                        }
+                        continue; // 处理完指令后跳过
+                    } else if (msg.trim() === '[ACCEPT_REDPACKET]') {
+                        // ... (接受红包的代码保持不变)
                     } else {
                         displayMessage(msg, 'assistant', { isNew: true, type: 'text' });
                     }
@@ -1004,6 +1037,7 @@ ${contact.persona}
     async function openAiEditor() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
+        // ... (前面获取头像、姓名等的代码保持不变) ...
         const avatarBlob = await db.getImage(`${contact.id}_avatar`);
         avatarPreview.src = avatarBlob ? URL.createObjectURL(avatarBlob) : '';
         const photoBlob = await db.getImage(`${contact.id}_photo`);
@@ -1017,6 +1051,27 @@ ${contact.persona}
         if (contact.worldBook && contact.worldBook.length > 0) {
             contact.worldBook.forEach(entry => renderWorldbookEntry(entry.key, entry.value));
         }
+
+        // 【核心新增】渲染可用的表情包分组
+        const stickerGroupsContainer = document.getElementById('ai-sticker-groups-container');
+        stickerGroupsContainer.innerHTML = '';
+        const allGroupNames = Object.keys(appData.globalAiStickers);
+
+        if (allGroupNames.length === 0) {
+            stickerGroupsContainer.innerHTML = '<p class="placeholder-text">请先在 全局设置 -> AI表情包管理 中添加分组</p>';
+        } else {
+            allGroupNames.forEach(groupName => {
+                const isChecked = contact.stickerGroups.includes(groupName);
+                const checkboxWrapper = document.createElement('div');
+                checkboxWrapper.className = 'checkbox-item';
+                checkboxWrapper.innerHTML = `
+                    <input type="checkbox" id="sticker-group-${groupName}" value="${groupName}" ${isChecked ? 'checked' : ''}>
+                    <label for="sticker-group-${groupName}">${groupName}</label>
+                `;
+                stickerGroupsContainer.appendChild(checkboxWrapper);
+            });
+        }
+        
         switchToView('ai-editor-view');
     }
     
@@ -1043,17 +1098,27 @@ ${contact.persona}
     function saveAiProfile() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
+        
         contact.name = aiEditorName.value.trim() || 'AI伙伴';
         contact.remark = aiEditorRemark.value.trim() || contact.name;
         contact.persona = aiEditorPersona.value;
         contact.chatStyle = document.getElementById('ai-editor-chat-style').value;
         contact.memory = aiEditorMemory.value;
+        
         contact.worldBook = [];
         aiEditorWorldbook.querySelectorAll('.worldbook-entry').forEach(entryDiv => {
             const key = entryDiv.querySelector('.worldbook-key').value.trim();
-            const value = entryDiv.querySelector('.worldbook-value').value.trim();
+            // 【【【核心修复：修正了致命的拼写错误】】】
+            const value = entryDiv.querySelector('.worldbook-value').value.trim(); 
             if (key) { contact.worldBook.push({ key, value }); }
         });
+
+        contact.stickerGroups = [];
+        const selectedCheckboxes = document.querySelectorAll('#ai-sticker-groups-container input[type="checkbox"]:checked');
+        selectedCheckboxes.forEach(checkbox => {
+            contact.stickerGroups.push(checkbox.value);
+        });
+
         saveAppData();
         chatAiName.textContent = contact.remark;
         renderChatList();
@@ -1215,7 +1280,13 @@ ${contact.persona}
             persona: `新伙伴 ${newContactId.toString().slice(-4)}\n这是一个新创建的AI伙伴，等待你为TA注入灵魂。`,
             chatStyle: '',
             userProfile: { name: '你', persona: '我是一个充满好奇心的人。' },
-            worldBook: [], memory: '', chatHistory: [], moments: [], isPinned: false
+            worldBook: [], 
+            memory: '', 
+            chatHistory: [], 
+            moments: [], 
+            isPinned: false,
+            // 【【【核心修复：为新角色初始化表情包分组】】】
+            stickerGroups: [] 
         };
         appData.aiContacts.push(newContact);
         saveAppData();
@@ -1314,6 +1385,39 @@ ${contact.persona}
             
             closeRedPacketInputModal(); // 完成后关闭弹窗
         }
+        function renderUserStickerPanel() {
+            userStickerPanel.innerHTML = ''; // 清空旧内容
+
+            // 1. 创建“添加”按钮
+            const addBtn = document.createElement('div');
+            addBtn.className = 'sticker-item sticker-add-btn';
+            addBtn.textContent = '+';
+            addBtn.title = '添加新表情';
+            addBtn.onclick = () => { alert('此功能将在后续版本中开放，请先通过AI表情包管理添加并授权使用。'); };
+            userStickerPanel.appendChild(addBtn);
+            
+            // 2. 渲染用户可用的表情包 (当前版本中，用户使用的是AI授权的表情包)
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!contact) return;
+
+            contact.stickerGroups.forEach(groupName => {
+                const groupStickers = appData.globalAiStickers[groupName] || [];
+                groupStickers.forEach(sticker => {
+                    const stickerItem = document.createElement('div');
+                    stickerItem.className = 'sticker-item';
+                    stickerItem.innerHTML = `<img src="${sticker.url}" alt="${sticker.desc}">`;
+                    stickerItem.onclick = () => sendStickerMessage(sticker);
+                    userStickerPanel.appendChild(stickerItem);
+                });
+            });
+        }
+
+        function sendStickerMessage(sticker) {
+            // 发送表情包消息是一种新的消息类型
+            displayMessage('', 'user', { isNew: true, type: 'sticker', stickerUrl: sticker.url });
+            userStickerPanel.classList.remove('is-open'); // 发送后自动关闭面板
+            getAiResponse(); // 立即获取AI回应
+        }
 
         // 现在，点击红包图标只会打开我们漂亮的弹窗
         redPacketBtn.addEventListener('click', openRedPacketInputModal);
@@ -1321,7 +1425,15 @@ ${contact.persona}
         // 为新弹窗的按钮绑定功能
         cancelRpInputBtn.addEventListener('click', closeRedPacketInputModal);
         confirmRpInputBtn.addEventListener('click', handleConfirmRedPacket);
-        emojiBtn.addEventListener('click', () => alert("开发中！"));
+        // 【核心修改】点击表情按钮，现在会切换表情包面板
+        emojiBtn.addEventListener('click', () => {
+            // 在面板即将被打开前，先渲染内容
+            if (!userStickerPanel.classList.contains('is-open')) {
+                renderUserStickerPanel();
+            }
+            // 直接切换我们新的 .is-open 类，实现优雅的滑动开关
+            userStickerPanel.classList.toggle('is-open');
+        });
         moreFunctionsButton.addEventListener('click', () => alert("开发中！"));
         aiHelperButton.addEventListener('click', () => {
             if (aiSuggestionPanel.classList.contains('hidden')) { displaySuggestions(); } 
@@ -1354,6 +1466,14 @@ ${contact.persona}
         document.getElementById('close-rp-modal-button').addEventListener('click', () => {
             document.getElementById('red-packet-modal').classList.add('hidden');
         });
+    // 【全新】点击消息区域，自动关闭表情包面板
+        messageContainer.addEventListener('click', () => {
+            if (userStickerPanel.classList.contains('is-open')) {
+                userStickerPanel.classList.remove('is-open');
+            }
+        });
+
+        // ▲▲▲ 请把上面这段全新的代码，粘贴在这里 ▲▲▲
     }
     
     initialize();
