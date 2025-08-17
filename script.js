@@ -79,6 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const backFromSettingsBtn = document.getElementById('back-to-list-from-settings');
     const chatAiName = document.getElementById('chat-ai-name');
     const chatAiStatus = document.getElementById('chat-ai-status');
+    const chatAiActivityStatus = document.getElementById('chat-ai-activity-status'); // 【新增】获取状态元素
     const chatHeaderInfo = document.getElementById('chat-header-info');
     const chatSettingsButton = document.getElementById('chat-settings-button');
     const messageContainer = document.getElementById('message-container');
@@ -168,6 +169,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const cancelRpInputBtn = document.getElementById('cancel-rp-input-btn');
     const confirmRpInputBtn = document.getElementById('confirm-rp-input-btn');
     const userStickerPanel = document.getElementById('user-sticker-panel');
+    const csMessageCount = document.getElementById('cs-message-count');
+    const csSummarizeChat = document.getElementById('cs-summarize-chat');
+    const summaryEditorModal = document.getElementById('summary-editor-modal');
+    const summaryEditorTextarea = document.getElementById('summary-editor-textarea');
+    const summaryStatusText = document.getElementById('summary-status-text');
+    const cancelSummaryBtn = document.getElementById('cancel-summary-btn');
+    const copySummaryBtn = document.getElementById('copy-summary-btn');
+    const saveSummaryBtn = document.getElementById('save-summary-btn');
+    const csAutoSummaryToggle = document.getElementById('cs-auto-summary-toggle');
+    const csAutoSummaryDisplay = document.getElementById('cs-auto-summary-display');
+    const csAutoSummaryInput = document.getElementById('cs-auto-summary-input');
+    const modeSelectModal = document.getElementById('mode-select-modal');
+    const modeOnlineBtn = document.getElementById('mode-online-btn');
+    const modeOfflineBtn = document.getElementById('mode-offline-btn');
 
     // --- 3. 核心功能 ---
     const sleep = ms => new Promise(res => setTimeout(res, ms));
@@ -391,11 +406,26 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!c.chatHistory) { c.chatHistory = []; }
             // 【【【核心修复：为老角色兼容表情包分组】】】
             if (!c.stickerGroups) c.stickerGroups = []; 
+            if (!c.activityStatus) c.activityStatus = ''; // 【新增】为旧角色初始化状态
+            // 【新增】初始化自动总结设置
+            if (c.autoSummaryEnabled === undefined) c.autoSummaryEnabled = false;
+            if (!c.autoSummaryThreshold) c.autoSummaryThreshold = 100;
+            if (!c.lastSummaryAtCount) c.lastSummaryAtCount = 0;
         });
-        // 【终极修复】确保全局AI表情包仓库存在，防止打开AI编辑器时出错
+        // ▼▼▼ 请把下面这段全新的代码，粘贴在这里 ▼▼▼
+        // 【全新】为全局AI表情包建立仓库，如果不存在的话
         if (!appData.globalAiStickers) {
+            // 数据结构为：{ "分组名": [ {id, url, desc}, ... ], ... }
             appData.globalAiStickers = {};
         }
+        // ▼▼▼ 请把下面这段全新的代码，粘贴在这里 ▼▼▼
+        // 【全新】为用户建立独立的表情包仓库
+        if (!appData.userStickers) {
+            // 用户的表情包结构可以更简单，直接是一个表情包数组
+            appData.userStickers = [];
+        }
+        // ▲▲▲ 请把上面这段全新的代码，粘贴在这里 ▲▲▲
+
         saveAppData();
     }
     function saveAppData() {
@@ -475,6 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const userAvatarBlob = await db.getImage(`${contact.id}_user_avatar`);
         contact.userAvatarUrl = userAvatarBlob ? URL.createObjectURL(userAvatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg';
         chatAiName.textContent = contact.remark;
+        chatAiActivityStatus.textContent = contact.activityStatus || ''; // 【新增】打开聊天时恢复状态
         messageContainer.innerHTML = '';
         contact.chatHistory.forEach((msg, index) => {
             msg.id = msg.id || `${Date.now()}-${index}`;
@@ -620,6 +651,9 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             if (options.imageData) { messageToSave.imageData = options.imageData; }
             if (options.redPacketData) { messageToSave.redPacketData = options.redPacketData; }
+            // 【终极修复】在这里把 stickerUrl 也存进相册！
+            if (options.stickerUrl) { messageToSave.stickerUrl = options.stickerUrl; } 
+
             contact.chatHistory.push(messageToSave);
             saveAppData();
             renderChatList();
@@ -639,14 +673,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function commitAndSendStagedMessages() {
+        // 步骤1: 如果输入框还有文字，先把它也变成一个临时消息
         if (chatInput.value.trim() !== '') {
             stageUserMessage();
         }
+
+        // 步骤2: 如果没有任何待发消息，就什么也不做
         if (stagedUserMessages.length === 0) return;
-        document.querySelectorAll('[data-staged="true"]').forEach(el => el.remove());
-        stagedUserMessages.forEach(msg => {
-            displayMessage(msg.content, 'user', { isNew: true, ...msg });
+
+        // 步骤3: 【核心改造】找到所有屏幕上的临时消息，把它们“转正”
+        document.querySelectorAll('[data-staged="true"]').forEach(el => {
+            el.removeAttribute('data-staged'); // 移除“临时工”标签
         });
+
+        // 步骤4: 在数据层面，把所有临时消息正式存入聊天记录
+        stagedUserMessages.forEach(msg => {
+            // 我们不再调用displayMessage，因为它已经在屏幕上了
+            // 我们只需要把这些消息加入到 chatHistory 里
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (contact) {
+                const messageToSave = {
+                    id: `${Date.now()}-${Math.random()}`,
+                    role: 'user',
+                    timestamp: Date.now(),
+                    ...msg // 把类型、内容、URL等所有信息都复制过来
+                };
+                contact.chatHistory.push(messageToSave);
+            }
+        });
+        
+        // 步骤5: 清空待发区，触发总结检查，并触发AI
+        saveAppData();
+        triggerAutoSummaryIfNeeded(); // 【新增】调用自动总结检查器
         stagedUserMessages = [];
         getAiResponse();
     }
@@ -730,14 +788,17 @@ ${contact.persona}
 - **回复风格**: 模拟真实聊天，将一个完整的思想拆分成【2-8条】独立的短消息。
 - **禁止括号**: 【绝对不能】包含任何括号内的动作、神态描写。
 - **回应图片**: 如果用户的消息包含图片，你【必须】先针对图片内容进行回应，然后再进行其他对话。
+- **回应表情**: 如果用户的消息是 \`[表情] 文字描述\` 的格式，这代表用户给你发了一个表情包。你【必须】针对文字描述所表达的情绪进行回应。
 - **发送图片**: 如果你想发图片，请使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送它。
 - **发送语音**: 如果某条回复更适合用语音表达（如唱歌、叹气、笑声），请在回复前加上 \`[voice]\` 标签。例如：\`[voice]嗯...让我想想。\`
 - **发送红包**: 在特殊节日、为了表达感谢或在剧情需要时，你可以发红包。请【严格使用】以下格式：\`[REDPACKET:祝福语,金额]\`。例如：\`[REDPACKET:节日快乐！,8.88]\`
-- **【【【核心规则：领取红包】】】**: 当用户给你发红包后，你【必须自己决定】是否领取。如果你决定领取，你的回复中【必须】单独包含一行暗号 \`[ACCEPT_REDPACKET]\`。你可以把感谢的话和这个暗号分开说。例如：
-  \`[ACCEPT_REDPACKET]\`
-  \`谢谢你的红包，我收下啦！\`
-  如果你决定不领取，就【绝对不要】发送这个暗号，直接说出你拒绝的理由即可。
-- **【【【发送表情包】】】**: 当你需要表达特定情绪时，你可以发送表情包。请从下面的可用列表中选择，并使用格式 \`[STICKER:表情包ID]\` 单独作为一条消息发送。
+- **【【【核心规则：领取红包】】】**: 当用户给你发红包后，你【必须自己决定】是否领取。如果你决定领取，你的'reply'数组中【必须】单独包含一个字符串：\`[ACCEPT_REDPACKET]\`。
+  - **这是一个给系统的静默指令，你【绝对不能】自己生成“xx领取了你的红包”这样的宣告。系统会自动处理。**
+  - 你可以把感谢的话（例如“谢谢你！”）作为另一条独立的消息放在数组里。
+  - 如果你决定不领取，就【绝对不要】在'reply'数组中包含这个指令。
+- **【【【核心准则：像真人一样使用表情包】】】**:
+  - **主动使用**: 在对话中，当你的文字无法完全表达情绪时（例如：开心、委屈、调皮、害羞），你【应该】主动从下面的可用列表中，选择一个最贴切的表情包来发送。这会让对话更生动。
+  - **发送格式**: 请严格使用格式 \`[STICKER:表情包ID]\`，并把它作为一条**独立**的消息放在你的'reply'数组中。
 
 ### 可用的表情包列表
 ${availableStickersPrompt}
@@ -746,29 +807,29 @@ ${availableStickersPrompt}
 # 【【【严格的输出格式要求】】】
 你的回复【必须】是一个能被JSON解析的、单一的JSON对象。
 你的输出【禁止】包含任何聊天内容、解释、或 \`\`\`json 标记。直接开始输出JSON对象。
-这个JSON对象必须包含 "reply" 和 "suggestions" 两个键。
+这个JSON对象必须包含 "reply" 和 "suggestions" 两个键，"activity" 键是【可选的】。
 
+- **"activity" (可选字段)**: 只有当你觉得你的虚拟状态【发生了有意义的改变时】，才包含这个字段。它是一个描述你新状态的【简短】字符串 (例如: "去洗澡了", "躺在床上", "开始看书")。
+  - **重要原则**: 如果你的状态没有变化（比如你一直在看书），就【绝对不要】在你的JSON输出中包含 "activity" 字段。系统会自动维持你之前的状态。
 - **"reply"**: 一个字符串数组，包含了你作为角色的所有聊天消息（包括特殊指令）。
 - **"suggestions"**: 一个包含4条字符串的数组，是为用户准备的回复建议（两条积极，一条中立，一条挑战）。
 
-**格式示例:**
-// ▼▼▼ 核心修复就在下面这一行 ▼▼▼
-\\\`\\\`\\\`json
+**格式示例 (状态改变时):**
+\`\`\`json
 {
-  "reply": [
-    "这是第一条聊天消息。",
-    "[STICKER:happy_cat_01]",
-    "这是第三条消息。"
-  ],
-  "suggestions": [
-    "哇，你太棒了！",
-    "听起来很有趣，多和我说说。",
-    "为什么会这样想呢？",
-    "我不太同意你的看法。"
-  ]
+  "activity": "打了个哈欠",
+  "reply": ["有点困了呢..."],
+  "suggestions": ["要去睡了吗？", "累了就休息吧", "是不是熬夜了？", "别睡，起来嗨！"]
 }
-// ▲▲▲ 和上面这一行就是修复的关键 ▲▲▲
-\\\`\\\`\\\`
+\`\`\`
+
+**格式示例 (状态不变时):**
+\`\`\`json
+{
+  "reply": ["这本书真有意思。", "特别是主角的这段经历。"],
+  "suggestions": ["听起来不错！", "讲讲书里的内容？", "你喜欢看什么类型的书？", "别看书了，陪我聊天。"]
+}
+\`\`\`
 
 ## 开始对话
 请根据上面的所有设定和下面的对话历史，对用户的最新消息做出回应，并只输出符合上述格式的JSON对象。`;
@@ -805,6 +866,16 @@ ${availableStickersPrompt}
                 if (jsonMatch && jsonMatch) {
                     // 如果成功提取出了 {...} 这部分，就只解析这部分
                     const parsedResponse = JSON.parse(jsonMatch);
+
+                    // ▼▼▼【核心修改】在这里接收并显示AI的状态▼▼▼
+                    if (parsedResponse.activity && typeof parsedResponse.activity === 'string') {
+                        // 1. 更新界面
+                        chatAiActivityStatus.textContent = parsedResponse.activity;
+                        // 2. 保存这个状态，以便下次进入聊天时能恢复
+                        contact.activityStatus = parsedResponse.activity; 
+                        saveAppData();
+                    }
+                    // ▲▲▲ 修改结束 ▲▲▲
 
                     // 第二步：从解析后的对象中，安全地提取聊天和建议
                     if (parsedResponse.reply && Array.isArray(parsedResponse.reply)) {
@@ -975,6 +1046,83 @@ ${availableStickersPrompt}
         aiSuggestionPanel.classList.remove('hidden');
     }
 
+    function renderStickerManager() {
+        const container = document.getElementById('sticker-manager-container');
+        container.innerHTML = ''; // 清空旧内容
+
+        const groupNames = Object.keys(appData.globalAiStickers);
+
+        if (groupNames.length === 0) {
+            container.innerHTML = '<p class="placeholder-text">还没有任何表情包分组，点击右下角+号创建一个吧！</p>';
+            return;
+        }
+
+        groupNames.forEach(groupName => {
+            const group = appData.globalAiStickers[groupName];
+            const groupCard = document.createElement('div');
+            groupCard.className = 'sticker-group-card';
+            
+            let stickersHTML = '';
+            group.forEach(sticker => {
+                stickersHTML += `
+                    <div class="sticker-manager-item">
+                        <img src="${sticker.url}" alt="${sticker.desc}">
+                        <button class="sticker-delete-btn" data-group="${groupName}" data-id="${sticker.id}">&times;</button>
+                    </div>
+                `;
+            });
+
+            groupCard.innerHTML = `
+                <div class="sticker-group-header">
+                    <h4>${groupName}</h4>
+                    <div class="header-actions">
+                        <button data-group="${groupName}" class="rename-group-btn">重命名</button>
+                        <button data-group="${groupName}" class="delete-group-btn">删除</button>
+                    </div>
+                </div>
+                <div class="sticker-grid">
+                    ${stickersHTML}
+                    <div class="sticker-manager-item sticker-add-placeholder" data-group="${groupName}">+</div>
+                </div>
+            `;
+            container.appendChild(groupCard);
+        });
+    }
+
+    /**
+     * 【全新】打开表情包上传弹窗
+     * @param {string} context - 要将表情包添加到的分组名
+     */
+    function openStickerUploadModal(context) {
+        const modal = document.getElementById('sticker-upload-modal');
+        const title = document.getElementById('sticker-upload-title');
+        const preview = document.getElementById('sticker-upload-preview');
+        const urlInput = document.getElementById('sticker-upload-url-input');
+        const descInput = document.getElementById('sticker-upload-desc-input');
+        const fileInput = document.getElementById('sticker-upload-file-input');
+
+        if (context === 'user') {
+            title.textContent = `添加我的表情包`;
+        } else {
+            title.textContent = `为 [${context}] 添加表情包`;
+        }
+
+        preview.src = '';
+        urlInput.value = '';
+        descInput.value = '';
+        fileInput.value = null; 
+
+        modal.dataset.currentContext = context; // 【关键修改】将上下文暂存到弹窗上
+        modal.classList.remove('hidden');
+    }
+
+    /**
+     * 【全新】关闭表情包上传弹窗
+     */
+    function closeStickerUploadModal() {
+        document.getElementById('sticker-upload-modal').classList.add('hidden');
+    }
+
     function showSuggestionUI() {
         aiSuggestionPanel.classList.remove('hidden');
         refreshSuggestionsContainer.classList.remove('hidden');
@@ -1056,6 +1204,13 @@ ${availableStickersPrompt}
         const myAvatarBlob = await db.getImage(`${contact.id}_user_avatar`);
         csMyAvatar.src = myAvatarBlob ? URL.createObjectURL(myAvatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg';
         csPinToggle.checked = contact.isPinned || false;
+        csMessageCount.textContent = contact.chatHistory.length;
+        
+        // 【新增】加载并显示自动总结设置
+        csAutoSummaryToggle.checked = contact.autoSummaryEnabled;
+        csAutoSummaryInput.value = contact.autoSummaryThreshold;
+        csAutoSummaryDisplay.textContent = contact.autoSummaryThreshold ? `${contact.autoSummaryThreshold}条` : '未设置';
+
         switchToView('contact-settings-view');
     }
 
@@ -1321,8 +1476,7 @@ ${availableStickersPrompt}
     }
 
     function bindEventListeners() {
-    // 【全新】使用事件委托处理红包点击
-    messageContainer.addEventListener('click', (e) => {
+        messageContainer.addEventListener('click', (e) => {
             const targetRow = e.target.closest('.message-row[data-action="open-red-packet"]');
             if (targetRow) {
                 openRedPacket(targetRow.dataset.messageId);
@@ -1368,18 +1522,18 @@ ${availableStickersPrompt}
         backToContactSettingsButton.addEventListener('click', () => switchToView('contact-settings-view'));
         addWorldbookEntryButton.addEventListener('click', () => renderWorldbookEntry());
         saveAiProfileButton.addEventListener('click', saveAiProfile);
-        chatHeaderInfo.addEventListener('click', openAiEditor);
+        chatAiName.addEventListener('click', openAiEditor);
         voiceBtn.addEventListener('click', openVoiceModal);
         cancelVoiceButton.addEventListener('click', closeVoiceModal);
         confirmVoiceButton.addEventListener('click', sendVoiceMessage);
         imageBtn.addEventListener('click', () => openImageUploadModal('upload'));
         cameraBtn.addEventListener('click', () => openImageUploadModal('simulate'));
-        // 【核心修改】将所有红包相关的逻辑，都移到我们的新弹窗里
+        
         function openRedPacketInputModal() {
-            rpInputBlessing.value = '恭喜发财'; // 每次打开都重置为默认祝福语
-            rpInputAmount.value = ''; // 清空上次输入的金额
+            rpInputBlessing.value = '恭喜发财';
+            rpInputAmount.value = '';
             redPacketInputModal.classList.remove('hidden');
-            rpInputBlessing.focus(); // 自动聚焦到祝福语输入框
+            rpInputBlessing.focus();
         }
 
         function closeRedPacketInputModal() {
@@ -1390,73 +1544,49 @@ ${availableStickersPrompt}
             const blessing = rpInputBlessing.value.trim();
             const amount = parseFloat(rpInputAmount.value);
 
-            if (!blessing) {
-                showCustomAlert('提示', '请输入红包祝福语！');
-                return;
-            }
-            if (isNaN(amount) || amount <= 0) {
-                showCustomAlert('提示', '请输入有效的金额！');
-                return;
-            }
+            if (!blessing) { showCustomAlert('提示', '请输入红包祝福语！'); return; }
+            if (isNaN(amount) || amount <= 0) { showCustomAlert('提示', '请输入有效的金额！'); return; }
 
             const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
             const tempMessageId = `staged-${Date.now()}-${Math.random()}`;
             const newRedPacket = { id: `rp-${Date.now()}`, senderName: contact.userProfile.name, blessing: blessing, amount: amount, isOpened: false };
             
-            // 【【【核心修复：在这里补上了 'role: 'user'】】】
             stagedUserMessages.push({ id: tempMessageId, role: 'user', content: blessing, type: 'red-packet', redPacketData: newRedPacket });
-            
             displayMessage(blessing, 'user', { isStaged: true, type: 'red-packet', redPacketData: newRedPacket, id: tempMessageId });
-            
-            closeRedPacketInputModal(); // 完成后关闭弹窗
+            closeRedPacketInputModal();
         }
+        
         function renderUserStickerPanel() {
-            userStickerPanel.innerHTML = ''; // 清空旧内容
-
-            // 1. 创建“添加”按钮
+            userStickerPanel.innerHTML = '';
             const addBtn = document.createElement('div');
             addBtn.className = 'sticker-item sticker-add-btn';
             addBtn.textContent = '+';
             addBtn.title = '添加新表情';
-            addBtn.onclick = () => { alert('此功能将在后续版本中开放，请先通过AI表情包管理添加并授权使用。'); };
+            addBtn.onclick = () => { openStickerUploadModal('user'); };
             userStickerPanel.appendChild(addBtn);
-            
-            // 2. 渲染用户可用的表情包 (当前版本中，用户使用的是AI授权的表情包)
-            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-            if (!contact) return;
-
-            contact.stickerGroups.forEach(groupName => {
-                const groupStickers = appData.globalAiStickers[groupName] || [];
-                groupStickers.forEach(sticker => {
-                    const stickerItem = document.createElement('div');
-                    stickerItem.className = 'sticker-item';
-                    stickerItem.innerHTML = `<img src="${sticker.url}" alt="${sticker.desc}">`;
-                    stickerItem.onclick = () => sendStickerMessage(sticker);
-                    userStickerPanel.appendChild(stickerItem);
-                });
+            appData.userStickers.forEach(sticker => {
+                const stickerItem = document.createElement('div');
+                stickerItem.className = 'sticker-item';
+                stickerItem.innerHTML = `<img src="${sticker.url}" alt="${sticker.desc}">`;
+                stickerItem.onclick = () => sendStickerMessage(sticker);
+                userStickerPanel.appendChild(stickerItem);
             });
         }
 
         function sendStickerMessage(sticker) {
-            // 发送表情包消息是一种新的消息类型
-            displayMessage('', 'user', { isNew: true, type: 'sticker', stickerUrl: sticker.url });
-            userStickerPanel.classList.remove('is-open'); // 发送后自动关闭面板
-            getAiResponse(); // 立即获取AI回应
+            const message = { type: 'sticker', content: `[表情] ${sticker.desc}`, stickerUrl: sticker.url };
+            stagedUserMessages.push(message);
+            displayMessage(message.content, 'user', { isStaged: true, type: 'sticker', stickerUrl: message.stickerUrl });
+            userStickerPanel.classList.remove('is-open');
         }
 
-        // 现在，点击红包图标只会打开我们漂亮的弹窗
         redPacketBtn.addEventListener('click', openRedPacketInputModal);
-
-        // 为新弹窗的按钮绑定功能
         cancelRpInputBtn.addEventListener('click', closeRedPacketInputModal);
         confirmRpInputBtn.addEventListener('click', handleConfirmRedPacket);
-        // 【核心修改】点击表情按钮，现在会切换表情包面板
         emojiBtn.addEventListener('click', () => {
-            // 在面板即将被打开前，先渲染内容
             if (!userStickerPanel.classList.contains('is-open')) {
                 renderUserStickerPanel();
             }
-            // 直接切换我们新的 .is-open 类，实现优雅的滑动开关
             userStickerPanel.classList.toggle('is-open');
         });
         moreFunctionsButton.addEventListener('click', () => alert("开发中！"));
@@ -1471,11 +1601,21 @@ ${availableStickersPrompt}
         avatarUploadInput.addEventListener('change', (e) => handleImageUpload(e.target.files[0], `${activeChatContactId}_avatar`, avatarPreview));
         photoUploadArea.addEventListener('click', () => photoUploadInput.click());
         photoUploadInput.addEventListener('change', (e) => handleImageUpload(e.target.files[0], `${activeChatContactId}_photo`, photoPreview));
+        
         contactSettingsView.querySelectorAll('.settings-item').forEach(item => {
-            if (item.id !== 'cs-edit-ai-profile' && item.id !== 'cs-edit-my-profile' && item.id !== 'cs-clear-history' && item.id !== 'cs-delete-contact' && !item.querySelector('.switch')) {
+            if (item.id !== 'cs-edit-ai-profile' && item.id !== 'cs-edit-my-profile' && item.id !== 'cs-summarize-chat' && item.id !== 'cs-clear-history' && item.id !== 'cs-delete-contact' && !item.querySelector('.switch')) {
                 item.addEventListener('click', () => alert('功能开发中，敬请期待！'));
             }
         });
+
+        // --- 【全新】记忆总结相关事件绑定 (最终修正版) ---
+        csSummarizeChat.addEventListener('click', handleManualSummary);
+        cancelSummaryBtn.addEventListener('click', () => summaryEditorModal.classList.add('hidden'));
+        copySummaryBtn.addEventListener('click', copySummaryToClipboard);
+        saveSummaryBtn.addEventListener('click', saveSummaryToMemory);
+        setupAutoSummaryInteraction(); // <--- 激活自动总结UI交互
+        // --- 绑定结束 ---
+
         csClearHistory.addEventListener('click', clearActiveChatHistory);
         csDeleteContact.addEventListener('click', deleteActiveContact);
         csPinToggle.addEventListener('change', togglePinActiveChat);
@@ -1491,15 +1631,417 @@ ${availableStickersPrompt}
         document.getElementById('close-rp-modal-button').addEventListener('click', () => {
             document.getElementById('red-packet-modal').classList.add('hidden');
         });
-    // 【全新】点击消息区域，自动关闭表情包面板
         messageContainer.addEventListener('click', () => {
             if (userStickerPanel.classList.contains('is-open')) {
                 userStickerPanel.classList.remove('is-open');
             }
         });
-
-        // ▲▲▲ 请把上面这段全新的代码，粘贴在这里 ▲▲▲
     }
     
+    // --- AI表情包管理系统 ---
+        const stickerManagerView = document.getElementById('ai-sticker-manager-view');
+        const stickerUploadModal = document.getElementById('sticker-upload-modal');
+        const addStickerGroupBtn = document.getElementById('add-sticker-group-btn');
+
+        // 在主设置页，添加一个入口
+        const settingsForm = document.getElementById('settings-form');
+        const stickerManagerEntry = document.createElement('div');
+        stickerManagerEntry.className = 'settings-group';
+        stickerManagerEntry.innerHTML = '<div class="settings-item"><span>AI表情包管理</span><span class="arrow">&gt;</span></div>';
+        settingsForm.insertBefore(stickerManagerEntry, settingsForm.querySelector('hr'));
+        
+        stickerManagerEntry.addEventListener('click', () => {
+            renderStickerManager();
+            switchToView('ai-sticker-manager-view');
+        });
+
+        // 从表情包管理页返回设置页
+        document.getElementById('back-to-settings-from-sticker-btn').addEventListener('click', () => switchToView('settings-view'));
+
+        // 点击“+”创建新分组
+        addStickerGroupBtn.addEventListener('click', () => {
+            const groupName = prompt("请输入新的表情包分组名：");
+            if (groupName && groupName.trim()) {
+                if (appData.globalAiStickers[groupName.trim()]) {
+                    alert("该分组名已存在！");
+                    return;
+                }
+                appData.globalAiStickers[groupName.trim()] = [];
+                saveAppData();
+                renderStickerManager();
+            }
+        });
+
+        // 使用事件委托处理所有对分组和表情包的操作
+        document.getElementById('sticker-manager-container').addEventListener('click', (e) => {
+            const target = e.target;
+            const group = target.dataset.group;
+
+            // 添加表情包
+            if (target.classList.contains('sticker-add-placeholder')) {
+                openStickerUploadModal(group);
+            }
+            // 删除表情包
+            if (target.classList.contains('sticker-delete-btn')) {
+                const id = target.dataset.id;
+                if (confirm(`确定要从 [${group}] 中删除这个表情包吗？`)) {
+                    appData.globalAiStickers[group] = appData.globalAiStickers[group].filter(s => s.id !== id);
+                    saveAppData();
+                    renderStickerManager();
+                }
+            }
+            // 重命名分组
+            if (target.classList.contains('rename-group-btn')) {
+                const newName = prompt(`请输入 [${group}] 的新名称：`, group);
+                if (newName && newName.trim() && newName.trim() !== group) {
+                    if (appData.globalAiStickers[newName.trim()]) {
+                        alert("该分组名已存在！"); return;
+                    }
+                    // 数据迁移
+                    appData.globalAiStickers[newName.trim()] = appData.globalAiStickers[group];
+                    delete appData.globalAiStickers[group];
+                    // 更新所有引用了旧分组名的角色
+                    appData.aiContacts.forEach(contact => {
+                        const index = contact.stickerGroups.indexOf(group);
+                        if (index > -1) {
+                            contact.stickerGroups[index] = newName.trim();
+                        }
+                    });
+                    saveAppData();
+                    renderStickerManager();
+                }
+            }
+            // 删除分组
+            if (target.classList.contains('delete-group-btn')) {
+                if (confirm(`【警告】确定要删除 [${group}] 整个分组吗？\n此操作不可撤销，且所有使用此分组的AI将无法再使用这些表情包！`)) {
+                    delete appData.globalAiStickers[group];
+                     // 移除所有角色对该分组的引用
+                    appData.aiContacts.forEach(contact => {
+                        contact.stickerGroups = contact.stickerGroups.filter(g => g !== group);
+                    });
+                    saveAppData();
+                    renderStickerManager();
+                }
+            }
+        });
+
+        // --- 表情包上传弹窗逻辑 ---
+        const stickerPreview = document.getElementById('sticker-upload-preview');
+        const stickerUrlInput = document.getElementById('sticker-upload-url-input');
+        const stickerFileInput = document.getElementById('sticker-upload-file-input');
+
+        // URL输入时更新预览
+        stickerUrlInput.addEventListener('input', () => {
+            stickerPreview.src = stickerUrlInput.value;
+        });
+
+        // 本地文件选择时更新预览
+        stickerFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    stickerPreview.src = event.target.result;
+                    stickerUrlInput.value = event.target.result; // 将DataURL也填入URL框
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // 取消上传
+        document.getElementById('cancel-sticker-upload-btn').addEventListener('click', closeStickerUploadModal);
+
+        // 确认上传
+        document.getElementById('confirm-sticker-upload-btn').addEventListener('click', () => {
+            const context = stickerUploadModal.dataset.currentContext; // 【关键修改】获取上下文
+            const url = stickerUrlInput.value.trim();
+            const desc = document.getElementById('sticker-upload-desc-input').value.trim();
+
+            if (!url) { alert("请输入图片URL或从本地上传！"); return; }
+            if (!desc) { alert("请输入表情描述！"); return; }
+            
+            const newSticker = {
+                id: `${context}_${Date.now()}`,
+                url: url,
+                desc: desc
+            };
+
+            // 【关键修改】根据上下文，保存到不同的地方
+            if (context === 'user') {
+                appData.userStickers.push(newSticker);
+            } else {
+                appData.globalAiStickers[context].push(newSticker);
+            }
+
+            saveAppData();
+            // 如果是为AI上传，则刷新AI管理页
+            if (context !== 'user') {
+                renderStickerManager();
+            }
+            closeStickerUploadModal();
+        });
+
+            // ---------------------------------------------------
+    // --- 【【【全新】】】记忆总结核心功能模块 ---
+    // ---------------------------------------------------
+
+    /**
+     * 手动总结功能的入口处理函数
+     */
+    async function handleManualSummary() {
+        // 【核心修改】使用我们全新的自定义弹窗
+        showModeSelectModal(async (isOnlineMode) => {
+            summaryEditorTextarea.value = 'AI正在努力回忆中，请稍候...';
+            summaryStatusText.textContent = '';
+            summaryEditorModal.classList.remove('hidden');
+
+            try {
+                const summary = await generateSummary(isOnlineMode);
+                summaryEditorTextarea.value = summary;
+            } catch (error) {
+                summaryEditorTextarea.value = `哎呀，总结失败了 T_T\n\n错误信息:\n${error.message}`;
+            }
+        });
+    }
+
+    /**
+     * 调用API生成总结的核心函数
+     * @param {boolean} isOnlineMode - true为线上闲聊模式, false为线下剧情模式
+     * @returns {Promise<string>} 返回AI生成的YAML格式总结
+     */
+    async function generateSummary(isOnlineMode) {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact || contact.chatHistory.length === 0) {
+            return "# 没有任何聊天记录可以总结。";
+        }
+        
+        // 我们只总结最近的N条记录，防止超出API限制，这里暂定500条
+        const recentHistory = contact.chatHistory.slice(-500); 
+        const chatLogForApi = recentHistory.map(msg => {
+            const roleName = msg.role === 'user' ? (contact.userProfile.name || '用户') : (contact.name || 'AI');
+            // 【优化】为每一条消息都加上时间戳，让AI更好地理解上下文
+            const time = new Date(msg.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+            return `[${time}] ${roleName}: ${msg.content}`;
+        }).join('\n');
+
+        const currentDate = new Date().toLocaleString('zh-CN'); // <-- 变化点1：获取当前日期时间
+        const prompt = buildSummaryPrompt(isOnlineMode, chatLogForApi, currentDate);
+        
+        const requestUrl = appData.appSettings.apiUrl.endsWith('/chat/completions') 
+            ? appData.appSettings.apiUrl 
+            : appData.appSettings.apiUrl + '/chat/completions';
+        
+        const response = await fetch(requestUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
+            body: JSON.stringify({
+                model: appData.appSettings.apiModel,
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.2 // 总结任务需要更低的温度以保证准确性
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`API 请求失败，状态码: ${response.status}`);
+        }
+        const data = await response.json();
+        if (!data.choices || data.choices.length === 0) {
+            throw new Error("API 返回了无效的数据结构。");
+        }
+        return data.choices[0].message.content;
+    }
+
+    /**
+     * 构建用于生成总结的详细Prompt
+     * @param {boolean} isOnlineMode - 模式选择
+     * @param {string} chatLog - 格式化后的聊天记录
+     * @returns {string} 完整的Prompt
+     */
+    function buildSummaryPrompt(isOnlineMode, chatLog, currentDate) { // <-- 变化点1：增加了一个参数
+        const commonRules = `
+# 任务: 对话总结
+你是一个专业的对话分析师。你的任务是阅读下面的对话记录，并以【严格的YAML格式】输出一份简明扼要的记忆总结。
+
+## 上下文信息
+- **当前时间**: ${currentDate}  // <-- 变化点2：把当前时间告诉AI
+
+## 核心原则
+- **只记录关键信息**: 忽略日常寒暄、无意义的闲聊和重复性内容。
+- **客观中立**: 以第三人称视角进行记录，不要添加个人情感或评论。
+- **合并事件**: 如果多个连续的对话都围绕同一主题，请将它们合并成一个事件。
+- **时间与地点**: **必须使用上面提供的“当前时间”来填充“日期”和“时间”字段**。如果无法推断具体地点，线上模式请填写"线上"，线下模式请留空或填写"未知"。
+
+
+## 输出格式 (必须严格遵守)
+\`\`\`yaml
+- 日期: YYYY年M月D日
+  时间: HH:MM
+  地点: 线上
+  事件: 
+    - 事件描述1
+    - 事件描述2
+- 日期: YYYY年M月D日
+  时间: HH:MM
+  地点: 咖啡馆
+  事件: 
+    - 事件描述1
+\`\`\`
+`;
+        const onlineModeRules = `
+## 【线上闲聊】模式总结重点
+你现在总结的是两个网友之间的日常聊天，请重点关注以下几类信息：
+1.  **个人信息披露**: 用户主动提及的个人喜好（如喜欢的食物、颜色、音乐）、厌恶、梦想、工作、生活习惯、过去的经历等。
+2.  **重要约定或承诺**: 双方定下的约定，或一方做出的重要承诺。
+3.  **剧烈情感波动**: 对话中表现出的强烈情绪转折点，如从开心到难过，或激烈的争吵与和解。
+4.  **关系里程碑**: 确认关系、第一次视频、互相表达爱意等标志性事件。
+`;
+        const offlineModeRules = `
+## 【线下剧情】模式总结重点
+你现在总结的是一个故事或角色扮演(RP)的对话，请重点关注以下几类信息：
+1.  **主线剧情推进**: 推动故事发展的关键行动或对话。例如，“角色A决定前往北方的森林寻找魔法石”。
+2.  **关键道具/信息**: 对话中出现的、对未来剧情有重要影响的物品、线索或信息。
+3.  **人物关系变化**: 角色之间关系发生的显著变化，如结盟、反目、产生爱意等。
+4.  **新场景/新角色**: 对话中首次引入的重要场景或角色。
+`;
+        const finalSection = `
+---
+# 对话记录
+${chatLog}
+
+---
+# 你的输出
+现在，请只输出符合上述规则和格式的YAML记忆总结。不要包含任何解释、标题或\`\`\`yaml\`\`\`标记。
+`;
+        return commonRules + (isOnlineMode ? onlineModeRules : offlineModeRules) + finalSection;
+    }
+
+    /**
+     * 将总结内容复制到剪贴板
+     */
+    function copySummaryToClipboard() {
+        navigator.clipboard.writeText(summaryEditorTextarea.value).then(() => {
+            summaryStatusText.textContent = "已成功复制到剪贴板！";
+            setTimeout(() => summaryStatusText.textContent = '', 2000);
+        }).catch(err => {
+            summaryStatusText.textContent = "复制失败，请手动复制。";
+        });
+    }
+
+    /**
+     * 将编辑后的总结保存到AI的专属记忆中
+     */
+    function saveSummaryToMemory() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+        
+        const summaryToAdd = summaryEditorTextarea.value;
+        if (summaryToAdd.trim() === '') return;
+
+        // 如果原有记忆不为空，则在前面加一个换行符和分隔符，让格式更清晰
+        if (contact.memory.trim() !== '') {
+            contact.memory += '\n\n---\n\n';
+        }
+        contact.memory += summaryToAdd;
+        
+        saveAppData();
+        summaryEditorModal.classList.add('hidden');
+        
+        // 短暂提示用户保存成功
+        showCustomAlert('操作成功', '记忆已成功存入AI的大脑！\n\n你现在可以在“编辑AI信息”页面查看。');
+    }
+    // --- 【全新】自动总结设置的交互与保存 ---
+    function setupAutoSummaryInteraction() {
+        // 点击显示文字，切换到输入框
+        csAutoSummaryDisplay.addEventListener('click', () => {
+            csAutoSummaryDisplay.classList.add('hidden');
+            csAutoSummaryInput.classList.remove('hidden');
+            csAutoSummaryInput.focus();
+        });
+
+        // 输入框失去焦点时，保存并切换回显示文字
+        csAutoSummaryInput.addEventListener('blur', () => {
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!contact) return;
+            
+            let threshold = parseInt(csAutoSummaryInput.value);
+            if (isNaN(threshold) || threshold < 50) {
+                threshold = 100; // 默认值
+            }
+            csAutoSummaryInput.value = threshold;
+            contact.autoSummaryThreshold = threshold;
+            csAutoSummaryDisplay.textContent = `${threshold}条`;
+            saveAppData();
+
+            csAutoSummaryDisplay.classList.remove('hidden');
+            csAutoSummaryInput.classList.add('hidden');
+        });
+
+        // 切换开关时，保存状态
+        csAutoSummaryToggle.addEventListener('change', () => {
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!contact) return;
+            contact.autoSummaryEnabled = csAutoSummaryToggle.checked;
+            saveAppData();
+        });
+    }
+    
+    /**
+     * 【全新】显示模式选择弹窗的函数
+     * @param {function} onSelect - 用户选择后的回调函数，接收一个布尔值参数 (true=online)
+     */
+    let modeSelectionCallback = null;
+    function showModeSelectModal(onSelect) {
+        modeSelectionCallback = onSelect;
+        modeSelectModal.classList.remove('hidden');
+    }
+    // 为模式选择按钮绑定一次性事件
+    modeOnlineBtn.addEventListener('click', () => {
+        if (modeSelectionCallback) modeSelectionCallback(true);
+        modeSelectModal.classList.add('hidden');
+    });
+    modeOfflineBtn.addEventListener('click', () => {
+        if (modeSelectionCallback) modeSelectionCallback(false);
+        modeSelectModal.classList.add('hidden');
+    });
+
+
+    /**
+     * 【全新】自动总结触发器
+     */
+    async function triggerAutoSummaryIfNeeded() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact || !contact.autoSummaryEnabled) {
+            return; // 如果没开启，直接退出
+        }
+
+        const threshold = contact.autoSummaryThreshold || 100;
+        const currentCount = contact.chatHistory.length;
+        const lastSummaryCount = contact.lastSummaryAtCount || 0;
+
+        // 核心判断：当前消息数 - 上次总结时的消息数 >= 阈值
+        if ((currentCount - lastSummaryCount) >= threshold) {
+            console.log(`自动总结触发！当前: ${currentCount}, 上次: ${lastSummaryCount}, 阈值: ${threshold}`);
+            try {
+                // 自动总结默认使用【线上闲聊】模式
+                const summary = await generateSummary(true);
+                
+                // 静默保存到记忆中
+                if (contact.memory.trim() !== '') {
+                    contact.memory += '\n\n---\n# 自动总结\n';
+                }
+                contact.memory += summary;
+                
+                // 更新“上次总结位置”标记
+                contact.lastSummaryAtCount = currentCount;
+                saveAppData();
+                console.log("自动总结成功并已存入记忆。");
+
+            } catch (error) {
+                console.error("自动总结失败:", error);
+            }
+        }
+    }
+    
+
     initialize();
 });
