@@ -272,6 +272,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const packet = message.redPacketData;
 
+        // 【【【核心修改：增加“门卫”逻辑】】】
+        // 在执行任何操作前，先检查红包是不是用户自己发的
+        if (message.role === 'user') {
+            // 如果是用户自己发的，无论是否领取，都只显示详情，然后立即停止
+            showRedPacketDetails(packet, message.role);
+            return; 
+        }
+
+        // 如果程序能走到这里，说明这一定是AI发的红包，可以继续正常的领取判断
         // 如果已经领过了，就只显示详情，不执行领取逻辑
         if (packet.isOpened) {
             showRedPacketDetails(packet, message.role);
@@ -320,29 +329,36 @@ document.addEventListener('DOMContentLoaded', () => {
         const senderAvatar = (senderRole === 'user') ? contact.userAvatarUrl : contact.avatarUrl;
         const senderName = packet.senderName;
         
-        // 填充模态框内容
+        // 填充模态框上半部分（这部分总会显示）
         modal.querySelector('#rp-sender-avatar').src = senderAvatar;
         modal.querySelector('#rp-sender-name').textContent = `${senderName}发送的红包`;
         modal.querySelector('#rp-blessing').textContent = packet.blessing;
         modal.querySelector('#rp-amount').textContent = packet.amount.toFixed(2);
         
-        // 填充领取人列表（在这个版本中，只有一个人）
+        // 【【【核心修改：增加状态检查】】】
         const receiverList = modal.querySelector('#rp-receiver-list');
-        const receiverName = (senderRole === 'user') ? contact.name : contact.userProfile.name;
-        const receiverAvatar = (senderRole === 'user') ? contact.avatarUrl : contact.userAvatarUrl;
-        
-        receiverList.innerHTML = `
-            <div class="receiver-item">
-                <img src="${receiverAvatar}" class="avatar">
-                <div class="receiver-info">
-                    <span class="receiver-name">${receiverName}</span>
-                    <span class="receiver-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                </div>
-                <span class="receiver-amount">${packet.amount.toFixed(2)}元</span>
-            </div>
-        `;
 
-        // 显示模态框
+        // 只有当红包的 isOpened 状态为 true 时，才显示领取人信息
+        if (packet.isOpened) {
+            const receiverName = (senderRole === 'user') ? contact.name : contact.userProfile.name;
+            const receiverAvatar = (senderRole === 'user') ? contact.avatarUrl : contact.userAvatarUrl;
+            
+            receiverList.innerHTML = `
+                <div class="receiver-item">
+                    <img src="${receiverAvatar}" class="avatar">
+                    <div class="receiver-info">
+                        <span class="receiver-name">${receiverName}</span>
+                        <span class="receiver-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    </div>
+                    <span class="receiver-amount">${packet.amount.toFixed(2)}元</span>
+                </div>
+            `;
+        } else {
+            // 如果红包还没被领取，就清空领取人列表区域
+            receiverList.innerHTML = '';
+        }
+
+        // 最后再显示整个模态框
         modal.classList.remove('hidden');
     }
 
@@ -663,6 +679,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 这部分 finalPrompt 的构建逻辑也是正确的，保持不变
         const finalPrompt = `# 任务: 角色扮演
+        你是一个AI角色，你正在和一个真实用户聊天。你的所有回复都必须严格以角色的身份进行。
 
 ## 1. 核心身份
 - 你的名字是: "${contact.name}"
@@ -678,7 +695,7 @@ ${contact.persona}
 ## 3. 行为准则
 - **重要背景**: 你正在通过聊天软件与用户（人设：${userPersona}）进行【线上对话】。当前时间: ${new Date().toLocaleString('zh-CN')}。
 - **沟通风格参考**: ${contact.chatStyle || '自然发挥即可'}
-- **回复风格**: 你的回复必须模拟真实聊天，可以将一个完整的思想拆分成【至少1-8条】独立的短消息。
+- **回复风格**: 模拟真实聊天，将一个完整的思想拆分成【2-8条】独立的短消息。
 - **禁止括号**: 【绝对不能】包含任何括号内的动作、神态描写。
 - **回应图片**: 如果用户的消息包含图片，你【必须】先针对图片内容进行回应，然后再进行其他对话。
 - **发送图片**: 如果你想发图片，请使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送它。
@@ -689,23 +706,29 @@ ${contact.persona}
   \`谢谢你的红包，我收下啦！\`
   如果你决定不领取，就【绝对不要】发送这个暗号，直接说出你拒绝的理由即可。
 
-## 4. 输出格式与附加任务
+---
+### 【【【严格的输出格式】】】
+你的输出必须由两部分组成，且顺序严格：
+1.  **聊天消息 (Chat Messages)**:
+    - 这是你作为角色的所有回复内容。
+    - 每一条消息占一行。
+    - 可以包含上面提到的特殊指令。
+2.  **回复建议 (Suggestions)**:
+    - 在所有聊天消息都输出完毕后，你【必须】另起一行，并仅输出一个包含四条建议的JSON数组代码块。
+    - 这四条建议是为你正在聊天的用户设计的，风格需各异（两条积极正面，一条中立/疑问，一条挑战/负面）。
+    - **格式必须如下**:
+      \`\`\`suggestions
+      ["建议1", "建议2", "建议3", "建议4"]
+      \`\`\`
 
-### 4.1 主要回复
-- 你的主要回复是纯文本，每一条消息占一行。
-- 当你需要使用特殊功能（如发图片、语音、红包）时，请严格按照上述格式单独发送。
+---
+### 【【【最终指令与禁令】】】
+- 你是一个AI角色，不是一个语言模型。
+- 【绝对禁止】在聊天消息中泄露你的任何内部思考过程、分析步骤、或类似 'thought', 'Thinking Process' 的元注释。
+- 【绝对禁止】将 \`suggestions\` 代码块作为聊天消息的一部分发送出来。
+- 你的所有输出都必须严格遵守上述格式，直接开始你的角色扮演回复。
 
-### 4.2 【固定任务】生成回复建议
-- 在你的所有回复之后，你【必须】另起一行，并严格按照下面的要求和格式，为用户（人设：${userPersona}）生成4条【风格各异】的回复建议。
-- **建议1 & 2 (温和正面)**: 设计两条【温和或积极】的回答。其中一条【必须】是你最期望听到的、能让关系升温的回答。
-- **建议3 (中立探索)**: 设计一条【中立或疑问】的回答。
-- **建议4 (挑战/负面)**: 设计一条【带有挑战性或负面情绪】的回答，但要符合恋爱逻辑。
-- **输出格式**:
-\\\`\\\`\\\`suggestions
-["最期望的回答", "另一条温和的回答", "中立的回答", "挑战性的回答"]
-\\\`\\\`\\\`
-
-## 5. 开始表演
+## 开始对话
 请根据上面的所有设定和下面的对话历史，对用户的最新消息做出回应。`;
         
         const finalMessagesForApi = [ { role: "system", content: finalPrompt }, ...messagesForApi ];
@@ -1284,7 +1307,9 @@ ${contact.persona}
             const tempMessageId = `staged-${Date.now()}-${Math.random()}`;
             const newRedPacket = { id: `rp-${Date.now()}`, senderName: contact.userProfile.name, blessing: blessing, amount: amount, isOpened: false };
             
-            stagedUserMessages.push({ id: tempMessageId, content: blessing, type: 'red-packet', redPacketData: newRedPacket });
+            // 【【【核心修复：在这里补上了 'role: 'user'】】】
+            stagedUserMessages.push({ id: tempMessageId, role: 'user', content: blessing, type: 'red-packet', redPacketData: newRedPacket });
+            
             displayMessage(blessing, 'user', { isStaged: true, type: 'red-packet', redPacketData: newRedPacket, id: tempMessageId });
             
             closeRedPacketInputModal(); // 完成后关闭弹窗
