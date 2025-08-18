@@ -75,7 +75,12 @@ body {
 /* --- 通用头部 --- */
 .header {
     height: var(--header-height);
-    background-color: var(--qq-blue);
+    /* 【核心】应用毛玻璃效果 */
+    background-color: rgba(59, 131, 162, 0.85); /* 这是你的湖蓝色的半透明版 */
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+
+    /* -- 以下是你原来的样式，保持不变 -- */
     color: var(--text-light);
     padding: 0 15px;
     text-align: center;
@@ -112,6 +117,8 @@ body {
     cursor: pointer;
     padding: 5px 10px;
     z-index: 5; 
+    display: flex; /* 【核心新增】确保SVG图标居中 */
+    align-items: center;
 }
 .back-button { 
     position: static;
@@ -170,7 +177,16 @@ body {
 /* --- 视图2: 聊天窗口 --- */
 #chat-ai-name { display: block; font-size: 16px; font-weight: bold; }
 #chat-ai-status { display: block; font-size: 12px; opacity: 0.8; }
-#message-container { flex-grow: 1; padding: 15px 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; background-color: var(--background-light); }
+#message-container { 
+    flex-grow: 1; 
+    padding: 15px 10px; 
+    overflow-y: auto; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 15px; 
+    /* 【核心】移除背景色，让它彻底变透明！ */
+    /* background-color: var(--background-light); */ 
+}
 .message-row { display: flex; gap: 10px; width: 100%; align-items: flex-start; padding-top: 5px; transition: background-color 0.2s; }
 .avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .message-content { display: flex; flex-direction: column; gap: 3px; max-width: calc(100% - 100px); position: relative; }
