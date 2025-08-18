@@ -9,7 +9,7 @@
     --primary-color: #007bff;
     --background-light: #f0f2f5;   /* 【已恢复】聊天背景恢复为浅灰色 */
     --background-white: #fff;
-    --text-dark: #000;             /* 【已恢复】主要文字恢复为纯黑色 */
+    --text-dark: #12262C;             /* 【已恢复】主要文字恢复为纯黑色 */
     --text-light: #fff;            /* 【已恢复】亮色文字恢复为纯白色 */
     --text-secondary: #8e8e93;
     --border-color: #dcdcdc;
@@ -75,12 +75,10 @@ body {
 /* --- 通用头部 --- */
 .header {
     height: var(--header-height);
-    /* 【核心】应用毛玻璃效果 */
-    background-color: rgba(59, 131, 162, 0.85); /* 这是你的湖蓝色的半透明版 */
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-
-    /* -- 以下是你原来的样式，保持不变 -- */
+    /* 【【【核心恢复】】】背景色改回使用我们定义好的、不透明的主题色变量 */
+    background-color: var(--qq-blue);
+    
+    /* -- 以下是你最原始的样式，保持不变 -- */
     color: var(--text-light);
     padding: 0 15px;
     text-align: center;
