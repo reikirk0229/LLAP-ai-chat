@@ -632,11 +632,11 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById(viewId).classList.remove('hidden');
         if (viewId === 'chat-list-view' || viewId === 'moments-view' || viewId === 'settings-view') {
             appNav.classList.remove('hidden');
-            appContainer.style.paddingBottom = '50px';
         } else {
             appNav.classList.add('hidden');
-            appContainer.style.paddingBottom = '0px';
         }
+        // 【核心】我们不再需要用JS粗暴地添加内边距了，Flexbox会自动处理布局！
+        appContainer.style.paddingBottom = '0px';
         navButtons.forEach(button => {
             button.classList.toggle('active', button.dataset.view === viewId);
         });
