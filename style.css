@@ -1244,3 +1244,80 @@ input:checked + .slider:before { transform: translateX(20px); }
 #global-toast.error {
     background-color: #f44336; /* 失败状态是红色 */
 }
+/* --- (全新) 情侣关系标志样式 --- */
+.partner-icon {
+    margin-left: 6px;
+    font-size: 14px; /* 可以调整大小 */
+    filter: drop-shadow(0 0 1px rgba(0,0,0,0.3)); /* 给图标一点立体感 */
+}
+/* --- (全新) 关系卡片 V2.0 样式 --- */
+.message-relationship-card {
+    background-color: #f7f7f8;
+    border: 1px solid #e9e9eb;
+    border-radius: 10px;
+    padding: 15px !important;
+    width: 250px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.relationship-card-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.relationship-card-text h4 {
+    margin: 0 0 5px 0;
+    font-size: 16px;
+}
+.relationship-card-text p {
+    margin: 0;
+    font-size: 13px;
+    color: #8e8e93;
+}
+.relationship-card-icon img {
+    width: 50px;
+    height: 50px;
+}
+.relationship-card-footer {
+    border-top: 1px solid #e9e9eb;
+    margin-top: 12px;
+    padding-top: 8px;
+    font-size: 12px;
+    color: #b2b2b2;
+}
+.relationship-card-actions {
+    margin-top: 15px;
+    display: flex;
+    gap: 10px;
+}
+.relationship-card-actions button {
+    flex: 1;
+    padding: 8px;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    background-color: white;
+    cursor: pointer;
+    font-weight: bold;
+}
+.relationship-card-actions button.accept {
+    background-color: var(--qq-blue);
+    color: white;
+    border-color: var(--qq-blue);
+}
+.relationship-card-actions button:disabled {
+    background-color: #e0e0e0;
+    color: #a0a0a0;
+    cursor: not-allowed;
+    border-color: #d0d0d0;
+}
+/* --- (全新 V2.2) 分手卡片样式 --- */
+.message-breakup-card {
+    background-color: #f0f2f5;
+    border: 1px solid #e9e9eb;
+    border-radius: 10px;
+    padding: 15px !important;
+    width: 250px;
+}
+.message-breakup-card h4 {
+    margin: 0;
+    color: #555;
+}
