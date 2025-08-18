@@ -762,11 +762,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         switch(type) {
             case 'image':
-                if (role === 'user') {
-                    messageContentHTML = options.imageData ? `<div class="message message-image-user"><img src="${options.imageData}" alt="${text}"></div>` : `<div class="message">🖼️ [图片] ${text}</div>`;
+                // 【V2.4 核心改造】统一用户和AI的“模拟照片”显示效果
+                const escapedDescription = text ? text.replace(/"/g, '&quot;') : '';
+
+                // 唯一特殊情况：用户真的上传了一张图片
+                if (role === 'user' && options.imageData) {
+                    messageContentHTML = `<div class="message message-image-user"><img src="${options.imageData}" alt="${text}"></div>`;
                 } else {
-                    const escapedDescription = text ? text.replace(/"/g, '&quot;') : '';
-                    messageContentHTML = `<div class="message message-image-ai-direct" data-description="${escapedDescription}"><img src="https://i.postimg.cc/vTdmV48q/a31b84cf45ff18f18b320470292a02c8.jpg" alt="AI生成的图片"></div>`;
+                    // 其他所有情况（AI发的图、用户模拟的图）都使用统一的占位符样式
+                    messageContentHTML = `<div class="message message-image-ai-direct" data-description="${escapedDescription}"><img src="https://i.postimg.cc/vTdmV48q/a31b84cf45ff18f18b320470292a02c8.jpg" alt="模拟的图片"></div>`;
                 }
                 break;
             case 'voice':
@@ -812,59 +816,47 @@ document.addEventListener('DOMContentLoaded', () => {
             // ▼▼▼ 全新的“关系卡片”渲染逻辑 ▼▼▼
             case 'relationship_proposal':
                 const cardData = options.relationshipData || {};
-                const isMyProposal = cardData.proposer === role;
-                let cardHTML = '';
+                let title, subtitle;
 
                 if (cardData.status === 'pending') {
-                    const title = isMyProposal ? '已发送情侣关系邀请' : '想和你建立情侣关系';
-                    const subtitle = isMyProposal ? '等待对方同意...' : '和Ta成为情侣，让爱意点滴记录';
-                    // 【V2.1 交互改造】卡片本身不再有按钮，而是变成一个可点击的整体
-                    const isClickable = (role === 'assistant' && cardData.status === 'pending');
-                    const clickAction = isClickable ? `onclick="openRelationshipModal('${messageId}')"` : '';
-
-                    cardHTML = `
-                        <h4>${title}</h4>
-                        <p>${subtitle}</p>
-                    `;
-                    
-                    messageContentHTML = `
-                        <div class="message message-relationship-card" ${clickAction} style="${isClickable ? 'cursor:pointer;' : ''}">
-                            <div class="relationship-card-content">
-                                <div class="relationship-card-text">${cardHTML}</div>
-                                <div class="relationship-card-icon"><img src="https://i.postimg.cc/P5Lg62Vq/lollipop.png" alt="icon"></div>
-                            </div>
-                            <div class="relationship-card-footer">亲密关系</div>
-                        </div>
-                    `;
+                    // 【【【V2.3 逻辑重塑】】】
+                    // 判断标准：这张卡片是显示在谁的气泡里 (role)
+                    if (role === 'user') {
+                        // 如果是显示在【用户】的气泡里，说明是用户发出去的
+                        title = '已发送情侣关系邀请';
+                        subtitle = '等待对方同意...';
+                    } else {
+                        // 如果是显示在【AI】的气泡里，说明是AI发过来给用户的
+                        title = '想和你建立情侣关系';
+                        subtitle = '和Ta成为情侣，让爱意点滴记录';
+                    }
                 } else if (cardData.status === 'accepted') {
-                    cardHTML = `
-                        <h4>我们已经成功建立情侶关系</h4>
-                        <p>我已同意了你的邀请，现在我们是情侣啦</p>
-                    `;
+                    // 【V2.3 逻辑重塑】
+                    // 判断标准：是谁【发起】的这个接受动作
+                    if (cardData.proposer === role) {
+                        // 如果是接受方发出的卡片
+                        title = '我们已经成功建立情侶关系';
+                        subtitle = '我已同意了你的邀请，现在我们是情侣啦';
+                    } else {
+                        // 如果是发起方看到的卡片状态更新 (虽然我们用新卡片代替了，但保留逻辑)
+                        title = '对方已同意';
+                        subtitle = '你们现在是情侣关系了';
+                    }
                 }
+
+                // 【【【V2.3 交互修复】】】
+                // 只有当卡片是【AI发的】并且状态是【等待中】时，它才应该是可点击的
+                const isClickable = (cardData.proposer === 'assistant' && cardData.status === 'pending');
+                const clickAction = isClickable ? `onclick="openRelationshipModal('${messageId}')"` : '';
                 
                 messageContentHTML = `
-                    <div class="message message-relationship-card">
-                        <div class="relationship-card-content">
-                            <div class="relationship-card-text">${cardHTML}</div>
-                            <div class="relationship-card-icon"><img src="https://i.postimg.cc/P5Lg62Vq/lollipop.png" alt="icon"></div>
-                        </div>
-                        <div class="relationship-card-footer">亲密关系</div>
-                    </div>
-                `;
-                break;
-                // ▼▼▼ 全新的“分手卡片”渲染逻辑 ▼▼▼
-            case 'relationship_breakup':
-                messageContentHTML = `
-                    <div class="message message-relationship-card">
+                    <div class="message message-relationship-card" ${clickAction} style="${isClickable ? 'cursor:pointer;' : ''}">
                         <div class="relationship-card-content">
                             <div class="relationship-card-text">
-                                <h4>解除亲密关系</h4>
-                                <p>我们之间的亲密关系已解除</p>
+                                <h4>${title}</h4>
+                                <p>${subtitle}</p>
                             </div>
-                            <div class="relationship-card-icon">
-                                <img src="https://i.postimg.cc/1tNCS12N/broken-heart.png" alt="icon">
-                            </div>
+                            <div class="relationship-card-icon"><img src="https://i.postimg.cc/P5Lg62Vq/lollipop.png" alt="icon"></div>
                         </div>
                         <div class="relationship-card-footer">亲密关系</div>
                     </div>
