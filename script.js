@@ -1,5 +1,21 @@
 // script.js (V8.26 - 红包功能终极修复版)
 document.addEventListener('DOMContentLoaded', () => {
+    // --- 【【【V2.5 终极全屏修复：屏幕尺寸校准器】】】 ---
+    const appContainerForResize = document.getElementById('app-container');
+
+    function resizeAppContainer() {
+        // 实时获取浏览器窗口的内部高度（最精准的高度）
+        const realHeight = window.innerHeight;
+        // 将app容器的高度强制设置为这个精准值
+        appContainerForResize.style.height = `${realHeight}px`;
+    }
+
+    // 1. 页面加载完成后，立刻校准一次
+    resizeAppContainer();
+
+    // 2. 当屏幕尺寸变化时（例如手机横屏），再次校准
+    window.addEventListener('resize', resizeAppContainer);
+    // --- 【【【修复代码结束】】】 ---
 
     // --- IndexedDB 数据库助手 ---
     const db = {
@@ -630,12 +646,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function switchToView(viewId) {
         views.forEach(view => view.classList.add('hidden'));
         document.getElementById(viewId).classList.remove('hidden');
-        if (viewId === 'chat-list-view' || viewId === 'moments-view' || viewId === 'settings-view') {
+        
+        // 【【【核心修改】】】
+        // 现在，只在聊天列表页显示导航栏
+        if (viewId === 'chat-list-view') {
             appNav.classList.remove('hidden');
         } else {
             appNav.classList.add('hidden');
         }
-        // 【核心】我们不再需要用JS粗暴地添加内边距了，Flexbox会自动处理布局！
+
         appContainer.style.paddingBottom = '0px';
         navButtons.forEach(button => {
             button.classList.toggle('active', button.dataset.view === viewId);
