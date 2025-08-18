@@ -21,34 +21,29 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background-color: var(--background-light);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
+    background-color: #e0e0e0; /* 给网页背景一个中性的灰色，方便桌面端显示 */
     margin: 0;
     -webkit-tap-highlight-color: transparent;
 }
 
 #app-container {
-    width: 360px;
-    height: 640px;
-    border: 1px solid var(--border-color);
+    width: 100%; /* 宽度占满全屏 */
+    height: 100vh; /* 高度占满全屏的可视高度 */
     background-color: var(--background-white);
-    border-radius: 10px;
-    box-shadow: 0 4px 15px var(--shadow-color);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    position: relative;
+    position: relative; 
 }
 
 .view {
     width: 100%;
-    height: 100%;
+    flex: 1; /* 【【【终极修复】】】使用flex: 1; 替代 flex-grow: 1; */
     display: flex;
     flex-direction: column;
     background-color: var(--background-light);
+    overflow: hidden; /* 防止内部元素溢出 */
+    min-height: 0; /* 增加一个兼容性修复，防止在某些flex布局下内容溢出 */
 }
 .hidden { display: none !important; }
 
@@ -436,7 +431,7 @@ input:checked + .slider:before { transform: translateX(20px); }
 .image-upload-area.user-avatar-upload { width: 80px; height: 80px; border-radius: 50%; margin: 0 auto; }
 
 /* --- 底部导航栏 --- */
-#app-nav { position: absolute; bottom: 0; left: 0; width: 100%; height: var(--nav-height); background-color: #f7f7f7; border-top: 1px solid var(--border-color); display: flex; z-index: 10; }
+#app-nav { position: relative; flex-shrink: 0; /* 【核心】防止被压缩 */ width: 100%; height: var(--nav-height); background-color: #f7f7f7; border-top: 1px solid var(--border-color); display: flex; z-index: 10; }
 .nav-button { flex: 1; display: flex; justify-content: center; align-items: center; cursor: pointer; color: var(--text-secondary); font-size: 14px; }
 .nav-button.active { color: var(--qq-blue); }
 /* --- 聊天时间戳样式 (请将此段代码粘贴到 style.css 文件末尾) --- */
@@ -1320,4 +1315,25 @@ input:checked + .slider:before { transform: translateX(20px); }
 .message-breakup-card h4 {
     margin: 0;
     color: #555;
+}
+/* --- (全新) 桌面端优雅模式适配 --- */
+@media (min-width: 480px) {
+    /* 这个规则只在屏幕宽度大于480px时生效（比如平板和电脑） */
+    body {
+        /* 在大屏幕上，让body重新负责居中 */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    #app-container {
+        /* 在大屏幕上，给容器一个最大宽度和高度，并加回边框和阴影 */
+        max-width: 375px;  /* 最大宽度 */
+        height: 812px;     /* 高度 */
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        margin: 20px; /* 给一个外边距，让它看起来不那么贴边 */
+    }
 }
