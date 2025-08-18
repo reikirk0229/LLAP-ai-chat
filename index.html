@@ -18,7 +18,6 @@
         <!-- 视图1: 消息列表 (默认视图) -->
         <div id="chat-list-view" class="view">
             <div class="header">
-                <!-- 修改点: 整个用户头像的 img 标签被彻底删除 -->
                 <span>消息</span>
                 <button id="add-contact-button" class="header-button">+</button>
             </div>
@@ -50,18 +49,12 @@
                 </div>
             </div>
             <div id="message-container"></div>
-            
-            <!-- (核心修改) 回归单一容器结构 -->
             <div id="ai-suggestion-panel" class="suggestion-panel hidden">
-                <!-- 内部将由JS动态填充 -->
             </div>
-
             <div class="chat-input-area">
-                <!-- (核心修改) 将刷新按钮容器“植入”输入区域顶部 -->
                 <div id="refresh-suggestions-container" class="hidden">
                     <button id="refresh-suggestions-btn" title="换一批"></button>
                 </div>
-
                 <div class="chat-functions-toolbar">
                     <button id="voice-btn" class="tool-button" title="语音"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg></button>
                     <button id="image-btn" class="tool-button" title="图片"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></button>
@@ -76,14 +69,8 @@
                     <button id="send-button">发送</button>
                 </div>
             </div>
-
-            <!-- 【【【核心修正：表情包面板被移到了正确的位置】】】 -->
-            <div id="user-sticker-panel" class="sticker-panel">
-                <!-- 表情包内容将由JS动态生成 -->
-            </div>
-
-        </div> <!-- 这是 id="chat-window-view" 的结束标签 -->
-        
+            <div id="user-sticker-panel" class="sticker-panel"></div>
+        </div>
         
         <!-- 视图3: 动态页面 -->
         <div id="moments-view" class="view hidden">
@@ -121,7 +108,6 @@
                 <div class="form-group"><label for="api-url-input">API 地址 (URL)</label><input type="text" id="api-url-input" placeholder="根据所选类型填写"></div>
                 <div class="form-group" id="model-area"><label>模型名称 (Model)</label><div class="model-selection-area"><select id="api-model-select"></select><button id="fetch-models-button">拉取</button></div></div>
                 <div class="form-group"><label for="api-key-input">API 密钥 (Key)</label><input type="password" id="api-key-input" placeholder="粘贴你的密钥"></div>
-                                <!-- (新增) 上下文记忆条数设置 -->
                 <div class="form-group">
                     <label for="context-limit-input">上下文记忆条数</label>
                     <input type="number" id="context-limit-input" placeholder="">
@@ -140,34 +126,24 @@
                 <span>聊天设置</span>
             </div>
             <div class="contact-settings-container">
-
-                <!-- (核心修改) 用户身份 和 AI信息 入口并排显示 -->
                 <div class="settings-group">
-                    <!-- 入口1: 修改 AI 信息 -->
                     <div class="settings-item contact-profile" id="cs-edit-ai-profile">
                         <img id="cs-contact-avatar" class="avatar" src="">
                         <span>对方信息</span>
                         <span class="arrow">&gt;</span>
                     </div>
-                    <!-- 入口2: 修改“我”的对话身份 -->
-                    <!-- 核心修改1: 添加了 contact-profile 类，确保样式对齐 -->
                     <div class="settings-item contact-profile" id="cs-edit-my-profile">
-                        <!-- 核心修改2: 将占位符 div 换成了真正的 img 标签 -->
                         <img id="cs-my-avatar" class="avatar" src="">
                         <span>我的身份</span>
                         <span class="arrow">&gt;</span>
                     </div>
                 </div>
-
-                <!-- (保留) 功能设置区域 -->
                 <div class="settings-group">
                     <div class="settings-item"><span>设为置顶</span><label class="switch"><input type="checkbox" id="cs-pin-toggle"><span class="slider"></span></label></div>
-                    <!-- ▼▼▼ 全新的“AI主动求爱”开关 ▼▼▼ -->
                     <div class="settings-item">
                         <span>允许AI主动求爱</span>
                         <label class="switch"><input type="checkbox" id="cs-propose-toggle"><span class="slider"></span></label>
                     </div>
-                    <!-- ▲▲▲ 开关结束 ▲▲▲ -->
                     <div class="settings-item"><span>导出/导入聊天记录</span><span class="arrow">&gt;</span></div>
                 </div>
                 <div class="settings-group">
@@ -179,7 +155,6 @@
                     <div class="settings-item"><span>设置气泡样式</span><span class="arrow">&gt;</span></div>
                     <div class="settings-item"><span>设置字体大小</span><span class="arrow">&gt;</span></div>
                 </div>
-                <!-- ▼▼▼ 全新的“记忆管理”功能区 ▼▼▼ -->
                 <div class="settings-group">
                     <div class="settings-item" id="cs-message-count-item">
                         <span>当前对话条数</span>
@@ -188,10 +163,8 @@
                     <div class="settings-item">
                         <span>自动总结</span>
                         <div class="auto-summary-setting">
-                            <!-- ▼▼▼ 全新的UI交互结构 ▼▼▼ -->
                             <div id="cs-auto-summary-display" class="summary-threshold-display">未设置</div>
                             <input type="number" id="cs-auto-summary-input" class="summary-threshold-input hidden" min="50">
-                            <!-- ▲▲▲ 结构结束 ▲▲▲ -->
                             <label class="switch"><input type="checkbox" id="cs-auto-summary-toggle"><span class="slider"></span></label>
                         </div>
                     </div>
@@ -200,15 +173,12 @@
                         <span class="arrow">&gt;</span>
                     </div>
                 </div>
-                <!-- ▲▲▲ 记忆管理功能区结束 ▲▲▲ -->
-
                 <div class="settings-group">
                     <div class="settings-item" id="cs-clear-history"><span class="danger">清空聊天记录</span></div>
                 </div>
                 <div class="settings-group">
                     <div class="settings-item" id="cs-blacklist-contact"><span class="danger">将对方添加至黑名单</span></div>
                 </div>
-                <!-- (新增) 删除角色功能 -->
                 <div class="settings-group">
                     <div class="settings-item" id="cs-delete-contact">
                         <span class="danger">删除该角色</span>
@@ -254,45 +224,50 @@
                     <label for="ai-editor-persona">AI的人设</label>
                     <textarea id="ai-editor-persona" rows="5"></textarea>
                 </div>
-                
-                <!-- 【全新】线上风格输入框 -->
                 <div class="form-group">
                     <label for="ai-editor-chat-style">线上风格</label>
                     <textarea id="ai-editor-chat-style" rows="4" placeholder="e.g., 喜欢用短句，偶尔会发可爱的Emoji、颜文字和表情包。不爱发语音，打字很快。说话直接，不喜欢拐弯抹角。"></textarea>
                 </div>
-
                 <div class="form-group"><label>AI的专属记忆</label><textarea id="ai-editor-memory" rows="8" placeholder="对话总结等长期记忆..."></textarea></div>
                 <div class="form-group">
                     <label>世界书</label>
                     <div id="ai-editor-worldbook"></div>
                     <button type="button" id="add-worldbook-entry-button">添加新条目</button>
                 </div>
-                <!-- 【【【核心新增：AI表情包分组选择】】】 -->
                 <div class="form-group">
                     <label>可用表情包分组</label>
                     <div id="ai-sticker-groups-container">
-                        <!-- 分组复选框将由JS动态生成 -->
                         <p class="placeholder-text">请先在 全局设置 -> AI表情包管理 中添加分组</p>
                     </div>
                 </div>
                 <button id="save-ai-profile-button">保存</button>
             </div>
         </div>
-        <!-- ▼▼▼ 代码块1: 全新的“AI表情包管理”页面 ▼▼▼ -->
+
         <!-- 视图7: AI表情包管理页面 -->
         <div id="ai-sticker-manager-view" class="view hidden">
             <div class="header">
                 <button id="back-to-settings-from-sticker-btn" class="header-button back-button">&lt;</button>
                 <span>AI表情包管理</span>
             </div>
-            <div id="sticker-manager-container">
-                <!-- 分组和表情包将由JS动态生成 -->
-            </div>
+            <div id="sticker-manager-container"></div>
             <button id="add-sticker-group-btn" class="fab">+</button>
         </div>
-        <!-- ▲▲▲ 代码块1结束 ▲▲▲ -->
-    </div>
-    
+
+        <!-- 【【【核心修正：导航栏现在是app-container的最后一个孩子】】】 -->
+        <div id="app-nav">
+            <div class="nav-button active" data-view="chat-list-view">消息</div>
+            <div class="nav-button" data-view="moments-view">动态</div>
+            <div class="nav-button" data-view="settings-view">设置</div>
+        </div>
+
+    </div> <!-- ▲▲▲ #app-container 到此彻底结束 ▲▲▲ -->
+
+    <!-- ############################################################### -->
+    <!-- #####          所有的弹窗(Modal)都应该放在这里            ##### -->
+    <!-- #####         作为 app-container 的兄弟，而不是孩子         ##### -->
+    <!-- ############################################################### -->
+
     <!-- 用户信息修改弹窗 -->
     <div id="user-profile-modal" class="modal-overlay hidden">
         <div class="modal-content">
@@ -313,8 +288,7 @@
         </div>
     </div> 
 
-    <!-- ▼▼▼ 代码块2: 全新的“表情包上传”弹窗 ▼▼▼ -->
-    <!-- (全新) 表情包上传弹窗 -->
+    <!-- 表情包上传弹窗 -->
     <div id="sticker-upload-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -346,9 +320,8 @@
             </div>
         </div>
     </div>
-    <!-- ▲▲▲ 代码块2结束 ▲▲▲ -->
      
-        <!-- 【全新】发送语音弹窗 -->
+    <!-- 发送语音弹窗 -->
     <div id="voice-input-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -366,7 +339,8 @@
             </div>
         </div>
     </div>
-    <!-- (新增) AI图片描述弹窗 -->
+
+    <!-- AI图片描述弹窗 -->
     <div id="ai-image-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -380,7 +354,8 @@
             </div>
         </div>
     </div>
-<!-- (新增) 用户上传/模拟图片弹窗 -->
+
+    <!-- 用户上传/模拟图片弹窗 -->
     <div id="image-upload-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -388,7 +363,6 @@
             </div>
             <div class="modal-body">
                 <div class="form-group" id="image-preview-area">
-                    <!-- 修改点1: 下面这行 <label> 已被删除 -->
                     <div class="image-upload-area" id="user-image-upload-area">
                         <img id="user-image-preview" class="image-preview" src="">
                         <span>点击上传</span>
@@ -396,7 +370,6 @@
                     <input type="file" id="user-image-upload-input" class="hidden-file-input" accept="image/*">
                 </div>
                 <div class="form-group" id="image-description-group">
-                    <!-- 修改点2: 下面这行 <label> 已被删除 -->
                     <textarea id="image-description-input" rows="3" placeholder="可以对图片进行提问或补充说明..."></textarea>
                 </div>
             </div>
@@ -406,7 +379,8 @@
             </div>
         </div>
     </div>
-    <!-- (全新) 自定义确认弹窗 -->
+
+    <!-- 自定义确认弹窗 -->
     <div id="custom-confirm-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -422,7 +396,7 @@
         </div>
     </div>
 
-    <!-- (全新) 红包详情弹窗 -->
+    <!-- 红包详情弹窗 -->
     <div id="red-packet-modal" class="modal-overlay hidden">
         <div class="red-packet-content">
             <button id="close-rp-modal-button" class="close-button">&times;</button>
@@ -441,7 +415,8 @@
             </div>
         </div>
     </div>
-    <!-- (全新) 自定义提示弹窗 -->
+
+    <!-- 自定义提示弹窗 -->
     <div id="custom-alert-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -455,7 +430,8 @@
             </div>
         </div>
     </div>
-    <!-- 【【【核心新增：发送红包弹窗】】】 -->
+
+    <!-- 发送红包弹窗 -->
     <div id="red-packet-input-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -477,9 +453,10 @@
             </div>
         </div>
     </div>
-    <!-- 【【【全新：记忆总结编辑弹窗】】】 -->
+
+    <!-- 记忆总结编辑弹窗 -->
     <div id="summary-editor-modal" class="modal-overlay hidden">
-        <div class="modal-content modal-lg"> <!-- 使用一个更大的弹窗样式 -->
+        <div class="modal-content modal-lg">
             <div class="modal-header">
                 <h3>编辑记忆总结</h3>
             </div>
@@ -497,7 +474,8 @@
             </div>
         </div>
     </div>
-    <!-- 【【【全新：总结模式选择弹窗】】】 -->
+
+    <!-- 总结模式选择弹窗 -->
     <div id="mode-select-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -512,22 +490,8 @@
             </div>
         </div>
     </div>
-        <!-- 【【【全新 V2.1：关系确认弹窗】】】 -->
-    <div id="relationship-confirm-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="relationship-confirm-title">情侣关系邀请</h3>
-            </div>
-            <div class="modal-body">
-                <p id="relationship-confirm-text"></p>
-            </div>
-            <div class="modal-footer-split">
-                <button id="relationship-confirm-refuse-btn" class="modal-button secondary">残忍拒绝</button>
-                <button id="relationship-confirm-accept-btn" class="modal-button primary">接受邀请</button>
-            </div>
-        </div>
-    </div>
-    <!-- 【【【全新：手动总结范围设置弹窗】】】 -->
+
+    <!-- 手动总结范围设置弹窗 -->
     <div id="summary-range-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -546,15 +510,24 @@
             </div>
         </div>
     </div>
-    <!-- 底部导航栏 -->
-    <div id="app-nav">
-        <div class="nav-button active" data-view="chat-list-view">消息</div>
-        <div class="nav-button" data-view="moments-view">动态</div>
-        <div class="nav-button" data-view="settings-view">设置</div>
+
+    <!-- 关系确认弹窗 -->
+    <div id="relationship-confirm-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="relationship-confirm-title">情侣关系邀请</h3>
+            </div>
+            <div class="modal-body">
+                <p id="relationship-confirm-text"></p>
+            </div>
+            <div class="modal-footer-split">
+                <button id="relationship-confirm-refuse-btn" class="modal-button secondary">残忍拒绝</button>
+                <button id="relationship-confirm-accept-btn" class="modal-button primary">接受邀请</button>
+            </div>
+        </div>
     </div>
     
     <script src="script.js"></script>
 
 </body>
 </html>
-
