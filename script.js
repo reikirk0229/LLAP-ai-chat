@@ -402,7 +402,171 @@ document.addEventListener('DOMContentLoaded', () => {
         // 最后再显示整个模态框
         modal.classList.remove('hidden');
     }
+// ---------------------------------------------------
+    // --- 【【【关系系统 V2.0：卡片式交互】】】 ---
+    // ---------------------------------------------------
+// --- 【【【关系系统 V2.1：体验优化】】】 ---
+    
+    /**
+     * 【全新】打开关系确认弹窗的控制器
+     * @param {string} messageId - 被点击的卡片消息ID
+     */
+    window.openRelationshipModal = function(messageId) {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+        
+        const modal = document.getElementById('relationship-confirm-modal');
+        const text = document.getElementById('relationship-confirm-text');
+        const acceptBtn = document.getElementById('relationship-confirm-accept-btn');
+        const refuseBtn = document.getElementById('relationship-confirm-refuse-btn');
 
+        text.textContent = `${contact.remark} 想和你建立情侣关系，你愿意吗？`;
+
+        // 为按钮绑定【一次性】事件，防止重复触发
+        const acceptHandler = () => {
+            window.handleRelationshipAction(messageId, true);
+            modal.classList.add('hidden');
+            removeListeners();
+        };
+        const refuseHandler = () => {
+            window.handleRelationshipAction(messageId, false);
+            modal.classList.add('hidden');
+            removeListeners();
+        };
+        const removeListeners = () => {
+            acceptBtn.removeEventListener('click', acceptHandler);
+            refuseBtn.removeEventListener('click', refuseHandler);
+        };
+        
+        removeListeners(); // 先移除旧的监听，确保干净
+        acceptBtn.addEventListener('click', acceptHandler);
+        refuseBtn.addEventListener('click', refuseHandler);
+        
+        modal.classList.remove('hidden');
+    }
+    /**
+     * 【全新】创建并发送一个关系邀请卡片
+     * @param {string} proposerRole - 发起人的角色 ('user' 或 'assistant')
+     */
+    function sendRelationshipProposal(proposerRole) {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+
+        const messageId = `staged-${Date.now()}-rel-${Math.random()}`;
+        const relationshipData = {
+            proposer: proposerRole,
+            status: 'pending'
+        };
+        
+        // 【核心改造】我们不再直接调用displayMessage，而是走官方的“暂存-发送”流程
+        const message = { 
+            id: messageId,
+            type: 'relationship_proposal', 
+            // 【关键】赋予卡片真正的“内容”，让AI能读懂
+            content: '[关系邀请] 已发送情侣关系邀请', 
+            relationshipData: relationshipData 
+        };
+
+        if (proposerRole === 'user') {
+            // 【V2.2 核心改造】只暂存，不发送！
+            // 1. 把它放进“待发消息”列表
+            stagedUserMessages.push(message);
+            // 2. 在屏幕上画出这张“待发”卡片
+            displayMessage(message.content, 'user', { isStaged: true, ...message });
+            // 3. 【删除】commitAndSendStagedMessages()，把发送权交还给用户！
+        } else { 
+            // 如果是AI发起的，则直接显示
+            displayMessage(message.content, 'assistant', { isNew: true, ...message });
+        }
+    }
+
+    /**
+     * 【全新】处理用户点击卡片按钮的动作
+     * @param {string} messageId - 被点击的卡片消息ID
+     * @param {boolean} isAccepted - 用户是否接受
+     */
+    window.handleRelationshipAction = function(messageId, isAccepted) {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+
+        // 1. 在聊天记录里找到这张卡片
+        const proposalMsg = contact.chatHistory.find(msg => msg.id === messageId);
+        if (!proposalMsg || proposalMsg.relationshipData.status !== 'pending') return;
+
+        if (isAccepted) {
+            // --- 用户或AI同意了 ---
+            // 1. 更新全局状态
+            appData.appSettings.partnerId = contact.id;
+            
+            // 2. 更新发起方卡片的状态为“已接受”
+            proposalMsg.relationshipData.status = 'accepted';
+
+            // 3. 【【【核心改造】】】
+            //    创建一个“接受”卡片，由【回应方】发送
+            const accepterRole = proposalMsg.relationshipData.proposer === 'user' ? 'assistant' : 'user';
+            const acceptanceMessage = {
+                type: 'relationship_proposal',
+                content: '[关系邀请] 我同意了你的邀请',
+                relationshipData: {
+                    proposer: accepterRole, // 发起人是接受者
+                    status: 'accepted'
+                }
+            };
+            // 将接受卡片加入历史记录
+            contact.chatHistory.push({
+                id: `${Date.now()}-rel-accept`,
+                role: accepterRole,
+                timestamp: Date.now(),
+                ...acceptanceMessage
+            });
+            
+            // 4. 保存数据并彻底刷新UI
+            saveAppData();
+            openChat(contact.id);
+            renderChatList(); 
+
+        } else {
+            // --- 用户拒绝了 ---
+            // 仅仅是让卡片消失，不记录状态，假装无事发生
+            contact.chatHistory = contact.chatHistory.filter(msg => msg.id !== messageId);
+            saveAppData();
+            openChat(contact.id); // 刷新聊天
+            
+            // 帮用户自动回复一句委婉的话
+            stagedUserMessages.push({ content: '抱歉，我现在可能还没准备好...', type: 'text' });
+            commitAndSendStagedMessages();
+        }
+    }
+
+    /**
+     * 【全新】处理解除关系的流程
+     */
+    function handleEndRelationship() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+
+        // 【V2.3 核心改造】分手也只暂存，不发送！
+        const breakupMessage = {
+            type: 'relationship_breakup',
+            content: '[解除关系] 亲密关系已解除' // 使用更中立的文本
+        };
+
+        stagedUserMessages.push(breakupMessage);
+        displayMessage(breakupMessage.content, 'user', { isStaged: true, ...breakupMessage });
+        // 【删除】commitAndSendStagedMessages()，把发送权交还给用户！
+        // 【删除】所有后续的数据和UI更新，这些都将在用户按下发送键后处理
+    }
+
+    /**
+     * 【全新】一个专门用来刷新聊天顶栏的函数 (修复Bug 4, 6)
+     */
+    function updateChatHeader() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+        const isPartner = appData.appSettings.partnerId === contact.id;
+        const partnerIcon = isPartner ? '<span class="partner-icon">💖</span>' : '';
+        chatAiName.innerHTML = `${contact.remark}${partnerIcon}`;
+    }
     async function initialize() {
         await db.init();
         loadAppData();
@@ -421,7 +585,11 @@ document.addEventListener('DOMContentLoaded', () => {
             appData.aiContacts.forEach(contact => { if (!contact.userProfile) { contact.userProfile = appData.currentUser; } });
             delete appData.currentUser;
         }
-        if (!appData.appSettings) { appData.appSettings = { apiType: 'openai_proxy', apiUrl: '', apiKey: '', apiModel: '', contextLimit: 20 }; }
+        if (!appData.appSettings) { appData.appSettings = { apiType: 'openai_proxy', apiUrl: '', apiKey: '', apiModel: '', contextLimit: 20, partnerId: null }; }
+        // 【新增】为旧数据兼容伴侣ID
+        if (appData.appSettings.partnerId === undefined) {
+            appData.appSettings.partnerId = null;
+        }
         if (appData.appSettings.contextLimit === undefined) { appData.appSettings.contextLimit = 20; }
         if (!appData.aiContacts) { appData.aiContacts = []; }
         appData.aiContacts.forEach(c => {
@@ -429,13 +597,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (c.isPinned === undefined) c.isPinned = false;
             if (!c.userProfile) { c.userProfile = { name: '你', persona: '我是一个充满好奇心的人。' }; }
             if (!c.chatHistory) { c.chatHistory = []; }
-            // 【【【核心修复：为老角色兼容表情包分组】】】
             if (!c.stickerGroups) c.stickerGroups = []; 
-            if (!c.activityStatus) c.activityStatus = ''; // 【新增】为旧角色初始化状态
-            // 【新增】初始化自动总结设置
+            if (!c.activityStatus) c.activityStatus = '';
             if (c.autoSummaryEnabled === undefined) c.autoSummaryEnabled = false;
             if (!c.autoSummaryThreshold) c.autoSummaryThreshold = 100;
             if (!c.lastSummaryAtCount) c.lastSummaryAtCount = 0;
+            // 【【【核心新增：为角色植入求爱开关，默认为开】】】
+            if (c.canPropose === undefined) {
+                c.canPropose = true;
+            }
         });
         // ▼▼▼ 请把下面这段全新的代码，粘贴在这里 ▼▼▼
         // 【全新】为全局AI表情包建立仓库，如果不存在的话
@@ -487,7 +657,12 @@ document.addEventListener('DOMContentLoaded', () => {
             item.className = 'chat-list-item';
             if (contact.isPinned) { item.classList.add('pinned'); }
             item.dataset.contactId = contact.id;
-            item.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="avatar"><div class="chat-list-item-info"><div class="chat-list-item-top"><span class="chat-list-item-name">${contact.remark}</span><span class="chat-list-item-time">昨天</span></div><div class="chat-list-item-msg">${lastMessage.content || '...'}</div></div>`;
+
+            // 【新增】检查是否为情侣，并添加标志
+            const isPartner = appData.appSettings.partnerId === contact.id;
+            const partnerIcon = isPartner ? '<span class="partner-icon">💖</span>' : '';
+
+            item.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="avatar"><div class="chat-list-item-info"><div class="chat-list-item-top"><span class="chat-list-item-name">${contact.remark}${partnerIcon}</span><span class="chat-list-item-time">昨天</span></div><div class="chat-list-item-msg">${lastMessage.content || '...'}</div></div>`;
             item.addEventListener('click', () => openChat(contact.id));
             chatListContainer.appendChild(item);
         }
@@ -529,8 +704,10 @@ document.addEventListener('DOMContentLoaded', () => {
         contact.avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
         const userAvatarBlob = await db.getImage(`${contact.id}_user_avatar`);
         contact.userAvatarUrl = userAvatarBlob ? URL.createObjectURL(userAvatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg';
-        chatAiName.textContent = contact.remark;
-        chatAiActivityStatus.textContent = contact.activityStatus || ''; // 【新增】打开聊天时恢复状态
+
+        // 【新增】检查是否为情侣，并添加标志
+        updateChatHeader(); // 使用我们全新的专业刷新函数
+        chatAiActivityStatus.textContent = contact.activityStatus || '';
         messageContainer.innerHTML = '';
         contact.chatHistory.forEach((msg, index) => {
             msg.id = msg.id || `${Date.now()}-${index}`;
@@ -631,6 +808,69 @@ document.addEventListener('DOMContentLoaded', () => {
                 const stickerUrl = options.stickerUrl || '';
                 messageContentHTML = `<div class="message message-sticker"><img src="${stickerUrl}" alt="sticker"></div>`;
                 break;
+
+            // ▼▼▼ 全新的“关系卡片”渲染逻辑 ▼▼▼
+            case 'relationship_proposal':
+                const cardData = options.relationshipData || {};
+                const isMyProposal = cardData.proposer === role;
+                let cardHTML = '';
+
+                if (cardData.status === 'pending') {
+                    const title = isMyProposal ? '已发送情侣关系邀请' : '想和你建立情侣关系';
+                    const subtitle = isMyProposal ? '等待对方同意...' : '和Ta成为情侣，让爱意点滴记录';
+                    // 【V2.1 交互改造】卡片本身不再有按钮，而是变成一个可点击的整体
+                    const isClickable = (role === 'assistant' && cardData.status === 'pending');
+                    const clickAction = isClickable ? `onclick="openRelationshipModal('${messageId}')"` : '';
+
+                    cardHTML = `
+                        <h4>${title}</h4>
+                        <p>${subtitle}</p>
+                    `;
+                    
+                    messageContentHTML = `
+                        <div class="message message-relationship-card" ${clickAction} style="${isClickable ? 'cursor:pointer;' : ''}">
+                            <div class="relationship-card-content">
+                                <div class="relationship-card-text">${cardHTML}</div>
+                                <div class="relationship-card-icon"><img src="https://i.postimg.cc/P5Lg62Vq/lollipop.png" alt="icon"></div>
+                            </div>
+                            <div class="relationship-card-footer">亲密关系</div>
+                        </div>
+                    `;
+                } else if (cardData.status === 'accepted') {
+                    cardHTML = `
+                        <h4>我们已经成功建立情侶关系</h4>
+                        <p>我已同意了你的邀请，现在我们是情侣啦</p>
+                    `;
+                }
+                
+                messageContentHTML = `
+                    <div class="message message-relationship-card">
+                        <div class="relationship-card-content">
+                            <div class="relationship-card-text">${cardHTML}</div>
+                            <div class="relationship-card-icon"><img src="https://i.postimg.cc/P5Lg62Vq/lollipop.png" alt="icon"></div>
+                        </div>
+                        <div class="relationship-card-footer">亲密关系</div>
+                    </div>
+                `;
+                break;
+                // ▼▼▼ 全新的“分手卡片”渲染逻辑 ▼▼▼
+            case 'relationship_breakup':
+                messageContentHTML = `
+                    <div class="message message-relationship-card">
+                        <div class="relationship-card-content">
+                            <div class="relationship-card-text">
+                                <h4>解除亲密关系</h4>
+                                <p>我们之间的亲密关系已解除</p>
+                            </div>
+                            <div class="relationship-card-icon">
+                                <img src="https://i.postimg.cc/1tNCS12N/broken-heart.png" alt="icon">
+                            </div>
+                        </div>
+                        <div class="relationship-card-footer">亲密关系</div>
+                    </div>
+                `;
+                break;
+            // ▲▲▲ 关系卡片逻辑结束 ▲▲▲
             default:
                 messageContentHTML = `<div class="message">${text}</div>`;
         }
@@ -676,8 +916,9 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             if (options.imageData) { messageToSave.imageData = options.imageData; }
             if (options.redPacketData) { messageToSave.redPacketData = options.redPacketData; }
-            // 【终极修复】在这里把 stickerUrl 也存进相册！
             if (options.stickerUrl) { messageToSave.stickerUrl = options.stickerUrl; } 
+            // 【新增】保存关系卡片的数据
+            if (options.relationshipData) { messageToSave.relationshipData = options.relationshipData; }
 
             contact.chatHistory.push(messageToSave);
             saveAppData();
@@ -711,17 +952,25 @@ document.addEventListener('DOMContentLoaded', () => {
             el.removeAttribute('data-staged'); // 移除“临时工”标签
         });
 
-        // 步骤4: 在数据层面，把所有临时消息正式存入聊天记录
+        // 步骤4: 在数据层面，把所有临时消息正式存入聊天记录，并检查特殊事件
         stagedUserMessages.forEach(msg => {
-            // 我们不再调用displayMessage，因为它已经在屏幕上了
-            // 我们只需要把这些消息加入到 chatHistory 里
             const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
             if (contact) {
+                // 【【【V2.3 核心修复：分手事件监听器】】】
+                // 在消息被存入历史记录之前，检查它是否是分手卡
+                if (msg.type === 'relationship_breakup') {
+                    // 如果是，立刻更新全局关系状态！
+                    appData.appSettings.partnerId = null;
+                    // 并立刻刷新UI，让爱心消失
+                    updateChatHeader();
+                    renderChatList();
+                }
+
                 const messageToSave = {
                     id: `${Date.now()}-${Math.random()}`,
                     role: 'user',
                     timestamp: Date.now(),
-                    ...msg // 把类型、内容、URL等所有信息都复制过来
+                    ...msg
                 };
                 contact.chatHistory.push(messageToSave);
             }
@@ -734,7 +983,7 @@ document.addEventListener('DOMContentLoaded', () => {
         getAiResponse();
     }
 
-    async function getAiResponse() {
+        async function getAiResponse() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
         removeLoadingBubble();
@@ -745,7 +994,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
         const contextLimit = appData.appSettings.contextLimit || 50;
         const recentHistory = contact.chatHistory.slice(-contextLimit);
-        // 【核心新增】准备AI可用的表情包列表
         let availableStickersPrompt = "你没有任何可用的表情包。";
         const availableStickers = [];
         contact.stickerGroups.forEach(groupName => {
@@ -756,12 +1004,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (availableStickers.length > 0) {
             availableStickersPrompt = "你可以使用以下表情包来增强表达（请优先使用表情包而不是Emoji）：\n";
             availableStickers.forEach(sticker => {
-                // 为每个表情包创建一个唯一的ID，格式为 [分组名_时间戳]
                 sticker.id = sticker.id || `${sticker.group}_${Date.now()}_${Math.random()}`; 
                 availableStickersPrompt += `- [STICKER:${sticker.id}] 描述: ${sticker.desc}\n`;
             });
         }
-        // 这部分 messagesForApi 的构建逻辑是正确的，保持不变
         const messagesForApi = recentHistory
             .filter(msg => msg.role === 'user' || msg.role === 'assistant') 
             .map(msg => {
@@ -781,6 +1027,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     contentPrefix = '[语音]';
                 } else if (msg.type === 'red-packet') {
                     contentPrefix = '[红包]';
+                } else if (msg.type === 'relationship_proposal') {
+                    // 【新增】告诉AI，这张卡片的内容是什么
+                    contentPrefix = '[关系邀请]';
                 }
                 return {
                     role: role,
@@ -792,7 +1041,26 @@ document.addEventListener('DOMContentLoaded', () => {
             ? contact.userProfile.persona 
             : '我是一个普通人。';
 
-        // 这部分 finalPrompt 的构建逻辑也是正确的，保持不变
+        // 【【【核心修改：注入全局情感状态】】】
+        let relationshipContext = '';
+        const currentPartnerId = appData.appSettings.partnerId;
+
+        // 【V2.1 认知升级】
+        if (currentPartnerId) {
+            // --- 用户有伴侣的情况 ---
+            if (currentPartnerId === contact.id) {
+                relationshipContext = `\n- **特别关系**: 你是用户的官方情侣。你们的对话应该充满爱意和亲密。`;
+            } else {
+                const partner = appData.aiContacts.find(c => c.id === currentPartnerId);
+                const partnerName = partner ? partner.name : '另一位AI';
+                relationshipContext = `\n- **重要情报**: 用户已经有官方情侣了，名字是“${partnerName}”。你必须在对话中体现出你对此的认知。`;
+            }
+        } else {
+            // --- 用户是单身的情况 ---
+            relationshipContext = `\n- **重要情报**: 用户目前是单身状态。`;
+        }
+        
+        // 【【【语法修正版】】】
         const finalPrompt = `# 任务: 角色扮演
         你是一个AI角色，你正在和一个真实用户聊天。你的所有回复都必须严格以角色的身份进行。
 
@@ -808,7 +1076,7 @@ ${contact.persona}
 - 你的专属记忆: ${contact.memory}
 
 ## 3. 行为准则
-- **重要背景**: 你正在通过聊天软件与用户（人设：${userPersona}）进行【线上对话】。当前时间: ${new Date().toLocaleString('zh-CN')}。
+- **重要背景**: 你正在通过聊天软件与用户（人设：${userPersona}）进行【线上对话】。当前时间: ${new Date().toLocaleString('zh-CN')}。${relationshipContext}
 - **沟通风格参考**: ${contact.chatStyle || '自然发挥即可'}
 - **回复风格**: 模拟真实聊天，将一个完整的思想拆分成【2-8条】独立的短消息。
 - **禁止括号**: 【绝对不能】包含任何括号内的动作、神态描写。
@@ -817,6 +1085,13 @@ ${contact.persona}
 - **发送图片**: 如果你想发图片，请使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送它。
 - **发送语音**: 如果某条回复更适合用语音表达（如唱歌、叹气、笑声），请在回复前加上 \`[voice]\` 标签。例如：\`[voice]嗯...让我想想。\`
 - **发送红包**: 在特殊节日、为了表达感谢或在剧情需要时，你可以发红包。请【严格使用】以下格式：\`[REDPACKET:祝福语,金额]\`。例如：\`[REDPACKET:节日快乐！,8.88]\`
+${ contact.canPropose ? `
+- **【【【核心规则 V2.0：发起/回应关系邀请】】】**
+  - **当你想主动求爱时**: 先说出你的告白，然后紧接着在'reply'数组最后，单独发送一个静默指令：\`[PROPOSE_RELATIONSHIP]\`。系统会自动把它变成一张邀请卡片。
+  - **当用户向你发出邀请时**: 用户的消息会是“[关系邀请] 已发送情侣关系邀请”。你【必须】自己决定是否同意。
+    - **如果同意**: 你的'reply'数组中【必须】单独包含一个字符串：\`[ACCEPT_RELATIONSHIP]\`。系统会自动处理后续，你无需多言。你可以在另一条消息里表达你的开心。
+    - **如果拒绝**: 你【不能】使用任何特殊指令。直接像正常聊天一样，说出你委婉拒绝的话即可。
+` : ''}
 - **【【【核心规则：领取红包】】】**: 当用户给你发红包后，你【必须自己决定】是否领取。如果你决定领取，你的'reply'数组中【必须】单独包含一个字符串：\`[ACCEPT_REDPACKET]\`。
   - **这是一个给系统的静默指令，你【绝对不能】自己生成“xx领取了你的红包”这样的宣告。系统会自动处理。**
   - 你可以把感谢的话（例如“谢谢你！”）作为另一条独立的消息放在数组里。
@@ -877,32 +1152,21 @@ ${availableStickersPrompt}
             if (data.error) throw new Error(`API返回错误: ${data.error.message}`);
             if (!data.choices || data.choices.length === 0) throw new Error("API返回了无效的数据结构。");
             
-            // ▼▼▼ 核心修正在这里：加上了 [0] ▼▼▼
             let responseText = data.choices[0].message.content;
-            // ▲▲▲ 修正结束 ▲▲▲
 
             let replies = [];
             lastReceivedSuggestions = [];
 
             try {
-                // 【终极修复】第一步：从AI的回复中，精准地提取出JSON部分
                 const jsonMatch = responseText.match(/{[\s\S]*}/);
+                if (jsonMatch && jsonMatch[0]) {
+                    const parsedResponse = JSON.parse(jsonMatch[0]);
 
-                if (jsonMatch && jsonMatch) {
-                    // 如果成功提取出了 {...} 这部分，就只解析这部分
-                    const parsedResponse = JSON.parse(jsonMatch);
-
-                    // ▼▼▼【核心修改】在这里接收并显示AI的状态▼▼▼
                     if (parsedResponse.activity && typeof parsedResponse.activity === 'string') {
-                        // 1. 更新界面
                         chatAiActivityStatus.textContent = parsedResponse.activity;
-                        // 2. 保存这个状态，以便下次进入聊天时能恢复
                         contact.activityStatus = parsedResponse.activity; 
                         saveAppData();
                     }
-                    // ▲▲▲ 修改结束 ▲▲▲
-
-                    // 第二步：从解析后的对象中，安全地提取聊天和建议
                     if (parsedResponse.reply && Array.isArray(parsedResponse.reply)) {
                         replies = parsedResponse.reply;
                     }
@@ -911,18 +1175,14 @@ ${availableStickersPrompt}
                     }
 
                 } else {
-                    // 如果连 {...} 的结构都找不到，就主动触发失败，执行降级方案
                     throw new Error("在AI回复中未找到有效的JSON结构。");
                 }
 
             } catch (error) {
                 console.error("解析AI返回的JSON失败:", error);
-                // 降级兼容：如果上述所有步骤都失败了，再当作普通文本处理
                 replies = responseText.split('\n').filter(line => line.trim() !== '');
             }
 
-
-            // 3. 遍历处理每一条消息
             if (replies.length > 0) {
                 for (const msg of replies) {
                     if (msg.startsWith('[REDPACKET:')) {
@@ -931,13 +1191,7 @@ ${availableStickersPrompt}
                             const blessing = data[0].trim();
                             const amount = parseFloat(data[1]);
                             if (blessing && !isNaN(amount)) {
-                                const redPacketData = {
-                                    id: `rp-ai-${Date.now()}`,
-                                    senderName: contact.name,
-                                    blessing: blessing,
-                                    amount: amount,
-                                    isOpened: false
-                                };
+                                const redPacketData = { id: `rp-ai-${Date.now()}`, senderName: contact.name, blessing: blessing, amount: amount, isOpened: false };
                                 displayMessage(blessing, 'assistant', { isNew: true, type: 'red-packet', redPacketData: redPacketData });
                             }
                         } catch (e) { console.error("解析红包指令失败", e); }
@@ -955,10 +1209,8 @@ ${availableStickersPrompt}
                         }
                         continue;
                     } else if (msg.trim().startsWith('[STICKER:')) {
-                        // 【核心新增】处理AI发送表情包的指令
                         const stickerId = msg.trim().substring(9, msg.length - 1);
                         let foundSticker = null;
-                        // 在所有全局表情包中查找这个ID
                         for (const groupName in appData.globalAiStickers) {
                             const sticker = appData.globalAiStickers[groupName].find(s => s.id === stickerId);
                             if (sticker) {
@@ -969,34 +1221,39 @@ ${availableStickersPrompt}
                         if (foundSticker) {
                             displayMessage('', 'assistant', { isNew: true, type: 'sticker', stickerUrl: foundSticker.url });
                         }
-                        continue; // 处理完指令后跳过
+                        continue;
                     } else if (msg.trim() === '[ACCEPT_REDPACKET]') {
-                        // 【终极修复】在这里执行领取红包的完整逻辑
-                        // 1. 从后往前，找到用户发的最后一个、还没被领取的红包
                         const userRedPacketMsg = [...contact.chatHistory].reverse().find(
                             m => m.role === 'user' && m.type === 'red-packet' && m.redPacketData && !m.redPacketData.isOpened
                         );
-
-                        // 2. 如果找到了这个红包
                         if (userRedPacketMsg) {
-                            // 2a. 在数据层面，把它标记为“已打开”
                             userRedPacketMsg.redPacketData.isOpened = true;
-
-                            // 2b. 在界面层面，找到那个红包气泡并更新它的样式
                             const messageRow = document.querySelector(`[data-message-id="${userRedPacketMsg.id}"]`);
                             if (messageRow) {
                                 const bubble = messageRow.querySelector('.message-red-packet');
                                 bubble.classList.add('opened');
                                 bubble.querySelector('.rp-bubble-info span').textContent = '已被领取';
                             }
-
-                            // 2c. 显示“xx已领取你的红包”的系统提示消息
                             displayMessage(`${contact.name} 领取了你的红包`, 'system', { isNew: true, type: 'system' });
                         }
-                        
-                        // 3. 这是一个“听而不闻”的静默指令，直接跳过，不要显示它
                         continue; 
-                        
+                    } else if (msg.trim() === '[PROPOSE_RELATIONSHIP]') {
+                        // AI发起邀请，发送一张卡片
+                        sendRelationshipProposal('assistant');
+                        continue;
+                    } else if (msg.trim() === '[ACCEPT_RELATIONSHIP]') {
+                        // AI同意了用户的邀请
+                        // 1. 找到用户发的那张“待定”卡片
+                        const userProposal = [...contact.chatHistory].reverse().find(m => 
+                            m.type === 'relationship_proposal' && 
+                            m.relationshipData.proposer === 'user' &&
+                            m.relationshipData.status === 'pending'
+                        );
+                        if (userProposal) {
+                            // 2. 调用我们的核心处理函数，假装是“用户点击了接受”
+                            window.handleRelationshipAction(userProposal.id, true);
+                        }
+                        continue;
                     } else {
                         displayMessage(msg, 'assistant', { isNew: true, type: 'text' });
                     }
@@ -1252,6 +1509,8 @@ ${availableStickersPrompt}
         const myAvatarBlob = await db.getImage(`${contact.id}_user_avatar`);
         csMyAvatar.src = myAvatarBlob ? URL.createObjectURL(myAvatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg';
         csPinToggle.checked = contact.isPinned || false;
+        // 【新增】根据数据设置“求爱开关”的初始状态
+        document.getElementById('cs-propose-toggle').checked = contact.canPropose;
         csMessageCount.textContent = contact.chatHistory.length;
         
         // 【新增】加载并显示自动总结设置
@@ -1464,16 +1723,22 @@ ${availableStickersPrompt}
     }
 
     let confirmCallback = null;
-    function showCustomConfirm(title, text, onConfirm) {
+    let cancelCallback = null; // 新增一个取消的回调
+    function showCustomConfirm(title, text, onConfirm, onCancel = null) {
         customConfirmTitle.textContent = title;
         customConfirmText.textContent = text;
         confirmCallback = onConfirm;
+        cancelCallback = onCancel; // 存储取消的回调
         customConfirmModal.classList.remove('hidden');
     }
 
-    function closeCustomConfirm() {
+    function closeCustomConfirm(isConfirm = false) {
         customConfirmModal.classList.add('hidden');
+        if (!isConfirm && cancelCallback) {
+            cancelCallback(); // 如果是点击取消，并且有取消回调，就执行它
+        }
         confirmCallback = null;
+        cancelCallback = null;
     }
 
     function showCustomAlert(title, text) {
@@ -1515,8 +1780,9 @@ ${availableStickersPrompt}
             chatHistory: [], 
             moments: [], 
             isPinned: false,
-            // 【【【核心修复：为新角色初始化表情包分组】】】
-            stickerGroups: [] 
+            stickerGroups: [],
+            // 【【【核心新增：为新角色默认开启求爱开关】】】
+            canPropose: true
         };
         appData.aiContacts.push(newContact);
         saveAppData();
@@ -1639,7 +1905,27 @@ ${availableStickersPrompt}
             }
             userStickerPanel.classList.toggle('is-open');
         });
-        moreFunctionsButton.addEventListener('click', () => alert("开发中！"));
+        moreFunctionsButton.addEventListener('click', () => {
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!contact) return;
+            const currentPartnerId = appData.appSettings.partnerId;
+
+            if (currentPartnerId === null) {
+                // 【V2.3 流程回归】先弹窗确认，再暂存卡片
+                showCustomConfirm('关系邀请', `确定要向 ${contact.remark} 发送情侣关系邀请吗？`, () => {
+                    sendRelationshipProposal('user');
+                });
+            } else if (currentPartnerId === contact.id) {
+                // 【V2.3 流程统一】分手也先弹窗确认，再暂存卡片
+                showCustomConfirm('解除关系', `你确定要向 ${contact.remark} 发送解除关系通知吗？这将会生成一张分手卡片待发送。`, () => {
+                    handleEndRelationship();
+                });
+            } else {
+                const partner = appData.aiContacts.find(c => c.id === currentPartnerId);
+                const partnerName = partner ? partner.remark : '未知';
+                showCustomAlert('提示', `你当前的情侣是 ${partnerName}。\n请先与对方解除关系，才能开始新的恋情。`);
+            }
+        });
         aiHelperButton.addEventListener('click', () => {
             if (aiSuggestionPanel.classList.contains('hidden')) { displaySuggestions(); } 
             else { hideSuggestionUI(); }
@@ -1669,9 +1955,69 @@ ${availableStickersPrompt}
         csClearHistory.addEventListener('click', clearActiveChatHistory);
         csDeleteContact.addEventListener('click', deleteActiveContact);
         csPinToggle.addEventListener('change', togglePinActiveChat);
-        customConfirmCancelBtn.addEventListener('click', closeCustomConfirm);
+        // 【【【核心魔改：为求爱开关赋予“关系重置”能力】】】
+        document.getElementById('cs-propose-toggle').addEventListener('change', (e) => {
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!contact) return;
+
+            const isNowChecked = e.target.checked;
+            const currentPartnerId = appData.appSettings.partnerId;
+
+            // --- 触发“反悔模式”的特殊条件 ---
+            // 条件1: 开关被【关闭】 (isNowChecked is false)
+            // 条件2: 当前用户【正和这个AI交往】 (currentPartnerId === contact.id)
+            if (!isNowChecked && currentPartnerId === contact.id) {
+                // --- “反悔模式”启动 ---
+
+                // 关键一步：立刻阻止开关的默认行为，并把它在视觉上拨回去
+                // 这样，只有在用户确认后，它才会真正关闭
+                e.preventDefault();
+                e.target.checked = true;
+
+                showCustomConfirm(
+                    '特殊操作：抹除关系',
+                    `你当前正与 ${contact.remark} 处于情侣关系中。\n\n关闭此开关将【彻底抹除】你们曾经确立过关系的所有痕迹（包括系统官宣消息），仿佛一切从未发生。\n\n确定要这样做吗？`,
+                    () => {
+                        // --- 用户确认执行“时间倒流” ---
+                        
+                        // 1. 在数据层面，静默解除关系
+                        appData.appSettings.partnerId = null;
+                        
+                        // 2. 将此AI的求爱能力也关闭
+                        contact.canPropose = false;
+
+                        // 3. 从聊天记录中删除“官宣”消息
+                        const relationshipStartText = `你和 ${contact.remark} 已正式确立情侣关系！`;
+                        contact.chatHistory = contact.chatHistory.filter(msg => 
+                            !(msg.type === 'system' && msg.content === relationshipStartText)
+                        );
+
+                        // 4. 保存所有改动，并刷新UI
+                        saveAppData();
+                        openChat(contact.id); // 重新打开聊天，清除旧消息，加载新消息
+                        renderChatList(); // 刷新列表，移除爱心
+                        showCustomAlert('操作完成', '关系痕迹已抹除，一切回到了最初。');
+                    },
+                    () => {
+                        // 用户点击了“取消”，什么也不做。
+                        // 因为我们之前已经把开关拨回去了，所以一切保持原样。
+                    }
+                );
+
+            } else {
+                // --- 正常模式：只是单纯地打开/关闭开关 ---
+                contact.canPropose = isNowChecked;
+                saveAppData();
+            }
+        });
+        customConfirmCancelBtn.addEventListener('click', () => closeCustomConfirm(false));
+        customConfirmOkBtn.addEventListener('click', () => { 
+            if (confirmCallback) { 
+                confirmCallback(); 
+            } 
+            closeCustomConfirm(true); 
+        });
         customAlertOkBtn.addEventListener('click', closeCustomAlert);
-        customConfirmOkBtn.addEventListener('click', () => { if (confirmCallback) { confirmCallback(); } closeCustomConfirm(); });
         userImageUploadArea.addEventListener('click', () => userImageUploadInput.click());
         userImageUploadInput.addEventListener('change', handleImagePreview);
         cancelImageUploadButton.addEventListener('click', closeImageUploadModal);
@@ -2140,7 +2486,6 @@ ${chatLog}
             }
         }
     }
-    
 
     initialize();
 });

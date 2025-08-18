@@ -162,6 +162,12 @@
                 <!-- (保留) 功能设置区域 -->
                 <div class="settings-group">
                     <div class="settings-item"><span>设为置顶</span><label class="switch"><input type="checkbox" id="cs-pin-toggle"><span class="slider"></span></label></div>
+                    <!-- ▼▼▼ 全新的“AI主动求爱”开关 ▼▼▼ -->
+                    <div class="settings-item">
+                        <span>允许AI主动求爱</span>
+                        <label class="switch"><input type="checkbox" id="cs-propose-toggle"><span class="slider"></span></label>
+                    </div>
+                    <!-- ▲▲▲ 开关结束 ▲▲▲ -->
                     <div class="settings-item"><span>导出/导入聊天记录</span><span class="arrow">&gt;</span></div>
                 </div>
                 <div class="settings-group">
@@ -503,6 +509,21 @@
                     <button id="mode-online-btn" class="modal-button primary">线上闲聊模式</button>
                     <button id="mode-offline-btn" class="modal-button secondary">线下剧情模式</button>
                 </div>
+            </div>
+        </div>
+    </div>
+        <!-- 【【【全新 V2.1：关系确认弹窗】】】 -->
+    <div id="relationship-confirm-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="relationship-confirm-title">情侣关系邀请</h3>
+            </div>
+            <div class="modal-body">
+                <p id="relationship-confirm-text"></p>
+            </div>
+            <div class="modal-footer-split">
+                <button id="relationship-confirm-refuse-btn" class="modal-button secondary">残忍拒绝</button>
+                <button id="relationship-confirm-accept-btn" class="modal-button primary">接受邀请</button>
             </div>
         </div>
     </div>
