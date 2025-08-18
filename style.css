@@ -27,8 +27,9 @@ body {
 }
 
 #app-container {
-    width: 100%; /* 宽度占满全屏 */
-    height: 100vh; /* 高度占满全屏的可视高度 */
+    width: 100%; 
+    /* 我们不再需要vh，JS会接管高度，这里留空或用100%作为备用 */
+    height: 100%; 
     background-color: var(--background-white);
     display: flex;
     flex-direction: column;
