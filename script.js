@@ -1944,43 +1944,37 @@ ${availableStickersPrompt}
     }
 
     function addSelectListeners(element) {
-        // --- 统一的菜单触发器 ---
-        const openMenuHandler = (event) => {
-            // 如果是选择模式，就不触发菜单
-            if (isSelectMode) return;
-            openContextMenu(event, element);
+        // --- 统一的长按入口 ---
+        const longPressHandler = () => {
+            // 无论PC还是手机，长按的唯一目标就是进入多选模式
+            if (!isSelectMode) {
+                enterSelectMode(element);
+            }
         };
 
-        // 电脑端：右键点击
-        element.addEventListener('contextmenu', openMenuHandler);
-
-        // 手机端：长按
-        element.addEventListener('touchstart', (e) => {
-            // 如果已经是选择模式，或者有多根手指，就忽略
-            if (isSelectMode || e.touches.length > 1) return;
-            longPressTimer = setTimeout(() => {
-                // 长按触发时，我们用触摸点的位置来模拟鼠标点击事件
-                openMenuHandler(e.touches[0]); 
-            }, 500); // 500毫秒算长按
+        // --- 电脑端：鼠标长按 ---
+        element.addEventListener('mousedown', (e) => {
+            if (isSelectMode || e.button !== 0) return;
+            longPressTimer = setTimeout(longPressHandler, 500);
         });
-        
-        // --- 清除长按计时器的逻辑 (保持不变) ---
+        element.addEventListener('mouseup', () => clearTimeout(longPressTimer));
+        element.addEventListener('mouseleave', () => clearTimeout(longPressTimer));
+
+        // --- 手机端：触摸长按 ---
+        element.addEventListener('touchstart', (e) => {
+            if (isSelectMode || e.touches.length > 1) return;
+            longPressTimer = setTimeout(longPressHandler, 500);
+        });
         element.addEventListener('touchend', () => clearTimeout(longPressTimer));
         element.addEventListener('touchmove', () => clearTimeout(longPressTimer));
         
-        // --- 选择模式的逻辑 (也需要微调，防止与长按冲突) ---
-        let simplePressTimer;
-        element.addEventListener('mousedown', (e) => {
-            if (isSelectMode || e.button !== 0) return;
-            simplePressTimer = setTimeout(() => enterSelectMode(element), 500);
-        });
-        element.addEventListener('mouseup', () => clearTimeout(simplePressTimer));
-        element.addEventListener('mouseleave', () => clearTimeout(simplePressTimer));
-
+        // --- 点击事件保持不变 ---
         element.addEventListener('click', () => { 
-            if (isSelectMode) toggleMessageSelection(element); 
+            if (isSelectMode) {
+                toggleMessageSelection(element); 
+            }
         });
-    }
+    } 
 
     function enterSelectMode(element) {
         // 【核心修复1】在进行任何操作前，先把当前的滚动位置存进“备忘录”
@@ -2019,6 +2013,7 @@ ${availableStickersPrompt}
         const messageId = element.dataset.messageId;
         const checkbox = element.querySelector('.select-checkbox');
         if (!checkbox) return;
+
         if (selectedMessages.has(messageId)) {
             selectedMessages.delete(messageId);
             checkbox.classList.remove('checked');
@@ -2026,14 +2021,40 @@ ${availableStickersPrompt}
             selectedMessages.add(messageId);
             checkbox.classList.add('checked');
         }
-        selectCount.textContent = `已选择${selectedMessages.size}项`;
-        deleteSelectedButton.disabled = selectedMessages.size === 0;
-        const firstSelectedId = selectedMessages.values().next().value;
-        const firstSelectedEl = messageContainer.querySelector(`[data-message-id="${firstSelectedId}"]`);
-        if (selectedMessages.size === 1 && firstSelectedEl && firstSelectedEl.dataset.role === 'user') {
-            editSelectedButton.classList.remove('hidden');
+
+        const count = selectedMessages.size;
+        selectCount.textContent = `已选择${count}项`;
+
+        // --- 【【【核心终极修复：智能按钮状态机】】】 ---
+        const recallBtn = document.getElementById('recall-selected-button');
+        const replyBtn = document.getElementById('reply-selected-button');
+        const editBtn = document.getElementById('edit-selected-button');
+        const deleteBtn = document.getElementById('delete-selected-button');
+
+        if (count === 0) {
+            // 如果没选，所有按钮都禁用
+            [recallBtn, replyBtn, editBtn, deleteBtn].forEach(btn => btn.style.display = 'none');
+        } else if (count === 1) {
+            // 如果只选了1条
+            const firstId = selectedMessages.values().next().value;
+            const messageData = findMessageById(firstId);
+            
+            // 引用、删除 按钮总是可用
+            replyBtn.style.display = 'inline-block';
+            deleteBtn.style.display = 'inline-block';
+            
+            // 只有自己的消息才能撤回和编辑
+            if (messageData && messageData.role === 'user') {
+                recallBtn.style.display = 'inline-block';
+                editBtn.style.display = 'inline-block';
+            } else {
+                recallBtn.style.display = 'none';
+                editBtn.style.display = 'none';
+            }
         } else {
-            editSelectedButton.classList.add('hidden');
+            // 如果选了多条，只能删除
+            deleteBtn.style.display = 'inline-block';
+            [recallBtn, replyBtn, editBtn].forEach(btn => btn.style.display = 'none');
         }
     }
     
@@ -2315,6 +2336,18 @@ function closeTextEditorModal() {
         cancelSelectButton.addEventListener('click', exitSelectMode);
         editSelectedButton.addEventListener('click', editSelectedMessage);
         deleteSelectedButton.addEventListener('click', deleteSelectedMessages);
+        document.getElementById('reply-selected-button').addEventListener('click', () => {
+            const messageId = selectedMessages.values().next().value;
+            activeContextMenuMessageId = messageId; // 假装是通过右键菜单触发的
+            stageQuoteReply();
+            exitSelectMode(); // 引用后自动退出多选
+        });
+        document.getElementById('recall-selected-button').addEventListener('click', () => {
+            const messageId = selectedMessages.values().next().value;
+            activeContextMenuMessageId = messageId; // 同样，假装是通过右键菜单触发的
+            recallMessage();
+            exitSelectMode(); // 撤回后也自动退出
+        });
         avatarUploadArea.addEventListener('click', () => avatarUploadInput.click());
         avatarUploadInput.addEventListener('change', (e) => handleImageUpload(e.target.files[0], `${activeChatContactId}_avatar`, avatarPreview));
         photoUploadArea.addEventListener('click', () => photoUploadInput.click());
