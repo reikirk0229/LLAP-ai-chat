@@ -1080,14 +1080,14 @@ async function openChat(contactId) {
         const text = chatInput.value.trim();
         if (text === '') return;
         
-        const messageData = { content: text, type: 'text' };
+        // 【核心修改1】为这条待发消息创建一个临时的、唯一的“身份证”
+        const tempId = `staged-${Date.now()}`;
+        const messageData = { id: tempId, content: text, type: 'text' };
         stagedUserMessages.push(messageData);
         
-        // 【【【BUG 2 终极修复】】】
-        // 步骤1: 命令工人去干活，并等待他返回“完工凭证”
-        await displayMessage(text, 'user', { isStaged: true, type: 'text' });
+        // 【核心修改2】在显示它的时候，把这个“身份证”也一起传过去
+        await displayMessage(text, 'user', { isStaged: true, type: 'text', id: messageData.id });
         
-        // 步骤2: 确认工人已完工，现在执行滚动！
         scrollToBottom();
 
         chatInput.value = '';
@@ -1893,26 +1893,41 @@ ${availableStickersPrompt}
     }
     
     function editSelectedMessage() {
-    if (selectedMessages.size !== 1) return;
-    const messageId = selectedMessages.values().next().value;
-    const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-    if (!contact) return;
-    const messageData = contact.chatHistory.find(msg => msg.id === messageId);
-    if (!messageData || messageData.role !== 'user') return;
+        if (selectedMessages.size !== 1) return;
+        const messageId = selectedMessages.values().next().value;
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
 
-    // 【核心改造】不再使用 prompt，而是打开我们自己的弹窗
-    openTextEditorModal(messageData.content, (newText) => {
-        // 这段代码会在用户点击“保存”时执行
-        if (newText !== null && newText.trim() !== '') {
-            messageData.content = newText.trim();
-            saveAppData();
-            const messageElement = messageContainer.querySelector(`[data-message-id="${messageId}"] .message`);
-            if (messageElement) { messageElement.textContent = newText.trim(); }
-            renderChatList();
+        // 【【【核心终极修复：聪明的“两步查找法”】】】
+        let messageData = null;
+
+        // 步骤1: 先去“正式档案柜”里找
+        messageData = contact.chatHistory.find(msg => msg.id === messageId);
+
+        // 步骤2: 如果没找到，就去“桌面待发托盘”里找！
+        if (!messageData) {
+            messageData = stagedUserMessages.find(msg => msg.id === messageId);
         }
-        exitSelectMode();
-    });
-}
+        
+        // 如果两个地方都没找到，或者找到的不是用户的消息，就放弃
+        if (!messageData || (messageData.role && messageData.role !== 'user')) {
+             exitSelectMode();
+             return;
+        }
+
+        // 找到了！现在可以正常打开编辑弹窗了
+        openTextEditorModal(messageData.content, (newText) => {
+            if (newText !== null && newText.trim() !== '') {
+                // 无论是在哪个列表里找到的，我们都可以直接修改它的内容
+                messageData.content = newText.trim();
+                saveAppData(); // 保存一下，以防万一
+                const messageElement = messageContainer.querySelector(`[data-message-id="${messageId}"] .message`);
+                if (messageElement) { messageElement.textContent = newText.trim(); }
+                renderChatList(); // 刷新一下列表的最后消息
+            }
+            exitSelectMode();
+        });
+    }
 
     function deleteSelectedMessages() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
