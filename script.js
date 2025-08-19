@@ -1,36 +1,24 @@
-// script.js (V8.26 - 红包功能终极修复版)
+// script.js (V8.26 - 红包功能终极修复版 + IndexedDB存储)
 document.addEventListener('DOMContentLoaded', () => {
     // --- 【【【V2.5 终极全屏修复：屏幕尺寸校准器】】】 ---
     const appContainerForResize = document.getElementById('app-container');
 
-    function resizeAppContainer() {
-        // 实时获取浏览器窗口的内部高度（最精准的高度）
-        const realHeight = window.innerHeight;
-        // 将app容器的高度强制设置为这个精准值
-        appContainerForResize.style.height = `${realHeight}px`;
-    }
-
-    // 1. 页面加载完成后，立刻校准一次
-    resizeAppContainer();
-
-    // 2. 当屏幕尺寸变化时（例如手机横屏），再次校准
-    window.addEventListener('resize', resizeAppContainer);
-    // --- 【【【修复代码结束】】】 ---
-
-    // --- IndexedDB 数据库助手 ---
+    // --- 【【【全新：IndexedDB 仓库管理员】】】 ---
     const db = {
         _db: null,
         init: function() {
             return new Promise((resolve, reject) => {
-                const request = indexedDB.open('AIChatAppDB', 1);
+                const request = indexedDB.open('AIChatAppDB', 1); // 打开或创建数据库
                 request.onerror = (event) => reject("数据库打开失败: " + event.target.errorCode);
                 request.onsuccess = (event) => {
                     this._db = event.target.result;
                     console.log("数据库初始化成功");
                     resolve();
                 };
+                // 如果是第一次创建，或版本升级，会触发此事件
                 request.onupgradeneeded = (event) => {
                     const dbInstance = event.target.result;
+                    // 创建一个名为 'images' 的“货架”（Object Store）专门用来放图片
                     if (!dbInstance.objectStoreNames.contains('images')) {
                         dbInstance.createObjectStore('images');
                     }
@@ -40,9 +28,10 @@ document.addEventListener('DOMContentLoaded', () => {
         saveImage: function(key, blob) {
             return new Promise((resolve, reject) => {
                 if (!this._db) return reject("数据库未初始化");
+                // 'readwrite' 表示我们要进行写入操作
                 const transaction = this._db.transaction(['images'], 'readwrite');
                 const store = transaction.objectStore('images');
-                const request = store.put(blob, key);
+                const request = store.put(blob, key); // 将 blob 文件存入，用 key 作为标签
                 request.onsuccess = () => resolve();
                 request.onerror = (event) => reject("图片保存失败: " + event.target.errorCode);
             });
@@ -50,10 +39,11 @@ document.addEventListener('DOMContentLoaded', () => {
         getImage: function(key) {
             return new Promise((resolve, reject) => {
                 if (!this._db) return reject("数据库未初始化");
+                 // 'readonly' 表示我们只进行读取操作
                 const transaction = this._db.transaction(['images'], 'readonly');
                 const store = transaction.objectStore('images');
-                const request = store.get(key);
-                request.onsuccess = (event) => resolve(event.target.result);
+                const request = store.get(key); // 根据 key 标签来取货
+                request.onsuccess = (event) => resolve(event.target.result); // 返回找到的文件
                 request.onerror = (event) => reject("图片读取失败: " + event.target.errorCode);
             });
         },
@@ -62,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!this._db) return reject("数据库未初始化");
                 const transaction = this._db.transaction(['images'], 'readwrite');
                 const store = transaction.objectStore('images');
-                store.delete(key);
+                store.delete(key); // 根据 key 标签删除货物
                 transaction.oncomplete = () => resolve();
                 transaction.onerror = (event) => reject("图片删除失败: " + event.target.errorCode);
             });
@@ -199,6 +189,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const modeSelectModal = document.getElementById('mode-select-modal');
     const modeOnlineBtn = document.getElementById('mode-online-btn');
     const modeOfflineBtn = document.getElementById('mode-offline-btn');
+    const textEditorModal = document.getElementById('text-editor-modal');
+    const textEditorTextarea = document.getElementById('text-editor-textarea');
+    const cancelTextEditBtn = document.getElementById('cancel-text-edit-btn');
+    const saveTextEditBtn = document.getElementById('save-text-edit-btn');
 
     // --- 3. 核心功能 ---
         // --- 【全新】全局Toast提示助手 ---
@@ -295,16 +289,26 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsDataURL(file);
     }
 
-    function sendImageMessage() {
+    async function sendImageMessage() {
         const description = imageDescriptionInput.value.trim();
         if (imageUploadMode === 'upload') {
-            if (!stagedImageData) { alert('请先选择一张图片！'); return; }
-            const message = { type: 'image', content: description || '图片', imageData: stagedImageData };
+            if (!stagedImageData) { showToast('请先选择一张图片！', 'error'); return; }
+            // 【核心改造】
+            // 1. 将 Base64 数据转换为真实图片文件 (Blob)
+            const imageBlob = await (await fetch(stagedImageData)).blob();
+            // 2. 创建一个唯一的图片ID作为标签
+            const imageId = `chatimg-${Date.now()}-${Math.random()}`;
+            // 3. 将图片存入大仓库
+            await db.saveImage(imageId, imageBlob);
+            // 4. 创建消息时，只保存图片ID，不再保存庞大的 imageData
+            const message = { type: 'image', content: description || '图片', imageId: imageId };
             stagedUserMessages.push(message);
-            displayMessage(message.content, 'user', { isStaged: true, type: 'image', imageData: message.imageData });
-        } else {
+            // 5. 显示消息时，也传入 imageId
+            displayMessage(message.content, 'user', { isStaged: true, type: 'image', imageId: message.imageId });
+
+        } else { // 模拟照片的情况保持不变
             if (!description) { alert('请填写图片描述！'); return; }
-            const message = { type: 'image', content: description, imageData: null };
+            const message = { type: 'image', content: description, imageData: null }; // imageData为null表示是模拟图
             stagedUserMessages.push(message);
             displayMessage(message.content, 'user', { isStaged: true, type: 'image', imageData: null });
         }
@@ -584,14 +588,13 @@ document.addEventListener('DOMContentLoaded', () => {
         chatAiName.innerHTML = `${contact.remark}${partnerIcon}`;
     }
     async function initialize() {
-        await db.init();
+        await db.init(); // 【核心新增】等待数据库仓库初始化完成
         loadAppData();
         await renderChatList();
         renderSettingsUI();
         bindEventListeners();
         switchToView('chat-list-view');
     }
-    
     function loadAppData() {
         const savedData = localStorage.getItem('myAiChatApp_V8_Data');
         if (savedData) { appData = JSON.parse(savedData); } 
@@ -669,15 +672,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const sortedContacts = [...appData.aiContacts].sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
         for (const contact of sortedContacts) {
+            // 【核心修改】从大仓库根据标签取回头像
             const avatarBlob = await db.getImage(`${contact.id}_avatar`);
             const avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
+            
             const lastMessage = (contact.chatHistory && contact.chatHistory.length > 0) ? contact.chatHistory[contact.chatHistory.length - 1] : { content: '...' };
             const item = document.createElement('div');
             item.className = 'chat-list-item';
             if (contact.isPinned) { item.classList.add('pinned'); }
             item.dataset.contactId = contact.id;
 
-            // 【新增】检查是否为情侣，并添加标志
             const isPartner = appData.appSettings.partnerId === contact.id;
             const partnerIcon = isPartner ? '<span class="partner-icon">💖</span>' : '';
 
@@ -713,19 +717,18 @@ document.addEventListener('DOMContentLoaded', () => {
         stagedUserMessages = [];
         lastRenderedTimestamp = 0;
         aiSuggestionPanel.classList.add('hidden');
-        
-        // 【终极修复】每次进入聊天界面时，都确保表情包面板是关闭的
         userStickerPanel.classList.remove('is-open');
 
         const contact = appData.aiContacts.find(c => c.id === contactId);
         if (!contact) return;
+
+        // 【核心修改】从大仓库异步加载头像
         const avatarBlob = await db.getImage(`${contact.id}_avatar`);
         contact.avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
         const userAvatarBlob = await db.getImage(`${contact.id}_user_avatar`);
         contact.userAvatarUrl = userAvatarBlob ? URL.createObjectURL(userAvatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg';
 
-        // 【新增】检查是否为情侣，并添加标志
-        updateChatHeader(); // 使用我们全新的专业刷新函数
+        updateChatHeader();
         chatAiActivityStatus.textContent = contact.activityStatus || '';
         messageContainer.innerHTML = '';
         contact.chatHistory.forEach((msg, index) => {
@@ -744,13 +747,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const TIME_GAP = 3 * 60 * 1000;
         let timestampDiv = null;
 
-        // 【核心修复】我们删除了 !isStaged 条件，让预览消息也能创建时间戳
         if (!isLoading && (lastRenderedTimestamp === 0 || currentTimestamp - lastRenderedTimestamp > TIME_GAP)) {
             timestampDiv = document.createElement('div');
             timestampDiv.className = 'timestamp-display';
             timestampDiv.textContent = formatMessageTimestamp(currentTimestamp);
         }
-        // 【核心修复】我们也删除了这里的 !isStaged 条件，让程序能记住预览消息的时间
         if (!isLoading) { lastRenderedTimestamp = currentTimestamp; }
         
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
@@ -781,14 +782,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         switch(type) {
             case 'image':
-                // 【V2.4 核心改造】统一用户和AI的“模拟照片”显示效果
                 const escapedDescription = text ? text.replace(/"/g, '&quot;') : '';
-
-                // 唯一特殊情况：用户真的上传了一张图片
-                if (role === 'user' && options.imageData) {
-                    messageContentHTML = `<div class="message message-image-user"><img src="${options.imageData}" alt="${text}"></div>`;
+                // 【核心修改】我们现在只处理 imageId（图片标签）
+                if (role === 'user' && options.imageId) {
+                    // 先创建一个带“加载中”占位符的图片框
+                    messageContentHTML = `<div class="message message-image-user"><img data-image-id="${options.imageId}" src="" alt="${text}"></div>`;
                 } else {
-                    // 其他所有情况（AI发的图、用户模拟的图）都使用统一的占位符样式
                     messageContentHTML = `<div class="message message-image-ai-direct" data-description="${escapedDescription}"><img src="https://i.postimg.cc/vTdmV48q/a31b84cf45ff18f18b320470292a02c8.jpg" alt="模拟的图片"></div>`;
                 }
                 break;
@@ -810,7 +809,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isOpened = packet.isOpened || false;
                 const bubbleClass = isOpened ? 'message-red-packet opened' : 'message-red-packet';
                 
-                // 【核心修改】我们把 onclick 事件的绑定交还给JS，而不是写在HTML里
                 messageRow.dataset.action = 'open-red-packet';
                 messageRow.dataset.messageId = messageId;
                 
@@ -826,10 +824,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 `;
                 break;
-                // 【核心新增】处理表情包消息的显示
             case 'sticker':
-                const stickerUrl = options.stickerUrl || '';
-                messageContentHTML = `<div class="message message-sticker"><img src="${stickerUrl}" alt="sticker"></div>`;
+                 // 【核心修改】我们也为表情包创建占位符
+                const stickerId = options.stickerId || (options.stickerUrl ? options.stickerUrl.split('/').pop() : ''); // 兼容旧数据
+                messageContentHTML = `<div class="message message-sticker"><img data-sticker-id="${stickerId}" src="" alt="sticker"></div>`;
                 break;
 
             // ▼▼▼ 全新的“关系卡片”渲染逻辑 ▼▼▼
@@ -906,6 +904,30 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (timestampDiv) { messageContainer.appendChild(timestampDiv); }
         messageContainer.appendChild(messageRow);
+
+        // 【【【核心新增：异步图片加载器】】】
+        // 在消息被添加到页面后，我们开始检查是否需要从仓库取货
+        if (type === 'image' && options.imageId) {
+            const imageElement = messageRow.querySelector(`[data-image-id="${options.imageId}"]`);
+            if (imageElement) {
+                db.getImage(options.imageId).then(blob => {
+                    if (blob) {
+                        imageElement.src = URL.createObjectURL(blob);
+                    }
+                });
+            }
+        }
+        if (type === 'sticker' && options.stickerId) {
+            const stickerElement = messageRow.querySelector(`[data-sticker-id="${options.stickerId}"]`);
+             if (stickerElement) {
+                db.getImage(options.stickerId).then(blob => {
+                    if (blob) {
+                        stickerElement.src = URL.createObjectURL(blob);
+                    }
+                });
+            }
+        }
+        
         const aiImageBubble = messageRow.querySelector('.message-image-ai-direct');
         if (aiImageBubble) {
             aiImageBubble.addEventListener('click', () => {
@@ -994,7 +1016,21 @@ document.addEventListener('DOMContentLoaded', () => {
         getAiResponse();
     }
 
-        async function getAiResponse() {
+        /**
+     * 【全新辅助函数】将图片文件(Blob)转换为API能识别的Base64文本
+     * @param {Blob} blob - 从IndexedDB取出的图片文件
+     * @returns {Promise<string>} 返回一个Promise，解析为Data URL字符串
+     */
+    function blobToDataURL(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(blob);
+        });
+    }
+
+    async function getAiResponse() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
         removeLoadingBubble();
@@ -1002,51 +1038,73 @@ document.addEventListener('DOMContentLoaded', () => {
         aiSuggestionPanel.classList.add('hidden');
         displayMessage('对方正在输入...', 'assistant', { isLoading: true });
         messageContainer.scrollTop = messageContainer.scrollHeight;
+        
         const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
         const contextLimit = appData.appSettings.contextLimit || 50;
         const recentHistory = contact.chatHistory.slice(-contextLimit);
+        
         let availableStickersPrompt = "你没有任何可用的表情包。";
         const availableStickers = [];
         contact.stickerGroups.forEach(groupName => {
             const group = appData.globalAiStickers[groupName] || [];
-            group.forEach(sticker => availableStickers.push(sticker));
+            group.forEach(sticker => {
+                // 【核心修正】确保我们用正确的ID给AI
+                const aiId = sticker.aiId || sticker.id;
+                availableStickers.push({ ...sticker, aiId });
+            });
         });
 
         if (availableStickers.length > 0) {
             availableStickersPrompt = "你可以使用以下表情包来增强表达（请优先使用表情包而不是Emoji）：\n";
             availableStickers.forEach(sticker => {
-                sticker.id = sticker.id || `${sticker.group}_${Date.now()}_${Math.random()}`; 
-                availableStickersPrompt += `- [STICKER:${sticker.id}] 描述: ${sticker.desc}\n`;
+                availableStickersPrompt += `- [STICKER:${sticker.aiId}] 描述: ${sticker.desc}\n`;
             });
         }
-        const messagesForApi = recentHistory
-            .filter(msg => msg.role === 'user' || msg.role === 'assistant') 
-            .map(msg => {
-                const role = msg.role;
-                const content = msg.content || '';
-                if (role === 'user' && msg.type === 'image' && msg.imageData) {
-                    return {
-                        role: 'user',
-                        content: [
-                            { type: "text", text: content },
-                            { type: "image_url", image_url: { url: msg.imageData } }
-                        ]
-                    };
-                }
-                let contentPrefix = '';
-                if (msg.type === 'voice') {
-                    contentPrefix = '[语音]';
-                } else if (msg.type === 'red-packet') {
-                    contentPrefix = '[红包]';
-                } else if (msg.type === 'relationship_proposal') {
-                    // 【新增】告诉AI，这张卡片的内容是什么
-                    contentPrefix = '[关系邀请]';
-                }
-                return {
-                    role: role,
-                    content: `${contentPrefix}${content}`
-                };
-            });
+
+        // --- 【【【核心改造开始】】】 ---
+        // 1. 我们需要用 Promise.all 来处理异步的图片加载
+        const messagesForApi = await Promise.all(
+            recentHistory
+                .filter(msg => msg.role === 'user' || msg.role === 'assistant')
+                .map(async (msg) => { // 2. map函数现在是异步的 (async)
+                    const role = msg.role;
+                    const content = msg.content || '';
+
+                    // 3. 全新的识图逻辑！
+                    //    检查消息类型是不是图片，并且它有没有“取货单”(imageId)
+                    if (role === 'user' && msg.type === 'image' && msg.imageId) {
+                        try {
+                            // 4. 去大仓库取货
+                            const imageBlob = await db.getImage(msg.imageId);
+                            if (imageBlob) {
+                                // 5. 把图片文件转换成AI能看懂的“文本格式”
+                                const imageDataUrl = await blobToDataURL(imageBlob);
+                                // 6. 按照官方格式，把图片和文字一起打包
+                                return {
+                                    role: 'user',
+                                    content: [
+                                        { type: "text", text: content },
+                                        { type: "image_url", image_url: { url: imageDataUrl } }
+                                    ]
+                                };
+                            }
+                        } catch (error) {
+                            console.error("加载聊天图片失败:", error);
+                            // 如果图片加载失败，就只发送文字部分，避免程序中断
+                            return { role: role, content: content };
+                        }
+                    }
+
+                    // (对于非图片消息，逻辑保持不变)
+                    let contentPrefix = '';
+                    if (msg.type === 'voice') contentPrefix = '[语音]';
+                    else if (msg.type === 'red-packet') contentPrefix = '[红包]';
+                    else if (msg.type === 'relationship_proposal') contentPrefix = '[关系邀请]';
+                    
+                    return { role: role, content: `${contentPrefix}${content}` };
+                })
+        );
+        // --- 【【【核心改造结束】】】 ---
 
         const userPersona = (contact.userProfile && contact.userProfile.persona) 
             ? contact.userProfile.persona 
@@ -1380,12 +1438,23 @@ ${availableStickersPrompt}
             
             let stickersHTML = '';
             group.forEach(sticker => {
+                // 【核心修改】为每个表情包创建一个唯一的DOM ID，方便后续加载
+                const domId = `sticker-manager-${sticker.id}`;
                 stickersHTML += `
                     <div class="sticker-manager-item">
-                        <img src="${sticker.url}" alt="${sticker.desc}">
+                        <img id="${domId}" src="" alt="${sticker.desc}">
                         <button class="sticker-delete-btn" data-group="${groupName}" data-id="${sticker.id}">&times;</button>
                     </div>
                 `;
+                // 异步加载图片
+                setTimeout(() => {
+                    const imgElement = document.getElementById(domId);
+                    if (imgElement) {
+                        db.getImage(sticker.id).then(blob => {
+                            if(blob) imgElement.src = URL.createObjectURL(blob);
+                        });
+                    }
+                }, 0);
             });
 
             groupCard.innerHTML = `
@@ -1657,13 +1726,22 @@ ${availableStickersPrompt}
     }
 
     function enterSelectMode(element) {
+        // 【核心修复1】在进行任何操作前，先把当前的滚动位置存进“备忘录”
+        const savedScrollTop = messageContainer.scrollTop;
+
         isSelectMode = true;
         chatHeaderNormal.classList.add('hidden');
         chatHeaderSelect.classList.remove('hidden');
+        
+        // (这里是导致滚动的“笨”操作，保持不变)
         messageContainer.querySelectorAll('.message-row').forEach(row => {
-            row.classList.add('in-select-mode');
+            row.classList.add('in--select-mode');
             row.querySelector('.select-checkbox').classList.remove('hidden');
         });
+
+        // 【核心修复2】在所有操作完成后，立刻从“备忘录”里恢复滚动位置
+        messageContainer.scrollTop = savedScrollTop;
+
         if (element) toggleMessageSelection(element);
     }
 
@@ -1703,13 +1781,16 @@ ${availableStickersPrompt}
     }
     
     function editSelectedMessage() {
-        if (selectedMessages.size !== 1) return;
-        const messageId = selectedMessages.values().next().value;
-        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        if (!contact) return;
-        const messageData = contact.chatHistory.find(msg => msg.id === messageId);
-        if (!messageData || messageData.role !== 'user') return;
-        const newText = prompt("编辑你的消息：", messageData.content);
+    if (selectedMessages.size !== 1) return;
+    const messageId = selectedMessages.values().next().value;
+    const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+    if (!contact) return;
+    const messageData = contact.chatHistory.find(msg => msg.id === messageId);
+    if (!messageData || messageData.role !== 'user') return;
+
+    // 【核心改造】不再使用 prompt，而是打开我们自己的弹窗
+    openTextEditorModal(messageData.content, (newText) => {
+        // 这段代码会在用户点击“保存”时执行
         if (newText !== null && newText.trim() !== '') {
             messageData.content = newText.trim();
             saveAppData();
@@ -1718,7 +1799,8 @@ ${availableStickersPrompt}
             renderChatList();
         }
         exitSelectMode();
-    }
+    });
+}
 
     function deleteSelectedMessages() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
@@ -1761,6 +1843,18 @@ ${availableStickersPrompt}
     function closeCustomAlert() {
         customAlertModal.classList.add('hidden');
     }
+    let textEditCallback = null;
+function openTextEditorModal(initialText, onSave) {
+    textEditorTextarea.value = initialText;
+    textEditCallback = onSave; // 暂存“保存”按钮的回调函数
+    textEditorModal.classList.remove('hidden');
+    textEditorTextarea.focus();
+}
+
+function closeTextEditorModal() {
+    textEditorModal.classList.add('hidden');
+    textEditCallback = null; // 清理回调函数
+}
 
     function deleteActiveContact() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
@@ -1893,17 +1987,33 @@ ${availableStickersPrompt}
             userStickerPanel.appendChild(addBtn);
             appData.userStickers.forEach(sticker => {
                 const stickerItem = document.createElement('div');
-                stickerItem.className = 'sticker-item';
-                stickerItem.innerHTML = `<img src="${sticker.url}" alt="${sticker.desc}">`;
-                stickerItem.onclick = () => sendStickerMessage(sticker);
+                // 【核心修改1】使用和AI管理器一样的class，自动获得“悬停”样式
+                stickerItem.className = 'sticker-manager-item'; 
+                // 【核心修改2】在图片旁边，增加一个删除按钮
+                stickerItem.innerHTML = `
+                    <img data-sticker-id="${sticker.id}" src="" alt="${sticker.desc}">
+                    <button class="sticker-delete-btn" data-id="${sticker.id}">&times;</button>
+                `;
+                
+                const imgElement = stickerItem.querySelector('img');
+                db.getImage(sticker.id).then(blob => {
+                    if (blob) imgElement.src = URL.createObjectURL(blob);
+                });
+
+                // 【核心修改3】点击图片本身是发送，但点击删除按钮不会触发发送
+                const imgContainer = stickerItem.querySelector('img');
+                if(imgContainer) {
+                    imgContainer.onclick = () => sendStickerMessage(sticker);
+                }
                 userStickerPanel.appendChild(stickerItem);
             });
         }
 
         function sendStickerMessage(sticker) {
-            const message = { type: 'sticker', content: `[表情] ${sticker.desc}`, stickerUrl: sticker.url };
+            // 【核心修改】我们现在发送的是 sticker.id，而不是 sticker.url
+            const message = { type: 'sticker', content: `[表情] ${sticker.desc}`, stickerId: sticker.id };
             stagedUserMessages.push(message);
-            displayMessage(message.content, 'user', { isStaged: true, type: 'sticker', stickerUrl: message.stickerUrl });
+            displayMessage(message.content, 'user', { isStaged: true, type: 'sticker', stickerId: message.stickerId });
             userStickerPanel.classList.remove('is-open');
         }
 
@@ -2043,6 +2153,35 @@ ${availableStickersPrompt}
                 userStickerPanel.classList.remove('is-open');
             }
         });
+
+        // 【【【全新：用户表情包删除逻辑】】】
+        userStickerPanel.addEventListener('click', (e) => {
+            // 我们只关心对删除按钮的点击
+            if (e.target.classList.contains('sticker-delete-btn')) {
+                const stickerId = e.target.dataset.id;
+                if (!stickerId) return;
+
+                if (confirm('确定要删除这个表情包吗？')) {
+                    // 1. 从大仓库(IndexedDB)里删除图片文件
+                    db.deleteImage(stickerId);
+                    // 2. 从小口袋(localStorage)里删除它的记录
+                    appData.userStickers = appData.userStickers.filter(s => s.id !== stickerId);
+                    // 3. 保存数据
+                    saveAppData();
+                    // 4. 重新绘制表情包面板
+                    renderUserStickerPanel();
+                }
+            }
+        });
+            // 【【【全新：为文本编辑弹窗按钮绑定事件】】】
+    cancelTextEditBtn.addEventListener('click', closeTextEditorModal);
+    saveTextEditBtn.addEventListener('click', () => {
+        if (textEditCallback) {
+            // 执行我们之前暂存的回调，并把输入框的最新内容传回去
+            textEditCallback(textEditorTextarea.value);
+        }
+        closeTextEditorModal();
+    });
     }
     
     // --- AI表情包管理系统 ---
@@ -2090,9 +2229,12 @@ ${availableStickersPrompt}
             }
             // 删除表情包
             if (target.classList.contains('sticker-delete-btn')) {
-                const id = target.dataset.id;
+                const stickerId = target.dataset.id;
                 if (confirm(`确定要从 [${group}] 中删除这个表情包吗？`)) {
-                    appData.globalAiStickers[group] = appData.globalAiStickers[group].filter(s => s.id !== id);
+                    // 【核心新增】从大仓库删除图片文件
+                    db.deleteImage(stickerId); 
+                    // 从小口袋删除记录
+                    appData.globalAiStickers[group] = appData.globalAiStickers[group].filter(s => s.id !== stickerId);
                     saveAppData();
                     renderStickerManager();
                 }
@@ -2159,33 +2301,42 @@ ${availableStickersPrompt}
         document.getElementById('cancel-sticker-upload-btn').addEventListener('click', closeStickerUploadModal);
 
         // 确认上传
-        document.getElementById('confirm-sticker-upload-btn').addEventListener('click', () => {
-            const context = stickerUploadModal.dataset.currentContext; // 【关键修改】获取上下文
+        document.getElementById('confirm-sticker-upload-btn').addEventListener('click', async () => {
+            const context = stickerUploadModal.dataset.currentContext;
             const url = stickerUrlInput.value.trim();
             const desc = document.getElementById('sticker-upload-desc-input').value.trim();
 
             if (!url) { alert("请输入图片URL或从本地上传！"); return; }
             if (!desc) { alert("请输入表情描述！"); return; }
             
-            const newSticker = {
-                id: `${context}_${Date.now()}`,
-                url: url,
-                desc: desc
-            };
+            try {
+                const imageBlob = await (await fetch(url)).blob();
+                const stickerId = `sticker-${Date.now()}-${Math.random()}`;
+                await db.saveImage(stickerId, imageBlob);
 
-            // 【关键修改】根据上下文，保存到不同的地方
-            if (context === 'user') {
-                appData.userStickers.push(newSticker);
-            } else {
-                appData.globalAiStickers[context].push(newSticker);
-            }
+                const newSticker = {
+                    id: stickerId,
+                    desc: desc
+                };
+                
+                if (context === 'user') {
+                    appData.userStickers.push(newSticker);
+                    renderUserStickerPanel(); // 【核心新增】立刻刷新用户表情包面板！
+                } else {
+                    newSticker.aiId = `${context}_${Date.now()}`; 
+                    appData.globalAiStickers[context].push(newSticker);
+                }
 
-            saveAppData();
-            // 如果是为AI上传，则刷新AI管理页
-            if (context !== 'user') {
-                renderStickerManager();
+                saveAppData();
+                if (context !== 'user') {
+                    renderStickerManager();
+                }
+                closeStickerUploadModal();
+
+            } catch (error) {
+                console.error("表情包保存失败:", error);
+                alert("无法处理该图片，请检查图片链接或更换图片。");
             }
-            closeStickerUploadModal();
         });
 
             // ---------------------------------------------------
