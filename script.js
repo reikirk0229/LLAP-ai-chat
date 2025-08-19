@@ -1,5 +1,8 @@
 // script.js (V8.26 - 红包功能终极修复版 + IndexedDB存储)
 document.addEventListener('DOMContentLoaded', () => {
+    const rootStyles = getComputedStyle(document.documentElement);
+    const mainThemeColor = rootStyles.getPropertyValue('--theme-color-primary').trim();
+    document.documentElement.style.setProperty('--main-theme-color', mainThemeColor);
     // --- 【【【V2.5 终极全屏修复：屏幕尺寸校准器】】】 ---
     const appContainerForResize = document.getElementById('app-container');
 
@@ -98,6 +101,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastRenderedTimestamp = 0;
     let loadingBubbleElement = null;
     let stagedStickerFile = null;
+    let activeContextMenuMessageId = null; // 追踪当前哪个消息被右键点击了
+    let stagedQuoteData = null; // 暂存准备要引用的消息数据
 
     // --- 2. 元素获取 ---
     const appContainer = document.getElementById('app-container');
@@ -263,13 +268,10 @@ function scrollToBottom() {
                 userStickerPanel.appendChild(stickerItem);
             });
         }
-        function sendStickerMessage(sticker) {
-            // 【核心修改】我们现在发送的是 sticker.id，而不是 sticker.url
-            const message = { type: 'sticker', content: `[表情] ${sticker.desc}`, stickerId: sticker.id };
-            stagedUserMessages.push(message);
-            displayMessage(message.content, 'user', { isStaged: true, type: 'sticker', stickerId: message.stickerId });
-            userStickerPanel.classList.remove('is-open');
-        }
+        async function sendStickerMessage(sticker) {
+    userStickerPanel.classList.remove('is-open');
+    await dispatchAndDisplayUserMessage({ content: `[表情] ${sticker.desc}`, type: 'sticker', stickerId: sticker.id });
+}
     // --- 3. 核心功能 ---
         // --- 【全新】全局Toast提示助手 ---
     let toastTimer;
@@ -367,27 +369,26 @@ function scrollToBottom() {
 
     async function sendImageMessage() {
         const description = imageDescriptionInput.value.trim();
+        
         if (imageUploadMode === 'upload') {
+            // --- 发送真实图片的逻辑保持不变 ---
             if (!stagedImageData) { showToast('请先选择一张图片！', 'error'); return; }
-            // 【核心改造】
-            // 1. 将 Base64 数据转换为真实图片文件 (Blob)
             const imageBlob = await (await fetch(stagedImageData)).blob();
-            // 2. 创建一个唯一的图片ID作为标签
             const imageId = `chatimg-${Date.now()}-${Math.random()}`;
-            // 3. 将图片存入大仓库
             await db.saveImage(imageId, imageBlob);
-            // 4. 创建消息时，只保存图片ID，不再保存庞大的 imageData
-            const message = { type: 'image', content: description || '图片', imageId: imageId };
-            stagedUserMessages.push(message);
-            // 5. 显示消息时，也传入 imageId
-            displayMessage(message.content, 'user', { isStaged: true, type: 'image', imageId: message.imageId });
-
-        } else { // 模拟照片的情况保持不变
+            await dispatchAndDisplayUserMessage({ type: 'image', content: description || '图片', imageId: imageId });
+        } else { 
+            // --- 发送“文字描述图片”的逻辑进行核心升级 ---
             if (!description) { alert('请填写图片描述！'); return; }
-            const message = { type: 'image', content: description, imageData: null }; // imageData为null表示是模拟图
-            stagedUserMessages.push(message);
-            displayMessage(message.content, 'user', { isStaged: true, type: 'image', imageData: null });
+            
+            // 【【【核心终极修复】】】
+            // 我们在描述前，加上一个独一无二的、给AI看的“特殊标签”
+            const contentForAI = `[模拟图片] ${description}`;
+            
+            // 我们仍然把它当作一条'image'类型的消息发出去，但在数据层面它没有imageId
+            await dispatchAndDisplayUserMessage({ type: 'image', content: contentForAI, imageData: null });
         }
+        
         closeImageUploadModal();
     }
 
@@ -544,37 +545,22 @@ function scrollToBottom() {
      * 【全新】创建并发送一个关系邀请卡片
      * @param {string} proposerRole - 发起人的角色 ('user' 或 'assistant')
      */
-    function sendRelationshipProposal(proposerRole) {
+    async function sendRelationshipProposal(proposerRole) {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        if (!contact) return;
-
-        const messageId = `staged-${Date.now()}-rel-${Math.random()}`;
-        const relationshipData = {
-            proposer: proposerRole,
-            status: 'pending'
-        };
-        
-        // 【核心改造】我们不再直接调用displayMessage，而是走官方的“暂存-发送”流程
-        const message = { 
-            id: messageId,
+    if (!contact) return;
+    const relationshipData = { proposer: proposerRole, status: 'pending' };
+    
+    if (proposerRole === 'user') {
+        await dispatchAndDisplayUserMessage({ 
             type: 'relationship_proposal', 
-            // 【关键】赋予卡片真正的“内容”，让AI能读懂
             content: '[关系邀请] 已发送情侣关系邀请', 
             relationshipData: relationshipData 
-        };
-
-        if (proposerRole === 'user') {
-            // 【V2.2 核心改造】只暂存，不发送！
-            // 1. 把它放进“待发消息”列表
-            stagedUserMessages.push(message);
-            // 2. 在屏幕上画出这张“待发”卡片
-            displayMessage(message.content, 'user', { isStaged: true, ...message });
-            // 3. 【删除】commitAndSendStagedMessages()，把发送权交还给用户！
-        } else { 
-            // 如果是AI发起的，则直接显示
-            displayMessage(message.content, 'assistant', { isNew: true, ...message });
-        }
+        });
+    } else { 
+        await displayMessage('[关系邀请] 已发送情侣关系邀请', 'assistant', { isNew: true, type: 'relationship_proposal', relationshipData: relationshipData });
+        scrollToBottom();
     }
+}
 
     /**
      * 【全新】处理用户点击卡片按钮的动作
@@ -637,20 +623,18 @@ function scrollToBottom() {
     /**
      * 【全新】处理解除关系的流程
      */
-    function handleEndRelationship() {
+    async function handleEndRelationship() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
-
-        // 【V2.3 核心改造】分手也只暂存，不发送！
+        
+        // 它的职责，就是准备好一个最标准的包裹
         const breakupMessage = {
             type: 'relationship_breakup',
-            content: '[解除关系] 亲密关系已解除' // 使用更中立的文本
+            content: '[解除关系] 亲密关系已解除'
         };
 
-        stagedUserMessages.push(breakupMessage);
-        displayMessage(breakupMessage.content, 'user', { isStaged: true, ...breakupMessage });
-        // 【删除】commitAndSendStagedMessages()，把发送权交还给用户！
-        // 【删除】所有后续的数据和UI更新，这些都将在用户按下发送键后处理
+        // 然后交给“中央调度中心”全权处理
+        await dispatchAndDisplayUserMessage(breakupMessage);
     }
 
     /**
@@ -859,21 +843,31 @@ async function openChat(contactId) {
 }
     
         function displayMessage(text, role, options = {}) {
-        const { isNew = false, isLoading = false, type = 'text', isStaged = false, id = null, timestamp = null } = options;
+        const { isNew = false, isLoading = false, type = 'text', isStaged = false, id = null, timestamp = null, quotedMessage = null } = options;
         
         const messageId = id || `${Date.now()}-${Math.random()}`;
         const currentTimestamp = timestamp || Date.now();
         const TIME_GAP = 3 * 60 * 1000;
         let timestampDiv = null;
-
         if (!isLoading && (lastRenderedTimestamp === 0 || currentTimestamp - lastRenderedTimestamp > TIME_GAP)) {
             timestampDiv = document.createElement('div');
             timestampDiv.className = 'timestamp-display';
             timestampDiv.textContent = formatMessageTimestamp(currentTimestamp);
         }
         if (!isLoading) { lastRenderedTimestamp = currentTimestamp; }
-        
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+
+        if (type === 'recalled') {
+            const recallerName = role === 'user' ? '你' : contact.remark;
+            const systemDiv = document.createElement('div');
+            systemDiv.className = 'message-recalled';
+            systemDiv.innerHTML = `${recallerName}撤回了一条消息`;
+            if (timestampDiv) messageContainer.appendChild(timestampDiv);
+            messageContainer.appendChild(systemDiv);
+            scrollToBottom();
+            return Promise.resolve(); // 直接结束，不再执行后续渲染
+        }
+
 
         if (type === 'system') {
             const systemDiv = document.createElement('div');
@@ -897,7 +891,16 @@ async function openChat(contactId) {
         if (isStaged) { messageRow.dataset.staged = 'true'; }
 
         const avatarUrl = role === 'user' ? (contact ? contact.userAvatarUrl : '') : (contact ? contact.avatarUrl : '');
-        let messageContentHTML;
+        let messageContentHTML = '';
+        let quoteHTML = '';
+        if (quotedMessage) {
+            quoteHTML = `
+                <div class="quoted-message-display">
+                    <span class="sender-name">${quotedMessage.sender}</span>
+                    <span class="message-snippet">${quotedMessage.content}</span>
+                </div>
+            `;
+        }
 
         // 【说明】下面的 switch case 结构和你原来的是一样的，只是为了完整性
         switch(type) {
@@ -980,15 +983,30 @@ async function openChat(contactId) {
                     </div>
                 `;
                 break;
+                case 'relationship_breakup':
+                messageContentHTML = `
+                    <div class="message message-relationship-card">
+                        <div class="relationship-card-content">
+                            <div class="relationship-card-text">
+                                <h4>解除亲密关系</h4>
+                                <p>我们之间的亲密关系已解除</p>
+                            </div>
+                            <div class="relationship-card-icon"><img src="https://i.postimg.cc/P5Lg62Vq/lollipop.png" alt="icon"></div>
+                        </div>
+                        <div class="relationship-card-footer">亲密关系</div>
+                    </div>
+                `;
+                break;
             default:
                 messageContentHTML = `<div class="message">${text}</div>`;
         }
-        
-        messageRow.innerHTML = `
+        // 统一添加引用和外层包裹
+        const finalContentHTML = `
             <div class="select-checkbox hidden"></div>
             <img class="avatar" src="${avatarUrl}">
-            <div class="message-content">${messageContentHTML}</div>
+            <div class="message-content">${quoteHTML}${messageContentHTML}</div>
         `;
+        messageRow.innerHTML = finalContentHTML;
         
         addSelectListeners(messageRow);
         
@@ -1054,12 +1072,25 @@ async function openChat(contactId) {
             }
             
             if (isNew && !isLoading && !isStaged && contact) {
-                // ... 保存聊天记录的逻辑和你原来的一样，保持不变 ...
-                const messageToSave = { id: messageId, role: role, content: text, type: type, timestamp: currentTimestamp };
+                const messageToSave = { 
+                    id: messageId, 
+                    role: role, 
+                    content: text, 
+                    type: type, 
+                    timestamp: currentTimestamp 
+                };
+                
+                // --- 档案补录清单 ---
                 if (options.imageId) { messageToSave.imageId = options.imageId; }
                 if (options.redPacketData) { messageToSave.redPacketData = options.redPacketData; }
                 if (options.stickerId) { messageToSave.stickerId = options.stickerId; }
                 if (options.relationshipData) { messageToSave.relationshipData = options.relationshipData; }
+                
+                // 【【【核心终极修复：把被遗忘的“引用注释”也登记进去！】】】
+                if (options.quotedMessage) {
+                    messageToSave.quotedMessage = options.quotedMessage;
+                }
+                
                 contact.chatHistory.push(messageToSave);
                 saveAppData();
                 renderChatList();
@@ -1075,69 +1106,69 @@ async function openChat(contactId) {
     function removeLoadingBubble() {
         if (loadingBubbleElement) { loadingBubbleElement.remove(); loadingBubbleElement = null; }
     }
-    
+    async function dispatchAndDisplayUserMessage(messageData) {
+        const tempId = `staged-${Date.now()}`;
+        
+        // 【【【核心终极修复 1：调度中心现在会检查“公共文件夹”了！】】】
+        const finalMessageData = { 
+            id: tempId, 
+            role: 'user', 
+            ...messageData,
+            quotedMessage: stagedQuoteData // 把暂存的引用数据一起打包！
+        };
+
+        stagedUserMessages.push(finalMessageData);
+        
+        // 在显示时，也把完整的引用信息传过去
+        await displayMessage(finalMessageData.content, 'user', { isStaged: true, ...finalMessageData });
+        
+        scrollToBottom();
+        
+        // 【重要】在所有工作都完成后，再清空“临时文件夹”
+        cancelQuoteReply();
+    }
     async function stageUserMessage() {
         const text = chatInput.value.trim();
         if (text === '') return;
-        
-        // 【核心修改1】为这条待发消息创建一个临时的、唯一的“身份证”
-        const tempId = `staged-${Date.now()}`;
-        const messageData = { id: tempId, content: text, type: 'text' };
-        stagedUserMessages.push(messageData);
-        
-        // 【核心修改2】在显示它的时候，把这个“身份证”也一起传过去
-        await displayMessage(text, 'user', { isStaged: true, type: 'text', id: messageData.id });
-        
-        scrollToBottom();
-
         chatInput.value = '';
+        // 它现在只负责打包文字，然后调用中心，其他一概不管
+        await dispatchAndDisplayUserMessage({ content: text, type: 'text' });
     }
 
-    function commitAndSendStagedMessages() {
-        // 步骤1: 如果输入框还有文字，先把它也变成一个临时消息
+    async function commitAndSendStagedMessages() {
         if (chatInput.value.trim() !== '') {
-            stageUserMessage();
+            await stageUserMessage(); // 【重要】等待文字消息也处理完
         }
 
-        // 步骤2: 如果没有任何待发消息，就什么也不做
         if (stagedUserMessages.length === 0) return;
 
-        // 步骤3: 【核心改造】找到所有屏幕上的临时消息，把它们“转正”
         document.querySelectorAll('[data-staged="true"]').forEach(el => {
-            el.removeAttribute('data-staged'); // 移除“临时工”标签
+            el.removeAttribute('data-staged');
         });
-
-        // 步骤4: 在数据层面，把所有临时消息正式存入聊天记录，并检查特殊事件
-        stagedUserMessages.forEach(msg => {
-            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-            if (contact) {
-                // 【【【V2.3 核心修复：分手事件监听器】】】
-                // 在消息被存入历史记录之前，检查它是否是分手卡
+        
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if(contact) {
+            stagedUserMessages.forEach(msg => {
                 if (msg.type === 'relationship_breakup') {
-                    // 如果是，立刻更新全局关系状态！
                     appData.appSettings.partnerId = null;
-                    // 并立刻刷新UI，让爱心消失
                     updateChatHeader();
                     renderChatList();
                 }
-
                 const messageToSave = {
-                    id: `${Date.now()}-${Math.random()}`,
                     role: 'user',
                     timestamp: Date.now(),
-                    ...msg
+                    ...msg,
+                    id: msg.id || `${Date.now()}-${Math.random()}`
                 };
                 contact.chatHistory.push(messageToSave);
-            }
-        });
+            });
+        }
         
-        // 步骤5: 清空待发区，触发总结检查，并触发AI
         saveAppData();
-        triggerAutoSummaryIfNeeded(); // 【新增】调用自动总结检查器
+        triggerAutoSummaryIfNeeded();
         stagedUserMessages = [];
-        getAiResponse();
+        getAiResponse(); // 【关键】现在，所有消息（包括图片描述）都已在chatHistory里，AI可以读到了！
     }
-
         /**
      * 【全新辅助函数】将图片文件(Blob)转换为API能识别的Base64文本
      * @param {Blob} blob - 从IndexedDB取出的图片文件
@@ -1158,13 +1189,11 @@ async function openChat(contactId) {
         removeLoadingBubble();
         lastReceivedSuggestions = [];
         aiSuggestionPanel.classList.add('hidden');
-        displayMessage('对方正在输入...', 'assistant', { isLoading: true });
-        messageContainer.scrollTop = messageContainer.scrollHeight;
         
-        const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
-        const contextLimit = appData.appSettings.contextLimit || 50;
-        const recentHistory = contact.chatHistory.slice(-contextLimit);
-        
+        // 【【【‘正在输入’不滚动 终极修复】】】
+        await displayMessage('对方正在输入...', 'assistant', { isLoading: true });
+        // 我们不再手动滚动，因为 displayMessage 内部对 system/loading 消息的处理已经包含了滚动
+
         let availableStickersPrompt = "你没有任何可用的表情包。";
         const availableStickers = [];
         contact.stickerGroups.forEach(groupName => {
@@ -1182,26 +1211,44 @@ async function openChat(contactId) {
                 availableStickersPrompt += `- [STICKER:${sticker.aiId}] 描述: ${sticker.desc}\n`;
             });
         }
+        const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
+       const contextLimit = appData.appSettings.contextLimit || 50; // 这仍然可以作为备用
+        const MAX_CONTEXT_TOKENS = 3000; // 设定一个安全的“背包”容量上限（单位：估算Token）
 
-        // --- 【【【核心改造开始】】】 ---
-        // 1. 我们需要用 Promise.all 来处理异步的图片加载
+        let currentTokens = 0;
+        const historyForApi = [];
+
+        // 【【【核心修复1：智能打包员，从后往前打包历史】】】
+        for (let i = contact.chatHistory.length - 1; i >= 0; i--) {
+            const msg = contact.chatHistory[i];
+            // 估算这条消息的“重量”(Token)，一个汉字约等于2个Token，我们保守估算
+            const messageTokens = (msg.content || '').length * 2; 
+
+            // 如果把这条消息放进背包，会超重吗？
+            if (currentTokens + messageTokens > MAX_CONTEXT_TOKENS) {
+                // 如果会超重，就立刻停止打包！
+                break; 
+            }
+
+            // 没超重，放进去，并记下重量
+            historyForApi.unshift(msg); // unshift可以保持消息的原始顺序
+            currentTokens += messageTokens;
+        }
+        
+        // --- 接下来的图片处理逻辑，现在是基于我们智能筛选后的 historyForApi ---
         const messagesForApi = await Promise.all(
-            recentHistory
+            historyForApi
                 .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-                .map(async (msg) => { // 2. map函数现在是异步的 (async)
+                .map(async (msg) => {
                     const role = msg.role;
                     const content = msg.content || '';
 
-                    // 3. 全新的识图逻辑！
-                    //    检查消息类型是不是图片，并且它有没有“取货单”(imageId)
+                    // 【【【核心修复1：为真实图片做准备】】】
                     if (role === 'user' && msg.type === 'image' && msg.imageId) {
                         try {
-                            // 4. 去大仓库取货
                             const imageBlob = await db.getImage(msg.imageId);
                             if (imageBlob) {
-                                // 5. 把图片文件转换成AI能看懂的“文本格式”
                                 const imageDataUrl = await blobToDataURL(imageBlob);
-                                // 6. 按照官方格式，把图片和文字一起打包
                                 return {
                                     role: 'user',
                                     content: [
@@ -1211,28 +1258,32 @@ async function openChat(contactId) {
                                 };
                             }
                         } catch (error) {
-                            console.error("加载聊天图片失败:", error);
-                            // 如果图片加载失败，就只发送文字部分，避免程序中断
                             return { role: role, content: content };
                         }
                     }
 
-                    // (对于非图片消息，逻辑保持不变)
+                    // 【【【核心终极修复：“贴标签”的打包员回来了！】】】
+                    let finalContent = content;
                     let contentPrefix = '';
-                    if (msg.type === 'voice') contentPrefix = '[语音]';
-                    else if (msg.type === 'red-packet') contentPrefix = '[红包]';
-                    else if (msg.type === 'relationship_proposal') contentPrefix = '[关系邀请]';
+
+                    // 根据消息类型，准备不同的“标签”
+                    if (msg.type === 'voice') {
+                        contentPrefix = '[语音] ';
+                    } else if (msg.type === 'red-packet') {
+                        contentPrefix = '[红包] ';
+                    } else if (msg.type === 'relationship_proposal') {
+                        contentPrefix = '[关系邀请] ';
+                    } else if (msg.type === 'image' && !msg.imageId) { // 这是“模拟图片”
+                        // 对于模拟图片，我们确保暗号还在
+                        // content 本身就是 "[模拟图片] 描述..."，所以不需要加前缀
+                    }
                     
-                    return { role: role, content: `${contentPrefix}${content}` };
+                    // 把“标签”和“内容”组合起来，发给AI
+                    return { role: role, content: `${contentPrefix}${finalContent}` };
                 })
         );
-        // --- 【【【核心改造结束】】】 ---
-
-        const userPersona = (contact.userProfile && contact.userProfile.persona) 
-            ? contact.userProfile.persona 
-            : '我是一个普通人。';
-
-        // 【【【核心修改：注入全局情感状态】】】
+        
+        const userPersona = (contact.userProfile && contact.userProfile.persona) ? contact.userProfile.persona : '我是一个普通人。';
         let relationshipContext = '';
         const currentPartnerId = appData.appSettings.partnerId;
 
@@ -1272,10 +1323,13 @@ ${contact.persona}
 - **回复风格**: 模拟真实聊天，将一个完整的思想拆分成【2-8条】独立的短消息。
 - **禁止括号**: 【绝对不能】包含任何括号内的动作、神态描写。
 - **回应图片**: 如果用户的消息包含图片，你【必须】先针对图片内容进行回应，然后再进行其他对话。
+- **回应“模拟图片”**: 如果用户的消息是以 \`[模拟图片]\` 开头的，这代表用户用文字向你描述了一张图片。你【必须】把这段文字**当作你真实看到的画面**来回应。你的回应【绝对不能】提及“描述”、“文字”、“看起来像”等词语，而是要直接、生动地回应你“看到”的内容。例如，对于消息 \`[模拟图片] 一只白色的小狗在草地上打滚\`，你应该回复：“哇，它玩得好开心啊！”而不是“你是在描述一只小狗吗？”。
 - **回应表情**: 如果用户的消息是 \`[表情] 文字描述\` 的格式，这代表用户给你发了一个表情包。你【必须】针对文字描述所表达的情绪进行回应。
 - **发送图片**: 如果你想发图片，请使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送它。
 - **发送语音**: 如果某条回复更适合用语音表达（如唱歌、叹气、笑声），请在回复前加上 \`[voice]\` 标签。例如：\`[voice]嗯...让我想想。\`
 - **发送红包**: 在特殊节日、为了表达感谢或在剧情需要时，你可以发红包。请【严格使用】以下格式：\`[REDPACKET:祝福语,金额]\`。例如：\`[REDPACKET:节日快乐！,8.88]\`
+- **引用回复**: 当你想明确针对用户的某句话进行回复时，请【严格使用】以下格式：\`[QUOTE:"被引用的内容摘要"] 你的回复内容...\`。例如：\`[QUOTE:"你喜欢看什么书？"] 我最近在看科幻小说。\`
+- **撤回消息**: 如果你发现你刚才说的**最后一句话**有严重错误或不妥，你可以在下一轮回复的'reply'数组中，【单独包含】一个字符串：\`[RECALL_LAST]\`。系统会自动撤回你上一条消息，你无需自己解释。
 ${ contact.canPropose ? `
 - **【【【核心规则 V2.0：发起/回应关系邀请】】】**
   - **当你想主动求爱时**: 先说出你的告白，然后紧接着在'reply'数组最后，单独发送一个静默指令：\`[PROPOSE_RELATIONSHIP]\`。系统会自动把它变成一张邀请卡片。
@@ -1349,37 +1403,97 @@ ${availableStickersPrompt}
             lastReceivedSuggestions = [];
 
             try {
+                // 优先尝试按JSON格式解析
                 const jsonMatch = responseText.match(/{[\s\S]*}/);
                 if (jsonMatch && jsonMatch[0]) {
                     const parsedResponse = JSON.parse(jsonMatch[0]);
-
                     if (parsedResponse.activity && typeof parsedResponse.activity === 'string') {
                         chatAiActivityStatus.textContent = parsedResponse.activity;
                         contact.activityStatus = parsedResponse.activity; 
                         saveAppData();
                     }
-                    if (parsedResponse.reply && Array.isArray(parsedResponse.reply)) {
-                        replies = parsedResponse.reply;
-                    }
-                    if (parsedResponse.suggestions && Array.isArray(parsedResponse.suggestions)) {
-                        lastReceivedSuggestions = parsedResponse.suggestions;
-                    }
-
+                    if (parsedResponse.reply && Array.isArray(parsedResponse.reply)) { replies = parsedResponse.reply; }
+                    if (parsedResponse.suggestions && Array.isArray(parsedResponse.suggestions)) { lastReceivedSuggestions = parsedResponse.suggestions; }
                 } else {
                     throw new Error("在AI回复中未找到有效的JSON结构。");
                 }
-
             } catch (error) {
-                console.error("解析AI返回的JSON失败:", error);
-                replies = responseText.split('\n').filter(line => line.trim() !== '');
+                // 【【【核心修复2：更智能的应急预案】】】
+                console.error("解析AI返回的JSON失败，启用备用方案:", error);
+                
+                // 我们不再简单地按换行符切，而是按中英文的句号、问号、感叹号来切分！
+                // 这能最大程度地把黏连的句子拆开。
+                replies = responseText
+                    .split(/([。！？?!\n])/) // 按标点和换行符切，并保留标点
+                    .reduce((acc, part) => {
+                        if (acc.length === 0) {
+                            acc.push(part);
+                        } else if (/[。！？?!\n]/.test(part)) {
+                            acc[acc.length - 1] += part;
+                        } else if (part.trim() !== '') {
+                            acc.push(part);
+                        }
+                        return acc;
+                    }, [])
+                    .filter(line => line.trim() !== ''); // 清除空行
+                
+                // 如果切分后还是只有一条，就保持原样
+                if (replies.length === 0 && responseText.trim() !== '') {
+                    replies = [responseText];
+                }
             }
 
             if (replies.length > 0) {
-                const displayPromises = [];
+                // 【【【核心终极修复：把被遗忘的“零件筐”加回来！】】】
+                const displayPromises = []; 
 
                 for (const msg of replies) {
                     let promise;
-                    if (msg.startsWith('[REDPACKET:')) {
+                    
+                    if (msg.trim() === '[RECALL_LAST]') {
+                        const lastAiMsg = [...contact.chatHistory].reverse().find(m => 
+                            m.role === 'assistant' && m.type !== 'system' && m.type !== 'recalled'
+                        );
+                        if (lastAiMsg) {
+                            recallMessageByAI(lastAiMsg.id);
+                        }
+                        continue;
+                    }
+                    
+                    if (msg.startsWith('[QUOTE:')) {
+                        try {
+                            const match = msg.match(/^\[QUOTE:"([^"]+)"\]\s*(.*)/s); // 's'标志让.能匹配换行符
+                            if (match) {
+                                // 【【【核心终极修复：修正致命的拼写错误】】】
+                                const quotedText = match[1]; // 应该取第1个捕获组
+                                const replyText = match[2];  // 应该取第2个捕获组
+                                
+                                const originalMessage = [...contact.chatHistory, ...stagedUserMessages].reverse().find(
+                                    m => m.content && m.content.includes(quotedText)
+                                );
+
+                                let quoteData = null;
+                                if (originalMessage) {
+                                    const senderName = originalMessage.role === 'user' ? (contact.userProfile.name || '你') : contact.remark;
+                                    quoteData = {
+                                        messageId: originalMessage.id,
+                                        sender: senderName,
+                                        content: originalMessage.content.length > 20 ? originalMessage.content.substring(0, 20) + '...' : originalMessage.content
+                                    };
+                                } else {
+                                     // 如果找不到原文，就用AI提供的摘要
+                                     quoteData = { messageId: null, sender: '...', content: quotedText };
+                                }
+                                
+                                promise = displayMessage(replyText, 'assistant', { isNew: true, type: 'text', quotedMessage: quoteData });
+                            } else {
+                                promise = displayMessage(msg, 'assistant', { isNew: true, type: 'text' });
+                            }
+                        } catch(e) { 
+                             promise = displayMessage(msg, 'assistant', { isNew: true, type: 'text' });
+                        }
+
+                    } else if (msg.startsWith('[REDPACKET:')) {
                         try {
                             const data = msg.substring(11, msg.length - 1).split(',');
                             const blessing = data[0].trim();
@@ -1397,15 +1511,11 @@ ${availableStickersPrompt}
                         if (description) { promise = displayMessage(description, 'assistant', { isNew: true, type: 'image' }); }
                     } else if (msg.trim().startsWith('[STICKER:')) {
                         const stickerAiId = msg.trim().substring(9, msg.length - 1);
-                        // 【【【BUG 1 终极修复】】】
-                        // 我们用AI返回的aiId，去我们准备好的可用列表里找到那个表情包
                         const foundSticker = availableStickers.find(s => s.aiId === stickerAiId);
                         if (foundSticker) {
-                            // 然后，我们把它的真实数据库ID (foundSticker.id) 传给工人
                             promise = displayMessage('', 'assistant', { isNew: true, type: 'sticker', stickerId: foundSticker.id });
                         }
                     } else if (msg.trim() === '[ACCEPT_REDPACKET]') {
-                        // ... 这部分逻辑不变 ...
                         const userRedPacketMsg = [...contact.chatHistory].reverse().find(
                             m => m.role === 'user' && m.type === 'red-packet' && m.redPacketData && !m.redPacketData.isOpened
                         );
@@ -1437,12 +1547,20 @@ ${availableStickersPrompt}
                         promise = displayMessage(msg, 'assistant', { isNew: true, type: 'text' });
                     }
 
-                    if (promise) { displayPromises.push(promise); }
+                    if (promise) {
+                        displayPromises.push(promise);
+                    }
+                    
+                    if (promise) {
+                        await promise; // 等待当前这条消息渲染完
+                        scrollToBottom(); // 立刻滚动
+                    }
+
                     await sleep(Math.random() * 400 + 300);
                 }
 
-                await Promise.all(displayPromises);
-                scrollToBottom();
+                // await Promise.all(displayPromises);
+                // scrollToBottom();
             }
         } catch (error) {
             console.error('API调用失败:', error);
@@ -1684,14 +1802,12 @@ ${availableStickersPrompt}
         voiceInputModal.classList.add('hidden');
     }
 
-    function sendVoiceMessage() {
-        const text = voiceTextInput.value.trim();
-        if (!text) { alert("请输入语音内容！"); return; }
-        stagedUserMessages.push({ content: text, type: 'voice' });
-        displayMessage(text, 'user', { isStaged: true, type: 'voice' });
-        closeVoiceModal();
-    }
-
+    async function sendVoiceMessage() {
+    const text = voiceTextInput.value.trim();
+    if (!text) { alert("请输入语音内容！"); return; }
+    closeVoiceModal();
+    await dispatchAndDisplayUserMessage({ content: text, type: 'voice' });
+}
     async function openContactSettings() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
@@ -1828,13 +1944,42 @@ ${availableStickersPrompt}
     }
 
     function addSelectListeners(element) {
-        element.addEventListener('mousedown', (e) => { if (isSelectMode || e.button !== 0) return; longPressTimer = setTimeout(() => enterSelectMode(element), 500); });
-        element.addEventListener('mouseup', () => clearTimeout(longPressTimer));
-        element.addEventListener('mouseleave', () => clearTimeout(longPressTimer));
-        element.addEventListener('touchstart', (e) => { if (isSelectMode) return; longPressTimer = setTimeout(() => enterSelectMode(element), 500); });
+        // --- 统一的菜单触发器 ---
+        const openMenuHandler = (event) => {
+            // 如果是选择模式，就不触发菜单
+            if (isSelectMode) return;
+            openContextMenu(event, element);
+        };
+
+        // 电脑端：右键点击
+        element.addEventListener('contextmenu', openMenuHandler);
+
+        // 手机端：长按
+        element.addEventListener('touchstart', (e) => {
+            // 如果已经是选择模式，或者有多根手指，就忽略
+            if (isSelectMode || e.touches.length > 1) return;
+            longPressTimer = setTimeout(() => {
+                // 长按触发时，我们用触摸点的位置来模拟鼠标点击事件
+                openMenuHandler(e.touches[0]); 
+            }, 500); // 500毫秒算长按
+        });
+        
+        // --- 清除长按计时器的逻辑 (保持不变) ---
         element.addEventListener('touchend', () => clearTimeout(longPressTimer));
         element.addEventListener('touchmove', () => clearTimeout(longPressTimer));
-        element.addEventListener('click', () => { if (isSelectMode) toggleMessageSelection(element); });
+        
+        // --- 选择模式的逻辑 (也需要微调，防止与长按冲突) ---
+        let simplePressTimer;
+        element.addEventListener('mousedown', (e) => {
+            if (isSelectMode || e.button !== 0) return;
+            simplePressTimer = setTimeout(() => enterSelectMode(element), 500);
+        });
+        element.addEventListener('mouseup', () => clearTimeout(simplePressTimer));
+        element.addEventListener('mouseleave', () => clearTimeout(simplePressTimer));
+
+        element.addEventListener('click', () => { 
+            if (isSelectMode) toggleMessageSelection(element); 
+        });
     }
 
     function enterSelectMode(element) {
@@ -2118,21 +2263,19 @@ function closeTextEditorModal() {
             redPacketInputModal.classList.add('hidden');
         }
 
-        function handleConfirmRedPacket() {
-            const blessing = rpInputBlessing.value.trim();
-            const amount = parseFloat(rpInputAmount.value);
+        async function handleConfirmRedPacket() { // <--- 把它变成 async
+        const blessing = rpInputBlessing.value.trim();
+        const amount = parseFloat(rpInputAmount.value);
 
-            if (!blessing) { showCustomAlert('提示', '请输入红包祝福语！'); return; }
-            if (isNaN(amount) || amount <= 0) { showCustomAlert('提示', '请输入有效的金额！'); return; }
+        if (!blessing) { showCustomAlert('提示', '请输入红包祝福语！'); return; }
+        if (isNaN(amount) || amount <= 0) { showCustomAlert('提示', '请输入有效的金额！'); return; }
 
-            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-            const tempMessageId = `staged-${Date.now()}-${Math.random()}`;
-            const newRedPacket = { id: `rp-${Date.now()}`, senderName: contact.userProfile.name, blessing: blessing, amount: amount, isOpened: false };
-            
-            stagedUserMessages.push({ id: tempMessageId, role: 'user', content: blessing, type: 'red-packet', redPacketData: newRedPacket });
-            displayMessage(blessing, 'user', { isStaged: true, type: 'red-packet', redPacketData: newRedPacket, id: tempMessageId });
-            closeRedPacketInputModal();
-        }
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        const newRedPacket = { id: `rp-${Date.now()}`, senderName: contact.userProfile.name, blessing: blessing, amount: amount, isOpened: false };
+        
+        closeRedPacketInputModal();
+        await dispatchAndDisplayUserMessage({ content: blessing, type: 'red-packet', redPacketData: newRedPacket });
+    }
         
 
         redPacketBtn.addEventListener('click', openRedPacketInputModal);
@@ -2300,6 +2443,16 @@ function closeTextEditorModal() {
         }
         closeTextEditorModal();
     });
+    window.addEventListener('click', closeContextMenu); // 点击页面任何地方都关闭菜单
+        document.getElementById('context-menu-reply').addEventListener('click', () => {
+            stageQuoteReply();
+            closeContextMenu();
+        });
+        document.getElementById('context-menu-recall').addEventListener('click', () => {
+            recallMessage();
+            closeContextMenu();
+        });
+        document.getElementById('cancel-reply-btn').addEventListener('click', cancelQuoteReply);
     }
     
     // --- AI表情包管理系统 ---
@@ -2792,6 +2945,151 @@ ${chatLog}
                 showToast('自动总结失败，请检查网络或API设置', 'error', 4000); // 显示失败提示，4秒后消失
             }
         }
+    }
+    // --- 【全新】引用与撤回功能模块 ---
+
+    const contextMenu = document.getElementById('message-context-menu');
+    const replyIndicator = document.getElementById('reply-indicator');
+
+    // “工人”：打开右键菜单
+    function openContextMenu(event, messageRow) {
+        event.preventDefault(); 
+        activeContextMenuMessageId = messageRow.dataset.messageId;
+
+        const messageData = findMessageById(activeContextMenuMessageId);
+        if (!messageData || messageData.type === 'recalled') return;
+
+        const recallMenuItem = document.getElementById('context-menu-recall');
+        
+        // 【【【核心权限验证】】】
+        // 只有当消息的发送者是“user”时，才显示“撤回”按钮
+        if (messageData.role === 'user') {
+            recallMenuItem.style.display = 'block';
+        } else {
+            recallMenuItem.style.display = 'none';
+        }
+        
+        contextMenu.style.top = `${event.clientY}px`;
+        contextMenu.style.left = `${event.clientX}px`;
+        contextMenu.style.display = 'block';
+    }
+
+    // “工人”：关闭右键菜单
+    function closeContextMenu() {
+        contextMenu.style.display = 'none';
+        activeContextMenuMessageId = null;
+    }
+
+    // “工人”：执行引用操作
+    function stageQuoteReply() {
+        const messageData = findMessageById(activeContextMenuMessageId);
+        if (!messageData) return;
+
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        const senderName = messageData.role === 'user' ? (contact.userProfile.name || '你') : contact.remark;
+        
+        stagedQuoteData = {
+            messageId: messageData.id,
+            sender: senderName,
+            content: messageData.content.length > 20 ? messageData.content.substring(0, 20) + '...' : messageData.content
+        };
+        
+        // 显示提示条
+        document.getElementById('reply-indicator-text').textContent = `正在回复 ${senderName}`;
+        replyIndicator.style.display = 'flex';
+        chatInput.focus();
+    }
+    
+    // “工人”：取消引用
+    function cancelQuoteReply() {
+        stagedQuoteData = null;
+        replyIndicator.style.display = 'none';
+    }
+    
+    // “工人”：执行撤回操作
+    function recallMessage() {
+        if (!activeContextMenuMessageId) return;
+
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+
+        const messageIdToRecall = activeContextMenuMessageId;
+        
+        // 【【【核心终极修复：引入“双轨制”处理逻辑】】】
+
+        // 轨道一：处理“已发送”的消息 (书架上的书)
+        let messageIndexInHistory = contact.chatHistory.findIndex(msg => msg.id === messageIdToRecall);
+        if (messageIndexInHistory > -1) {
+            const originalMessage = contact.chatHistory[messageIndexInHistory];
+            const recalledMessage = {
+                id: originalMessage.id,
+                type: 'recalled',
+                role: originalMessage.role,
+                timestamp: originalMessage.timestamp || Date.now()
+            };
+            contact.chatHistory.splice(messageIndexInHistory, 1, recalledMessage);
+            saveAppData();
+            openChat(activeChatContactId); // 对于历史记录的重大改变，我们仍然需要“总馆长”来刷新
+            return; // 完成任务，立刻返回
+        }
+
+        // 轨道二：处理“待发送”的消息 (推车上的书) - 这是全新的、精准的“微创手术”
+        let messageIndexInStaged = stagedUserMessages.findIndex(msg => msg.id === messageIdToRecall);
+        if (messageIndexInStaged > -1) {
+            const originalMessage = stagedUserMessages[messageIndexInStaged];
+            const recalledMessage = {
+                id: originalMessage.id,
+                type: 'recalled',
+                role: originalMessage.role || 'user', // 待发消息默认是user
+                timestamp: originalMessage.timestamp || Date.now()
+            };
+            
+            // 步骤1: 在数据层面，用“墓碑”替换掉推车上的原书
+            stagedUserMessages.splice(messageIndexInStaged, 1, recalledMessage);
+            
+            // 步骤2: 在视觉层面，找到墙上对应的那个临时展示的气泡
+            const messageRow = messageContainer.querySelector(`[data-message-id="${messageIdToRecall}"]`);
+            if (messageRow) {
+                // 步骤3: 直接用“墓碑”的HTML内容，替换掉那个气泡的HTML内容！
+                const recallerName = '你'; // 待发消息只能是用户自己撤回
+                messageRow.className = 'message-recalled'; // 改变它的样式类
+                messageRow.innerHTML = `${recallerName}撤回了一条消息`;
+                // 我们不需要保存数据，因为stagedUserMessages是临时的，会在发送时一起处理
+            }
+        }
+    }
+    function recallMessageByAI(messageId) {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+        
+        let messageIndex = contact.chatHistory.findIndex(msg => msg.id === messageId);
+
+        if (messageIndex > -1) {
+            const originalMessage = contact.chatHistory[messageIndex];
+            // 确保AI不能撤回用户的消息
+            if (originalMessage.role !== 'assistant') return;
+
+            const recalledMessage = {
+                id: originalMessage.id,
+                type: 'recalled',
+                role: 'assistant', // 明确是AI撤回的
+                timestamp: originalMessage.timestamp || Date.now()
+            };
+            contact.chatHistory.splice(messageIndex, 1, recalledMessage);
+            saveAppData();
+            openChat(activeChatContactId); // 刷新界面
+        }
+    }
+
+    // “聪明的档案管理员”：一个能在所有地方查找消息的工具
+    function findMessageById(messageId) {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return null;
+        let message = contact.chatHistory.find(msg => msg.id === messageId);
+        if (!message) {
+            message = stagedUserMessages.find(msg => msg.id === messageId);
+        }
+        return message;
     }
 
     initialize();
