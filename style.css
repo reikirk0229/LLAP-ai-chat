@@ -1,571 +1,1402 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>IDIC实验室</title>
-    <link rel="stylesheet" href="style.css">
+/* style.css (V8.18 - 视觉与体验优化) */
+/* 【终极修复】为所有元素设置正确的盒子模型，防止padding撑大布局 */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
 
-    <style>
-            .message-context-menu { position: fixed; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 5px; z-index: 1000; display: none; }
-            .context-menu-item { padding: 8px 12px; cursor: pointer; font-size: 14px; border-radius: 5px; }
-            .context-menu-item:hover { background-color: #f0f0f0; }
-            .quoted-message-display { display: block; background-color: rgba(0,0,0,0.05); padding: 6px 10px; margin: -2px -2px 8px; border-radius: 8px 8px 0 0; font-size: 13px; color: #555; border-left: 3px solid var(--main-theme-color, #3B83A2);  }
-            .quoted-message-display .sender-name { font-weight: bold; }
-            .quoted-message-display .message-snippet { display: block; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
-            .reply-indicator { background-color: #f0f4f8; padding: 5px 10px; font-size: 12px; color: #333; display: none; align-items: center; justify-content: space-between; }
-            .reply-indicator-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .cancel-reply-btn { cursor: pointer; font-size: 16px; font-weight: bold; padding: 0 5px; }
-            .message-recalled { color: #888; font-size: 12px; text-align: center; padding: 10px 0; width: 100%; }
-            .recalled-edit-btn { color: #3B83A2; cursor: pointer; margin-left: 5px; }
-        </style>
-</head>
-<body>
-    <div id="message-context-menu" class="message-context-menu">
-        <div class="context-menu-item" id="context-menu-reply">引用</div>
-        <div class="context-menu-item" id="context-menu-recall">撤回</div>
-    </div>
+:root {
+    /* -- 恢复了大部分原始颜色 -- */
+    --primary-color: #007bff;
+    --background-light: #f0f2f5;   /* 【已恢复】聊天背景恢复为浅灰色 */
+    --background-white: #fff;
+    --text-dark: #12262C;             /* 【已恢复】主要文字恢复为纯黑色 */
+    --text-light: #fff;            /* 【已恢复】亮色文字恢复为纯白色 */
+    --text-secondary: #8e8e93;
+    --border-color: #dcdcdc;
+    --shadow-color: rgba(0,0,0,0.1);
 
-    <!-- 【【【全新：全局Toast提示】】】 -->
-    <div id="global-toast" class="hidden">
-        <span id="global-toast-text"></span>
-    </div>
+    /* 【【【核心修改：只把主题色换成你的湖蓝色】】】 */
+    --qq-blue: #3B83A2;
 
-    <div id="app-container">
+    /* -- 其他变量保持不变 -- */
+    --bubble-gray: #e9e9eb;
+    --header-height: 50px;
+    --nav-height: 50px;
+}
 
-        <!-- 视图1: 消息列表 (默认视图) -->
-        <div id="chat-list-view" class="view">
-            <div class="header">
-                <span>消息</span>
-                <button id="add-contact-button" class="header-button">+</button>
-            </div>
-            <div id="chat-list-container"></div>
-        </div>
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* 防止意外的滚动条出现 */
+}
 
-        <!-- 视图2: 聊天窗口 -->
-        <div id="chat-window-view" class="view hidden">
-            <div class="header">
-                <div id="chat-header-normal">
-                    <button id="back-to-list-button" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                    <div id="chat-header-info">
-                        <span id="chat-ai-name" class="clickable">AI 伙伴</span>
-                        <div id="chat-ai-status-line">
-                            <span class="online-indicator"></span>
-                            <span id="chat-ai-status">在线</span>
-                            <span id="chat-ai-activity-status"></span>
-                        </div>
-                    </div>
-                    <button id="chat-settings-button" class="header-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button>
-                </div>
-                <div id="chat-header-select" class="hidden">
-                    <button id="cancel-select-button" class="header-button-text">取消</button>
-                    <span id="select-count">已选择0项</span>
-                    <div>
-                        <button id="edit-selected-button" class="header-button-text hidden">编辑</button>
-                        <button id="delete-selected-button" class="header-button-text">删除</button>
-                    </div>
-                </div>
-            </div>
-            <div id="message-container"></div>
-            <div id="ai-suggestion-panel" class="suggestion-panel hidden">
-            </div>
-            <div class="chat-input-area">
-                <div id="refresh-suggestions-container" class="hidden">
-                    <button id="refresh-suggestions-btn" title="换一批"></button>
-                </div>
-                <div class="chat-functions-toolbar">
-                    <button id="voice-btn" class="tool-button" title="语音"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg></button>
-                    <button id="image-btn" class="tool-button" title="图片"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></button>
-                    <button id="camera-btn" class="tool-button" title="拍摄"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></button>
-                    <button id="red-packet-btn" class="tool-button" title="红包"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.2c-5.5 0-10 2.4-10 6.8 0 2.4.6 4.6 2.4 6.4 1.8 2 4.2 2.6 4.2 4.6 0 1.1.9 2 2 2h2.8c1.1 0 2-.9 2-2 0-2 2.4-2.6 4.2-4.6 1.8-1.8 2.4-4 2.4-6.4 0-4.4-4.5-6.8-10-6.8z"></path><path d="M12 12.6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg></button>
-                    <button id="emoji-btn" class="tool-button" title="表情"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg></button>
-                    <button id="ai-helper-button" class="tool-button" title="AI帮回"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M20 12h-4"></path><path d="M12 20v-4"></path></svg></button>
-                    <button id="more-functions-button" class="tool-button" title="更多"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
-                </div>
-                <div id="reply-indicator" class="reply-indicator">
-                    <span id="reply-indicator-text"></span>
-                    <span id="cancel-reply-btn" title="取消回复">&times;</span>
-                </div>
-                <div class="input-row">
-                    <textarea id="chat-input" placeholder="输入消息..."></textarea>
-                    <button id="send-button">发送</button>
-                </div>
-            </div>
-            <div id="user-sticker-panel" class="sticker-panel"></div>
-        </div>
-        
-        <!-- 视图3: 动态页面 -->
-        <div id="moments-view" class="view hidden">
-            <div class="header">
-                 <button id="back-to-list-from-moments" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <span>动态</span>
-            </div>
-            <div class="moments-container">
-                <div class="moments-header">
-                    <img class="moments-banner" src="https://i.postimg.cc/L8y2zWc2/default-banner.jpg" alt="banner">
-                    <div class="moments-user-info">
-                        <span id="moments-user-name">你的昵称</span>
-                        <img id="moments-user-avatar" class="avatar-lg" src="">
-                    </div>
-                </div>
-                <div class="moments-nav">
-                    <span>相册</span>
-                    <span>说说</span>
-                    <span>装扮</span>
-                    <span>游戏</span>
-                </div>
-                <div class="moments-feed"></div>
-                 <button id="create-post-button" class="fab">+</button>
-            </div>
-        </div>
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    /* 【核心】把浅灰色背景色移到body上，作为整个App的“墙纸” */
+    background-color: #f0f2f5; 
+    -webkit-tap-highlight-color: transparent;
+}
+#app-container {
+    width: 100%;
+    height: 100%; 
+    /* 【核心】让主容器变透明，这样才能看到body的“墙纸” */
+    background-color: transparent;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative; 
+}
 
-        <!-- 视图4: 设置页面 (通用设置) -->
-        <div id="settings-view" class="view hidden">
-            <div class="header">
-                 <button id="back-to-list-from-settings" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <span>设置</span>
-            </div>
-            <div id="settings-form">
-                <div class="form-group"><label for="api-type-select">API 类型</label><select id="api-type-select"><option value="openai_proxy">OpenAI 格式 (推荐)</option><option value="gemini_direct" disabled>Google Gemini (暂不推荐)</option></select></div>
-                <div class="form-group"><label for="api-url-input">API 地址 (URL)</label><input type="text" id="api-url-input" placeholder="根据所选类型填写"></div>
-                <div class="form-group" id="model-area"><label>模型名称 (Model)</label><div class="model-selection-area"><select id="api-model-select"></select><button id="fetch-models-button">拉取</button></div></div>
-                <div class="form-group"><label for="api-key-input">API 密钥 (Key)</label><input type="password" id="api-key-input" placeholder="粘贴你的密钥"></div>
-                <div class="form-group">
-                    <label for="context-limit-input">上下文记忆条数</label>
-                    <input type="number" id="context-limit-input" placeholder="">
-                </div>
-                <hr>
-                <h3>全局设置 (待开发)</h3>
-                <p class="placeholder-text">未来可在这里添加全局预设、外观等设置。</p>
-                <button id="save-settings-button">保存设置</button>
-            </div>
-        </div>
+.view {
+    width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    /* 【核心】让视图容器也变透明，彻底移除障碍 */
+    background-color: transparent;
+    /* 【【【核心修复】】】删除了 overflow: hidden; 解除对内部滚动的限制 */
+    min-height: 0;
+}
+.hidden { display: none !important; }
 
-        <!-- 视图5: 单个联系人的聊天设置页面 -->
-        <div id="contact-settings-view" class="view hidden">
-            <div class="header">
-                 <button id="back-to-chat-button" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <span>聊天设置</span>
-            </div>
-            <div class="contact-settings-container">
-                <div class="settings-group">
-                    <div class="settings-item contact-profile" id="cs-edit-ai-profile">
-                        <img id="cs-contact-avatar" class="avatar" src="">
-                        <span>对方信息</span>
-                        <span class="arrow">&gt;</span>
-                    </div>
-                    <div class="settings-item contact-profile" id="cs-edit-my-profile">
-                        <img id="cs-my-avatar" class="avatar" src="">
-                        <span>我的身份</span>
-                        <span class="arrow">&gt;</span>
-                    </div>
-                </div>
-                <div class="settings-group">
-                    <div class="settings-item"><span>设为置顶</span><label class="switch"><input type="checkbox" id="cs-pin-toggle"><span class="slider"></span></label></div>
-                    <div class="settings-item">
-                        <span>允许AI主动求爱</span>
-                        <label class="switch"><input type="checkbox" id="cs-propose-toggle"><span class="slider"></span></label>
-                    </div>
-                    <div class="settings-item"><span>导出/导入聊天记录</span><span class="arrow">&gt;</span></div>
-                </div>
-                <div class="settings-group">
-                    <div class="settings-item"><span>设置AI动态频率</span><span class="arrow">&gt;</span></div>
-                    <div class="settings-item"><span>设置AI主动消息频率</span><span class="arrow">&gt;</span></div>
-                </div>
-                <div class="settings-group">
-                    <div class="settings-item"><span>设置聊天背景</span><span class="arrow">&gt;</span></div>
-                    <div class="settings-item"><span>设置气泡样式</span><span class="arrow">&gt;</span></div>
-                    <div class="settings-item"><span>设置字体大小</span><span class="arrow">&gt;</span></div>
-                </div>
-                <div class="settings-group">
-                    <div class="settings-item" id="cs-message-count-item">
-                        <span>当前对话条数</span>
-                        <span id="cs-message-count">0</span>
-                    </div>
-                    <div class="settings-item">
-                        <span>自动总结</span>
-                        <div class="auto-summary-setting">
-                            <div id="cs-auto-summary-display" class="summary-threshold-display">未设置</div>
-                            <input type="number" id="cs-auto-summary-input" class="summary-threshold-input hidden" min="50">
-                            <label class="switch"><input type="checkbox" id="cs-auto-summary-toggle"><span class="slider"></span></label>
-                        </div>
-                    </div>
-                    <div class="settings-item" id="cs-summarize-chat">
-                        <span>手动总结</span>
-                        <span class="arrow">&gt;</span>
-                    </div>
-                </div>
-                <div class="settings-group">
-                    <div class="settings-item" id="cs-clear-history"><span class="danger">清空聊天记录</span></div>
-                </div>
-                <div class="settings-group">
-                    <div class="settings-item" id="cs-blacklist-contact"><span class="danger">将对方添加至黑名单</span></div>
-                </div>
-                <div class="settings-group">
-                    <div class="settings-item" id="cs-delete-contact">
-                        <span class="danger">删除该角色</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- 视图6: AI信息编辑页面 -->
-        <div id="ai-editor-view" class="view hidden">
-            <div class="header">
-                <button id="back-to-contact-settings-button" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <span>编辑AI信息</span>
-            </div>
-            <div id="ai-editor-form">
-                <div class="form-group-horizontal">
-                    <div class="form-group avatar-group">
-                        <label>AI 头像</label>
-                        <div class="image-upload-area avatar-upload" id="avatar-upload-area">
-                            <img id="avatar-preview" class="image-preview" src="">
-                            <span>点击上传</span>
-                        </div>
-                        <input type="file" id="avatar-upload-input" class="hidden-file-input" accept="image/*">
-                    </div>
-                    <div class="form-group photo-group">
-                        <label>AI 照片</label>
-                        <div class="image-upload-area photo-upload" id="photo-upload-area">
-                            <img id="photo-preview" class="image-preview" src="">
-                            <span>点击上传</span>
-                        </div>
-                        <input type="file" id="photo-upload-input" class="hidden-file-input" accept="image/*">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="ai-editor-name">AI 姓名</label>
-                    <input type="text" id="ai-editor-name">
-                </div>
-                <div class="form-group">
-                    <label for="ai-editor-remark">AI 备注</label>
-                    <input type="text" id="ai-editor-remark">
-                </div>
-                <div class="form-group">
-                    <label for="ai-editor-persona">AI的人设</label>
-                    <textarea id="ai-editor-persona" rows="5"></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="ai-editor-chat-style">线上风格</label>
-                    <textarea id="ai-editor-chat-style" rows="4" placeholder="e.g., 喜欢用短句，偶尔会发可爱的Emoji、颜文字和表情包。不爱发语音，打字很快。说话直接，不喜欢拐弯抹角。"></textarea>
-                </div>
-                <div class="form-group"><label>AI的专属记忆</label><textarea id="ai-editor-memory" rows="8" placeholder="对话总结等长期记忆..."></textarea></div>
-                <div class="form-group">
-                    <label>世界书</label>
-                    <div id="ai-editor-worldbook"></div>
-                    <button type="button" id="add-worldbook-entry-button">添加新条目</button>
-                </div>
-                <div class="form-group">
-                    <label>可用表情包分组</label>
-                    <div id="ai-sticker-groups-container">
-                        <p class="placeholder-text">请先在 全局设置 -> AI表情包管理 中添加分组</p>
-                    </div>
-                </div>
-                <button id="save-ai-profile-button">保存</button>
-            </div>
-        </div>
+#message-container::-webkit-scrollbar,
+#chat-list-container::-webkit-scrollbar,
+.moments-container::-webkit-scrollbar,
+#settings-form::-webkit-scrollbar,
+#ai-editor-form::-webkit-scrollbar,
+.contact-settings-container::-webkit-scrollbar {
+    display: none;
+}
+#message-container,
+#chat-list-container,
+.moments-container,
+#settings-form,
+#ai-editor-form,
+.contact-settings-container {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
 
-        <!-- 视图7: AI表情包管理页面 -->
-        <div id="ai-sticker-manager-view" class="view hidden">
-            <div class="header">
-                <button id="back-to-settings-from-sticker-btn" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <span>AI表情包管理</span>
-            </div>
-            <div id="sticker-manager-container"></div>
-            <button id="add-sticker-group-btn" class="fab">+</button>
-        </div>
+/* --- 通用头部 --- */
+.header {
+    height: var(--header-height);
+    /* 【【【核心恢复】】】背景色改回使用我们定义好的、不透明的主题色变量 */
+    background-color: var(--qq-blue);
+    
+    /* -- 以下是你最原始的样式，保持不变 -- */
+    color: var(--text-light);
+    padding: 0 15px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 18px;
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+#chat-header-normal, #chat-header-select {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+#chat-header-normal {
+    justify-content: flex-start;
+}
+.header-button-text {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 15px;
+    cursor: pointer;
+    padding: 5px 10px;
+}
+.header-button {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 5px 10px;
+    z-index: 5; 
+    display: flex; /* 【核心新增】确保SVG图标居中 */
+    align-items: center;
+}
+.back-button { 
+    position: static;
+}
+#add-contact-button { position: absolute; right: 5px; top: 50%; transform: translateY(-50%);}
+#chat-settings-button { 
+    position: absolute; 
+    right: 5px; 
+    top: 50%;
+    transform: translateY(-50%);
+}
+.avatar-sm { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+#current-user-avatar { position: static; }
+.clickable { cursor: pointer; }
+#chat-header-info {
+    text-align: left;
+    margin-left: 8px;
+}
+#chat-ai-status-line {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 5px;
+}
+.online-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: #4CAF50;
+    border-radius: 50%;
+}
 
-        <!-- 【【【核心修正：导航栏现在是app-container的最后一个孩子】】】 -->
-        <div id="app-nav">
-            <div class="nav-button active" data-view="chat-list-view">消息</div>
-            <div class="nav-button" data-view="moments-view">动态</div>
-            <div class="nav-button" data-view="settings-view">设置</div>
-        </div>
+/* --- 视图1: 消息列表 --- */
+#chat-list-container { 
+    flex-grow: 1; 
+    overflow-y: auto; 
+    /* 【补色】确保消息列表本身是白色背景 */
+    background-color: var(--background-white); 
+}
+.chat-list-item { display: flex; align-items: center; padding: 10px 15px; gap: 12px; cursor: pointer; border-bottom: 1px solid var(--background-light);transition: background-color 0.2s;}
+/* 【新增】置顶聊天的特殊背景色 */
+.chat-list-item.pinned {
+    background-color: #f5f5f5;
+}
+.chat-list-item:hover {
+    background-color: #e9e9e9;
+}
+.chat-list-item:hover { background-color: #f9f9f9; }
+.chat-list-item .avatar { width: 48px; height: 48px; border-radius: 10px; }
+.chat-list-item-info { flex-grow: 1; overflow: hidden; }
+.chat-list-item-top { display: flex; justify-content: space-between; align-items: center; }
+.chat-list-item-name { font-weight: bold; font-size: 16px; color: var(--text-dark); }
+.chat-list-item-time { font-size: 12px; color: var(--text-secondary); }
+.chat-list-item-msg { font-size: 14px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
 
-    </div> <!-- ▲▲▲ #app-container 到此彻底结束 ▲▲▲ -->
+/* --- 视图2: 聊天窗口 --- */
+#chat-ai-name { display: block; font-size: 16px; font-weight: bold; }
+#chat-ai-status { display: block; font-size: 12px; opacity: 0.8; }
+#message-container { 
+    flex-grow: 1; 
+    padding: 15px 10px; 
+    overflow-y: auto; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 15px; 
+    /* 【核心】移除背景色，让它彻底变透明！ */
+    /* background-color: var(--background-light); */ 
+}
+.message-row { display: flex; gap: 10px; width: 100%; align-items: flex-start; padding-top: 5px; transition: background-color 0.2s; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.message-content { display: flex; flex-direction: column; gap: 3px; max-width: calc(100% - 100px); position: relative; }
+.message { padding: 10px 12px; border-radius: 10px; line-height: 1.5; word-break: break-word; position: relative; }
+/* 【全新】语音气泡专属样式 */
+.message-voice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    min-width: 100px; /* 最小宽度，防止太短不好看 */
+}
+.play-icon-container {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.user-row .play-icon-container {
+    background-color: rgba(255, 255, 255, 0.9);
+}
+.assistant-row .play-icon-container {
+    background-color: var(--background-white); /* 改为白色背景 */
+    /* 可选：添加一个细微的边框，让它在白色气泡上更清晰 */
+    border: 1px solid #eeeeee; 
+}
+.play-icon-container svg {
+    width: 16px;
+    height: 16px;
+}
+.user-row .play-icon-container svg {
+    fill: var(--qq-blue);
+}
+.assistant-row .play-icon-container svg {
+    fill: var(--qq-blue); /* 图标颜色改为蓝色 */
+}
+.sound-wave {
+    flex-grow: 1;
+    height: 20px;
+    display: flex;
+    align-items: flex-end; /* 让柱子底部对齐 */
+    gap: 2px;
+    min-width: 30px; /* 【核心修复】确保声波区域至少有30px宽度，绝不会消失 */
+}
+.wave-bar {
+    flex-grow: 1; /* 让柱子自动填满空间 */
+    border-radius: 2px;
+    animation-duration: 1.2s;
+    animation-iteration-count: infinite;
+    animation-timing-function: ease-in-out;
+}
+.user-row .wave-bar { background-color: white; }
+.assistant-row .wave-bar { background-color: #dcdcdc; }
+.voice-duration {
+    flex-shrink: 0;
+    font-size: 14px;
+    font-weight: bold;
+}
+.user-row .voice-duration { color: white; }
+.assistant-row .voice-duration { color: #555; }
 
-    <!-- ############################################################### -->
-    <!-- #####          所有的弹窗(Modal)都应该放在这里            ##### -->
-    <!-- #####         作为 app-container 的兄弟，而不是孩子         ##### -->
-    <!-- ############################################################### -->
+/* 播放动画 */
+.message-voice.playing .wave-bar {
+    animation-name: play-animation;
+}
+@keyframes play-animation {
+    0% { transform: scaleY(0.3); }
+    25% { transform: scaleY(1); }
+    50% { transform: scaleY(0.5); }
+    75% { transform: scaleY(0.8); }
+    100% { transform: scaleY(0.3); }
+}
+.voice-text-content {
+    background-color: var(--background-white);
+    padding: 10px 12px;
+    border-radius: 10px;
+    margin-top: 5px;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text-dark);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    /* 默认隐藏 */
+    display: none;
+}
+.user-row .voice-text-content {
+    /* 用户侧的文字气泡颜色可以不同，但这里保持统一 */
+    background-color: var(--background-white);
+}
+.assistant-row { justify-content: flex-start; }
+.assistant-row .message { 
+    background-color: var(--background-white); /* 【已恢复】AI气泡恢复为纯白色 */
+    color: var(--text-dark); 
+    align-self: flex-start;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
 
-    <!-- 用户信息修改弹窗 -->
-    <div id="user-profile-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header"><h3>修改我的信息</h3><button id="close-modal-button" class="close-button">&times;</button></div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>我的头像</label>
-                    <div class="image-upload-area user-avatar-upload" id="user-avatar-upload-area">
-                        <img id="user-avatar-preview" class="image-preview" src="">
-                        <span>点击上传</span>
-                    </div>
-                    <input type="file" id="user-avatar-upload-input" class="hidden-file-input" accept="image/*">
-                </div>
-                <div class="form-group"><label for="modal-user-name-input">我的昵称</label><input type="text" id="modal-user-name-input"></div>
-                <div class="form-group"><label for="modal-user-persona-input">我的人设</label><textarea id="modal-user-persona-input" rows="4"></textarea></div>
-            </div>
-            <div class="modal-footer"><button id="save-profile-button">保存</button></div>
-        </div>
-    </div> 
+.assistant-row .message::before { 
+    content: ''; 
+    position: absolute; 
+    left: -8px;
+    top: 12px; 
+    width: 0; 
+    height: 0; 
+    border-style: solid; 
+    border-width: 6px 8px 6px 0; 
+    /* 【【【核心修复】】】小尾巴的颜色永远跟随气泡的背景色 */
+    border-color: transparent var(--background-white) transparent transparent; 
+    z-index: 1;
+}
+.user-row { justify-content: flex-end; }
+.user-row .avatar { order: 2; }
+.user-row .message-content { order: 1; align-items: flex-end;}
+.user-row .message { background-color: var(--qq-blue); color: var(--text-light); align-self: flex-end; }
+.user-row .message::after { content: ''; position: absolute; right: -6px; top: 12px; width: 0; height: 0; border-style: solid; border-width: 6px 0 6px 8px; border-color: transparent transparent transparent var(--qq-blue); }
+.select-checkbox { width: 18px; height: 18px; border: 1px solid var(--border-color); border-radius: 50%; flex-shrink: 0; transition: all 0.2s; }
+.select-checkbox.checked { background-color: var(--qq-blue); border-color: var(--qq-blue); background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3e%3cpath d='M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022Z'/%3e%3c/svg%3e"); }
+.message-row.in-select-mode { cursor: pointer; padding: 5px; border-radius: 8px; }
+.message-row.in-select-mode:hover { background-color: #e9e9e9; }
+.timestamp-display {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 8px 0;
+}
+.suggestion-panel { flex-shrink: 0; padding: 10px; background-color: var(--background-light); border-top: 1px solid var(--border-color); display: flex; flex-wrap: wrap; gap: 8px; }
+.suggestion-button { background-color: #fff; border: 1px solid var(--border-color); border-radius: 15px; padding: 6px 12px; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+.suggestion-button:hover { background-color: var(--qq-blue); color: white; border-color: var(--qq-blue); }
+.chat-input-area { 
+    display: flex; 
+    flex-direction: column; 
+    flex-shrink: 0; 
+    background-color: rgba(247, 247, 247, 0.85); 
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border-color); 
+}
+.chat-functions-toolbar { padding: 8px 15px; display: flex; justify-content: space-around; }
+.input-row { padding: 10px; display: flex; gap: 10px; align-items: flex-end; }
+.tool-button { background: none; border: none; cursor: pointer; padding: 5px; border-radius: 5px; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s; }
+.tool-button:hover { background-color: #e0e0e0; }
+.tool-button svg { width: 22px; height: 22px; stroke: #555; }
+.tool-button:hover svg { stroke: #000; }
+#chat-input { flex-grow: 1; border: none; background-color: var(--background-white); border-radius: 12px; padding: 10px 15px; font-size: 16px; resize: none; max-height: 100px; }
+#send-button { border: none; background-color: var(--qq-blue); color: var(--text-light); border-radius: 8px; cursor: pointer; font-weight: bold; padding: 10px 20px; flex-shrink: 0; }
 
-    <!-- 表情包上传弹窗 -->
-    <div id="sticker-upload-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="sticker-upload-title">添加表情包</h3>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>表情预览</label>
-                    <div class="image-upload-area sticker-preview-area">
-                        <img id="sticker-upload-preview" class="image-preview" src="">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="sticker-upload-url-input">图片地址 (URL)</label>
-                    <input type="text" id="sticker-upload-url-input" placeholder="粘贴URL或选择本地文件">
-                </div>
-                 <div class="form-group">
-                    <label for="sticker-upload-file-input" class="button-like-label">从本地上传</label>
-                    <input type="file" id="sticker-upload-file-input" class="hidden-file-input" accept="image/*">
-                </div>
-                <div class="form-group">
-                    <label for="sticker-upload-desc-input">表情描述 (给AI看)</label>
-                    <textarea id="sticker-upload-desc-input" rows="3" placeholder="例如：一只微笑的柴犬"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer-split">
-                <button id="cancel-sticker-upload-btn" class="modal-button secondary">取消</button>
-                <button id="confirm-sticker-upload-btn" class="modal-button primary">保存</button>
-            </div>
-        </div>
-    </div>
-     
-    <!-- 发送语音弹窗 -->
-    <div id="voice-input-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>发送语音</h3>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="voice-text-input">请输入你想说的内容:</label>
-                    <textarea id="voice-text-input" rows="3"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer-split">
-                <button id="cancel-voice-button" class="modal-button secondary">取消</button>
-                <button id="confirm-voice-button" class="modal-button primary">确定</button>
-            </div>
-        </div>
-    </div>
+/* --- 视图3: 动态页面 --- */
+.moments-container { flex-grow: 1; overflow-y: auto; }
+.moments-header { position: relative; height: 200px; }
+.moments-banner { width: 100%; height: 100%; object-fit: cover; }
+.moments-user-info { position: absolute; bottom: -15px; right: 20px; display: flex; align-items: flex-end; gap: 10px;}
+#moments-user-name { color: white; text-shadow: 1px 1px 2px black; font-weight: bold; padding-bottom: 5px; }
+.avatar-lg { width: 70px; height: 70px; border-radius: 10px; border: 2px solid white; object-fit: cover;}
+.moments-nav { display: flex; justify-content: space-around; padding: 25px 10px 10px; background-color: white; border-bottom: 1px solid var(--border-color); }
+.moments-feed { padding: 10px; background-color: white; }
+.fab { position: fixed; bottom: 80px; right: 25px; width: 50px; height: 50px; background-color: var(--qq-blue); color: white; border-radius: 50%; border: none; font-size: 24px; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
 
-    <!-- AI图片描述弹窗 -->
-    <div id="ai-image-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>照片描述</h3>
-            </div>
-            <div class="modal-body">
-                <p id="ai-image-description-text"></p>
-            </div>
-            <div class="modal-footer">
-                <button id="close-ai-image-modal-button">好的</button>
-            </div>
-        </div>
-    </div>
+/* --- 视图4: 设置页面 --- */
+#settings-form { padding: 20px; overflow-y: auto; flex-grow: 1; background-color: white; }
+.form-group { margin-bottom: 20px; }
+.form-group label { display: block; margin-bottom: 8px; font-weight: bold; color: #333; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 5px; font-size: 14px; box-sizing: border-box; }
+.model-selection-area { display: flex; gap: 10px; }
+#fetch-models-button { padding: 0 20px; border: none; background-color: var(--qq-blue); color: var(--text-light); border-radius: 5px; cursor: pointer; flex-shrink: 0; }
+#save-settings-button { width: 100%; padding: 12px; border: none; background-color: #28a745; color: white; border-radius: 5px; font-size: 16px; cursor: pointer; }
+hr { border: none; border-top: 1px solid var(--background-light); margin: 20px 0; }
+.placeholder-text { color: #999; text-align: center; }
 
-    <!-- 用户上传/模拟图片弹窗 -->
-    <div id="image-upload-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="image-upload-title">发送图片</h3>
-            </div>
-            <div class="modal-body">
-                <div class="form-group" id="image-preview-area">
-                    <div class="image-upload-area" id="user-image-upload-area">
-                        <img id="user-image-preview" class="image-preview" src="">
-                        <span>点击上传</span>
-                    </div>
-                    <input type="file" id="user-image-upload-input" class="hidden-file-input" accept="image/*">
-                </div>
-                <div class="form-group" id="image-description-group">
-                    <textarea id="image-description-input" rows="3" placeholder="可以对图片进行提问或补充说明..."></textarea>
-                </div>
-            </div>
-            <div class="modal-footer-split">
-                <button id="cancel-image-upload-button" class="modal-button secondary">取消</button>
-                <button id="confirm-image-upload-button" class="modal-button primary">发送</button>
-            </div>
-        </div>
-    </div>
+/* --- 视图5: 聊天设置页面 --- */
+.contact-settings-container { flex-grow: 1; overflow-y: auto; padding: 15px 0; background-color: var(--background-light); }
+.settings-group { background-color: white; border-radius: 8px; margin: 0 10px 12px; overflow: hidden; }
+.settings-item { display: flex; justify-content: space-between; align-items: center; padding: 14px 12px; font-size: 15px; cursor: pointer; transition: background-color 0.2s; }
+.settings-item:not(:last-child) { border-bottom: 1px solid var(--background-light); }
+.settings-item:hover { background-color: #f9f9f9; }
+.settings-item .arrow { color: var(--text-secondary); font-size: 18px; font-weight: bold; }
+.settings-item.contact-profile { font-weight: bold; font-size: 16px; gap: 12px; justify-content: flex-start; }
+.settings-item.contact-profile .arrow { margin-left: auto; }
+.settings-item .danger { color: #e53935; width: 100%; text-align: center; }
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+.slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
+input:checked + .slider { background-color: #4CAF50; }
+input:checked + .slider:before { transform: translateX(20px); }
 
-    <!-- 自定义确认弹窗 -->
-    <div id="custom-confirm-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="custom-confirm-title">确认操作</h3>
-            </div>
-            <div class="modal-body">
-                <p id="custom-confirm-text"></p>
-            </div>
-            <div class="modal-footer-split">
-                <button id="custom-confirm-cancel-btn" class="modal-button secondary">取消</button>
-                <button id="custom-confirm-ok-btn" class="modal-button primary">确定</button>
-            </div>
-        </div>
-    </div>
+/* --- 视图6: AI信息编辑页面 --- */
+#ai-editor-form { flex-grow: 1; overflow-y: auto; padding: 20px; background-color: white; }
 
-    <!-- 红包详情弹窗 -->
-    <div id="red-packet-modal" class="modal-overlay hidden">
-        <div class="red-packet-content">
-            <button id="close-rp-modal-button" class="close-button">&times;</button>
-            <div class="rp-header">
-                <img id="rp-sender-avatar" class="avatar" src="">
-                <p id="rp-sender-name"></p>
-                <p id="rp-blessing"></p>
-                <div class="rp-amount-line">
-                    <span class="rp-currency">¥</span>
-                    <span id="rp-amount">0.00</span>
-                </div>
-                <p class="rp-status-text">收到的红包已存入余额</p>
-            </div>
-            <div class="rp-footer">
-                <div id="rp-receiver-list"></div>
-            </div>
-        </div>
-    </div>
+/* 步骤1: 明确定义水平容器的行为 */
+.form-group-horizontal {
+    display: flex;           /* 启用 Flexbox 布局 */
+    flex-direction: row;     /* 强制水平排列 (虽然是默认值，但写上更保险) */
+    flex-wrap: nowrap;       /* 强制不换行 */
+    align-items: flex-end;   /* 保持原有的底部对齐 */
+    gap: 15px;               /* 保持间距 */
+    margin-bottom: 20px;     /* 保持外边距 */
+}
 
-    <!-- 自定义提示弹窗 -->
-    <div id="custom-alert-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="custom-alert-title">提示</h3>
-            </div>
-            <div class="modal-body">
-                <p id="custom-alert-text"></p>
-            </div>
-            <div class="modal-footer">
-                <button id="custom-alert-ok-btn">确定</button>
-            </div>
-        </div>
-    </div>
+/* 步骤2: 用最严格的方式定义“AI头像”区域 */
+.form-group.avatar-group {
+    flex: 0 0 90px; /* 终极咒语1: 不准变大(0)，不准变小(0)，固定宽度90px */
+}
 
-    <!-- 发送红包弹窗 -->
-    <div id="red-packet-input-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>发送红包</h3>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="rp-input-blessing">祝福语</label>
-                    <input type="text" id="rp-input-blessing" value="恭喜发财">
-                </div>
-                <div class="form-group">
-                    <label for="rp-input-amount">金额 (元)</label>
-                    <input type="number" id="rp-input-amount" placeholder="0.00" step="0.01">
-                </div>
-            </div>
-            <div class="modal-footer-split">
-                <button id="cancel-rp-input-btn" class="modal-button secondary">取消</button>
-                <button id="confirm-rp-input-btn" class="modal-button primary">塞钱进红包</button>
-            </div>
-        </div>
-    </div>
+/* 步骤3: 用最严格的方式定义“AI照片”区域，并加入解决问题的关键代码 */
+.form-group.photo-group {
+    flex: 1 1 auto; /* 终极咒语2: 可以变大(1)，可以变小(1)，尺寸随内容自适应 */
+    min-width: 0;   /* 关键代码！解除内部内容的宽度限制，允许它被正确压缩 */
+}
 
-    <!-- 记忆总结编辑弹窗 -->
-    <div id="summary-editor-modal" class="modal-overlay hidden">
-        <div class="modal-content modal-lg">
-            <div class="modal-header">
-                <h3>编辑记忆总结</h3>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>AI总结的记忆草稿 (YAML格式):</label>
-                    <textarea id="summary-editor-textarea" rows="12"></textarea>
-                </div>
-                <p id="summary-status-text" class="summary-status"></p>
-            </div>
-            <div class="modal-footer-split">
-                <button id="cancel-summary-btn" class="modal-button secondary">取消</button>
-                <button id="copy-summary-btn" class="modal-button secondary">复制到剪贴板</button>
-                <button id="save-summary-btn" class="modal-button primary">存入AI记忆</button>
-            </div>
-        </div>
-    </div>
+/* 【新增】头像上传区域样式 (这部分无需改动，保持原样) */
+.image-upload-area.avatar-upload {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%; /* 圆形 */
+}
+/* 【新增】照片上传区域样式 (这部分无需改动，保持原样) */
+.image-upload-area.photo-upload {
+    width: 100%;
+    height: 120px; /* 4:3 比例的高度 */
+    border-radius: 8px; /* 方形 */
+}
+#ai-editor-form input[type="text"] {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+/* 上面那行 .form-group-horizontal .form-group { ... } 已被彻底删除 */
+.image-upload-area { width: 100%; height: 120px; border: 2px dashed var(--border-color); border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; background-color: #f9f9f9; position: relative; overflow: hidden; }
+.image-upload-area:hover { border-color: var(--qq-blue); background-color: #f0f8ff; }
+.image-upload-area span { color: var(--text-secondary); font-size: 14px; }
+.image-preview { position: absolute; width: 100%; height: 100%; object-fit: cover; }
+.hidden-file-input { display: none; }
+#ai-editor-form .form-group label { display: block; margin-bottom: 8px; font-weight: bold; }
+#ai-editor-form textarea { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 5px; font-size: 14px; box-sizing: border-box; }
+#add-worldbook-entry-button { width: 100%; padding: 10px; background-color: #f0f0f0; border: 1px dashed var(--border-color); border-radius: 5px; cursor: pointer; margin-top: 10px; }
+#save-ai-profile-button { width: 100%; padding: 12px; margin-top: 20px; background-color: var(--qq-blue); color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+.worldbook-entry { display: flex; flex-direction: column; gap: 5px; margin-bottom: 15px; background-color: #f9f9f9; padding: 10px; border-radius: 5px; }
+.worldbook-header { display: flex; gap: 10px; }
+.worldbook-entry .worldbook-key { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; }
+.worldbook-entry .worldbook-value { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; min-height: 60px; resize: vertical; box-sizing: border-box; font-family: inherit; font-size: 14px; }
+.worldbook-delete-btn { background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; padding: 0 12px; font-size: 18px; }
 
-    <!-- 总结模式选择弹窗 -->
-    <div id="mode-select-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>请选择总结模式</h3>
-            </div>
-            <div class="modal-body">
-                <p>AI将根据你选择的模式，采用不同的侧重点来总结你们的对话。</p>
-                <div class="mode-select-buttons">
-                    <button id="mode-online-btn" class="modal-button primary">线上闲聊模式</button>
-                    <button id="mode-offline-btn" class="modal-button secondary">线下剧情模式</button>
-                </div>
-            </div>
-        </div>
-    </div>
+/* --- 用户信息弹窗样式 --- */
+.modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+.modal-content {
+    /* 【核心】把背景色从纯白改为带有70%不透明度的白色 */
+    background-color: rgba(255, 255, 255, 0.7);
+    /* 【核心】添加背景模糊滤镜 */
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px); /* 兼容Safari浏览器 */
+    
+    /* (可选) 增加一个微妙的“玻璃”边框，让质感更好 */
+    border: 1px solid rgba(255, 255, 255, 0.2);
 
-    <!-- 手动总结范围设置弹窗 -->
-    <div id="summary-range-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>手动总结设置</h3>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="summary-range-input">要总结最近的多少条消息？</label>
-                    <input type="number" id="summary-range-input" placeholder="例如: 100">
-                    <p style="font-size:12px; color:#999; margin-top:5px;">(不填则默认总结全部新消息)</p>
-                </div>
-            </div>
-            <div class="modal-footer-split">
-                <button id="cancel-summary-range-btn" class="modal-button secondary">取消</button>
-                <button id="confirm-summary-range-btn" class="modal-button primary">下一步</button>
-            </div>
-        </div>
-    </div>
+    /* -- 以下是你原来的样式，保持不变 -- */
+    padding: 20px; 
+    border-radius: 8px; 
+    width: 90%; 
+    max-width: 320px; 
+    box-shadow: 0 5px 20px rgba(0,0,0,0.25); 
+    display: flex; 
+    flex-direction: column; 
+}
+.modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+.modal-header h3 { margin: 0; font-size: 16px; }
+.close-button { background: none; border: none; font-size: 24px; cursor: pointer; color: #999; }
+.modal-body .form-group { margin-bottom: 15px; }
+.modal-footer { margin-top: 10px; }
+.modal-footer button { width: 100%; padding: 10px; border: none; border-radius: 5px; background-color: var(--qq-blue); color: white; font-size: 16px; cursor: pointer; }
+/* 【新增】左右分割的弹窗底部按钮样式 */
+.modal-footer-split {
+    display: flex;
+    margin-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+.modal-button {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+}
+.modal-button.secondary {
+    color: #555;
+    border-right: 1px solid var(--border-color);
+}
+.modal-button.primary {
+    color: var(--qq-blue);
+}
+.image-upload-area.user-avatar-upload { width: 80px; height: 80px; border-radius: 50%; margin: 0 auto; }
 
-    <!-- 关系确认弹窗 -->
-    <div id="relationship-confirm-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="relationship-confirm-title">情侣关系邀请</h3>
-            </div>
-            <div class="modal-body">
-                <p id="relationship-confirm-text"></p>
-            </div>
-            <div class="modal-footer-split">
-                <button id="relationship-confirm-refuse-btn" class="modal-button secondary">残忍拒绝</button>
-                <button id="relationship-confirm-accept-btn" class="modal-button primary">接受邀请</button>
-            </div>
-        </div>
-    </div>
-    <!-- 【【【全新：文本编辑弹窗】】】 -->
-    <div id="text-editor-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="text-editor-title">编辑消息</h3>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <textarea id="text-editor-textarea" rows="5"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer-split">
-                <button id="cancel-text-edit-btn" class="modal-button secondary">取消</button>
-                <button id="save-text-edit-btn" class="modal-button primary">保存</button>
-            </div>
-        </div>
-    </div>
-    <script src="script.js"></script>
+/* --- 底部导航栏 --- */
+#app-nav { 
+    position: relative; 
+    flex-shrink: 0; 
+    width: 100%; 
+    height: var(--nav-height); 
+    
+    /* 【核心】背景色改为带有85%不透明度的浅灰色 */
+    background-color: rgba(247, 247, 247, 0.85); 
+    /* 【核心】添加背景模糊滤镜 */
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    
+    border-top: 1px solid var(--border-color); 
+    display: flex; 
+    z-index: 10; 
+}
+.nav-button { flex: 1; display: flex; justify-content: center; align-items: center; cursor: pointer; color: var(--text-secondary); font-size: 14px; }
+.nav-button.active { color: var(--qq-blue); }
+/* --- 聊天时间戳样式 (请将此段代码粘贴到 style.css 文件末尾) --- */
+.timestamp-display {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 8px 0;
+}
+/* 用户发送的真实图片消息样式 */
+.message-image-user {
+    padding: 5px !important;
+    background-color: transparent !important;
+    max-width: 150px;
+    box-shadow: none !important;
+}
+.message-image-user img {
+    width: 100%;
+    border-radius: 8px;
+    display: block;
+    cursor: pointer;
+}
+.user-row .message-image-user::after {
+    display: none; /* 用户图片不需要聊天箭头 */
+}
 
-</body>
-</html>
+/* AI 发送的 “图片已被坐塌” 样式 */
+.message-image-ai {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px !important;
+    border: 2px solid #e0e0e0;
+    cursor: pointer;
+    background-color: #f9f9f9 !important;
+    min-width: 180px;
+    text-align: center;
+}
+.message-image-ai .placeholder-icon {
+    width: 80px;
+    height: auto;
+    opacity: 0.6;
+}
+.message-image-ai .placeholder-text {
+    margin-top: 10px;
+    font-size: 14px;
+    color: #555;
+    font-weight: bold;
+}
+
+/* 上传弹窗里的预览区域微调 */
+#user-image-upload-area {
+    width: 100px;
+    height: 100px;
+}
+/* --- (新增) 聊天图片上传预览框样式 --- */
+#user-image-upload-area {
+    width: 120px;
+    height: 120px;
+    border-radius: 8px; /* 方形带圆角 */
+    margin: 0 auto 15px; /* 居中并与下方输入框拉开距离 */
+}
+/* --- (新增) AI 直接发送图片的样式 --- */
+.message-image-ai-direct {
+    padding: 5px !important; /* 只需要一点内边距 */
+    background-color: transparent !important; /* 背景透明 */
+    max-width: 150px; /* 限制最大宽度，防止图片过大 */
+    box-shadow: none !important; /* 去掉默认的气泡阴影 */
+    cursor: pointer; /* 鼠标悬停时显示为小手，提示可点击 */
+    border-radius: 10px; /* 确保容器有圆角 */
+    overflow: hidden; /* 隐藏内部图片溢出的部分 */
+}
+
+.message-image-ai-direct img {
+    width: 100%; /* 图片宽度撑满容器 */
+    display: block; /* 消除图片下方的微小间隙 */
+    border-radius: 8px; /* 给图片本身也加个小圆角 */
+}
+
+/* 确保AI图片气泡的箭头也能正常显示 */
+.assistant-row .message-image-ai-direct::before {
+    content: ''; 
+    position: absolute; 
+    left: -8px;
+    top: 12px; 
+    width: 0; 
+    height: 0; 
+    border-style: solid; 
+    border-width: 6px 8px 6px 0; 
+    /* 箭头颜色应与聊天背景色一致，或白色 */
+    border-color: transparent var(--background-white) transparent transparent; 
+    z-index: 1;
+}
+/* --- (新增) 聊天设置页图标占位符样式 --- */
+.settings-item-icon-placeholder {
+    width: 40px;  /* 尺寸与聊天头像保持一致 */
+    height: 40px; /* 尺寸与聊天头像保持一致 */
+    flex-shrink: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    color: var(--qq-blue);
+    background-color: #f0f2f5;
+    border-radius: 50%; /* 核心修改：50% 即可变成完美的圆形 */
+    /* margin-right: 12px; (这个间距由父元素的 gap 控制，可以省略) */
+}
+/* --- (全新) AI帮回/建议面板样式最终版 V4 --- */
+
+/* (核心修改1) 给建议面板增加右内边距，为刷新按钮“预留”空间 */
+#ai-suggestion-panel {
+    padding: 10px 15px; /* (核心修复) 恢复左右对称的内边距 */
+    background-color: var(--background-light);
+    border-top: 1px solid var(--border-color);
+    position: relative; 
+}
+
+.suggestion-buttons-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* 刷新按钮容器不再需要，可以删除其样式 */
+/* #refresh-suggestions-container { ... } */
+
+#refresh-suggestions-btn {
+    position: absolute;
+    bottom: 10px; /* 微调位置 */
+    right: 10px;  /* 微调位置 */
+    width: 36px;  /* 放大按钮 */
+    height: 36px; /* 放大按钮 */
+    border: none;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background-color 0.3s ease, opacity 0.3s ease;
+    opacity: 0.5;
+}
+/* (核心修改3) 鼠标悬停或点击时，完全不透明 */
+#ai-suggestion-panel:hover #refresh-suggestions-btn,
+#refresh-suggestions-btn:active {
+    opacity: 1;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+#refresh-suggestions-btn svg {
+    width: 20px;  /* 放大图标 */
+    height: 20px; /* 放大图标 */
+    stroke: white; /* 图标改为白色，在深色背景上更清晰 */
+    stroke-width: 2.5;
+}
+
+#refresh-suggestions-btn.spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+/* --- (新增) 删除按钮及自定义弹窗样式 --- */
+
+/* 步骤1: 定义通用的危险文字样式（比如“清空聊天记录”），让它保持红色文字 */
+.settings-item .danger {
+    color: #e53935;
+    width: 100%;
+    text-align: center;
+}
+
+/* 步骤2: 专门为“删除角色”按钮本身设置红色的背景 */
+#cs-delete-contact {
+    background-color: #e53935; /* 核心修改：背景变为红色 */
+    transition: background-color 0.2s; /* 让颜色变化更平滑 */
+}
+
+/* 步骤3: 覆盖“删除角色”按钮内部的文字颜色，让它变成白色 */
+#cs-delete-contact .danger {
+    color: white; /* 核心修改：文字变为白色 */
+    font-weight: bold; /* 加粗文字，更醒目 */
+}
+
+/* (可选) 步骤4: 添加一个漂亮的鼠标悬停效果 */
+#cs-delete-contact:hover {
+    background-color: #d32f2f; /* 鼠标放上去时，背景变成更深的红色 */
+}
+/* --- 【全新】红包系统样式 --- */
+
+/* 聊天气泡里的红包样式 */
+.message-red-packet {
+    background-color: #fa9d3b; /* 红包橙红色 */
+    color: white;
+    padding: 15px !important;
+    width: 240px;
+    cursor: pointer;
+    border-radius: 8px !important;
+    transition: background-color 0.2s;
+    position: relative;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.message-red-packet:hover {
+    background-color: #f98e22;
+}
+
+.message-red-packet.opened {
+    background-color: #fcd7b6; /* 已领取后的颜色 */
+    cursor: default;
+}
+
+.rp-bubble-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.rp-bubble-icon {
+    font-size: 36px;
+    flex-shrink: 0;
+}
+.rp-bubble-info p {
+    margin: 0;
+    font-size: 16px;
+    font-weight: bold;
+}
+.rp-bubble-info span {
+    font-size: 13px;
+    opacity: 0.9;
+}
+
+/* 红包详情弹窗样式 */
+.red-packet-content {
+    background-color: #f7f7f7;
+    width: 100%;
+    max-width: 360px; /* 匹配app宽度 */
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+}
+.red-packet-content .close-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    color: #fff;
+    font-size: 28px;
+    z-index: 2;
+}
+.rp-header {
+    background: linear-gradient(180deg, #e85a57 0%, #d94f4c 100%);
+    text-align: center;
+    padding: 40px 20px 20px;
+    color: white;
+    flex-shrink: 0;
+}
+.rp-header .avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    margin-bottom: 8px;
+}
+.rp-header p { margin: 4px 0; }
+#rp-sender-name { font-size: 15px; opacity: 0.9; }
+#rp-blessing { font-size: 18px; }
+.rp-amount-line {
+    font-size: 48px;
+    font-weight: bold;
+    margin: 15px 0;
+}
+.rp-currency { font-size: 30px; margin-right: 5px;}
+.rp-status-text { font-size: 14px; color: #ffd76a; }
+
+.rp-footer {
+    flex-grow: 1;
+    overflow-y: auto;
+    background-color: white;
+    padding: 10px 15px;
+}
+.receiver-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+.receiver-item .avatar { width: 40px; height: 40px; }
+.receiver-info {
+    flex-grow: 1;
+    margin: 0 12px;
+}
+.receiver-name { display: block; font-size: 15px; color: #333; }
+.receiver-time { display: block; font-size: 12px; color: #999; }
+.receiver-amount { font-size: 15px; font-weight: bold; color: #333; }
+
+/* 领取红包后的系统提示消息 */
+.system-message {
+    text-align: center;
+    color: #999;
+    font-size: 12px;
+    padding: 8px 0;
+    width: 100%;
+}
+
+/* 自定义弹窗内的文本样式 */
+#custom-confirm-text, #custom-alert-text {
+    line-height: 1.6;
+    font-size: 15px;
+    white-space: pre-wrap;
+}
+/* --- 【全新】红包系统样式 --- */
+
+/* 聊天气泡里的红包样式 */
+.message-red-packet {
+    background-color: #fa9d3b; /* 红包橙红色 */
+    color: white;
+    padding: 15px !important;
+    width: 240px;
+    cursor: pointer;
+    border-radius: 8px !important;
+    transition: background-color 0.2s;
+    position: relative;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.message-red-packet:hover {
+    background-color: #f98e22;
+}
+
+/* 已领取的红包样式 */
+.message-red-packet.opened {
+    background-color: #fcd7b6; /* 已领取后的颜色 */
+    cursor: default;
+}
+
+.rp-bubble-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.rp-bubble-icon {
+    font-size: 36px;
+    flex-shrink: 0;
+}
+.rp-bubble-info p {
+    margin: 0;
+    font-size: 16px;
+    font-weight: bold;
+}
+.rp-bubble-info span {
+    font-size: 13px;
+    opacity: 0.9;
+}
+
+/* 红包详情弹窗样式 (全屏模态框) */
+.red-packet-content {
+    background-color: #f7f7f7;
+    width: 100%;
+    max-width: 360px; /* 匹配app宽度 */
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+}
+.red-packet-content .close-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    color: #fff;
+    font-size: 28px;
+    z-index: 2;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+.rp-header {
+    background: linear-gradient(180deg, #e85a57 0%, #d94f4c 100%);
+    text-align: center;
+    padding: 40px 20px 20px;
+    color: white;
+    flex-shrink: 0;
+}
+.rp-header .avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    margin-bottom: 8px;
+}
+.rp-header p { margin: 4px 0; }
+#rp-sender-name { font-size: 15px; opacity: 0.9; }
+#rp-blessing { font-size: 18px; font-weight: bold; }
+.rp-amount-line {
+    font-size: 48px;
+    font-weight: bold;
+    margin: 15px 0;
+}
+.rp-currency { font-size: 30px; margin-right: 5px;}
+.rp-status-text { font-size: 14px; color: #ffd76a; }
+
+.rp-footer {
+    flex-grow: 1;
+    overflow-y: auto;
+    background-color: white;
+    padding: 10px 15px;
+}
+.receiver-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+.receiver-item .avatar { width: 40px; height: 40px; }
+.receiver-info {
+    flex-grow: 1;
+    margin: 0 12px;
+}
+.receiver-name { display: block; font-size: 15px; color: #333; }
+.receiver-time { display: block; font-size: 12px; color: #999; }
+.receiver-amount { font-size: 15px; font-weight: bold; color: #333; }
+
+/* 领取红包后的系统提示消息 (参考图4) */
+.system-message {
+    text-align: center;
+    color: #999;
+    font-size: 12px;
+    padding: 8px 0;
+    width: 100%;
+}
+/* --- 【【【核心新增：表情包系统样式】】】 --- */
+
+/* 聊天气泡中的表情包消息样式 */
+.message-sticker {
+    padding: 0 !important; /* 无内边距 */
+    background-color: transparent !important; /* 背景透明 */
+    box-shadow: none !important; /* 无阴影 */
+    max-width: 120px; /* 限制最大宽度 */
+    overflow: hidden;
+}
+.message-sticker img {
+    width: 100%;
+    display: block;
+}
+.user-row .message-sticker::after, .assistant-row .message-sticker::before {
+    display: none; /* 表情包消息不需要聊天箭头 */
+}
+
+/* 底部滑出的表情包面板 */
+.sticker-panel {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 220px; /* 面板高度 */
+    background-color: #f0f2f5;
+    border-top: 1px solid var(--border-color);
+    overflow-y: auto;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); /* 响应式网格布局 */
+    gap: 10px;
+    z-index: 50;
+    transition: transform 0.3s ease-in-out;
+    transform: translateY(100%); /* 【修改1】默认状态就是隐藏在屏幕下方 */
+}
+
+/* 【修改2】新增一个 .is-open 类，当拥有它时，面板就会滑上来 */
+.sticker-panel.is-open {
+    transform: translateY(0);
+}
+
+/* 网格中的单个表情包样式 */
+.sticker-item {
+    width: 70px;
+    height: 70px;
+    background-color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 5px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.sticker-item img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+/* 网格中的“添加”按钮 */
+.sticker-add-btn {
+    border: 2px dashed var(--border-color);
+    background-color: #fafafa;
+    font-size: 30px;
+    color: var(--text-secondary);
+}
+/* --- (全新) AI表情包管理页面样式 --- */
+#sticker-manager-container {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 15px;
+    background-color: var(--background-light);
+}
+.sticker-group-card {
+    background-color: white;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.sticker-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    border-bottom: 1px solid #f0f0f0;
+}
+.sticker-group-header h4 {
+    margin: 0;
+    font-size: 16px;
+}
+.sticker-group-header .header-actions button {
+    background: none;
+    border: 1px solid var(--border-color);
+    padding: 4px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-left: 8px;
+    font-size: 13px;
+}
+.sticker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+    gap: 10px;
+    padding: 15px;
+}
+.sticker-manager-item {
+    position: relative;
+    width: 70px;
+    height: 70px;
+    background-color: #f0f2f5;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 5px;
+}
+.sticker-manager-item img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+.sticker-delete-btn {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 20px;
+    height: 20px;
+    background-color: #e53935;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 20px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.sticker-manager-item:hover .sticker-delete-btn {
+    opacity: 1;
+}
+.sticker-add-placeholder {
+    border: 2px dashed var(--border-color);
+    cursor: pointer;
+    font-size: 24px;
+    color: var(--text-secondary);
+}
+.button-like-label {
+    display: inline-block;
+    padding: 10px 15px;
+    background-color: var(--qq-blue);
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: center;
+}
+.sticker-preview-area {
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 15px;
+}
+/* --- (全新) AI信息页-表情包分组选择样式 --- */
+#ai-sticker-groups-container {
+    display: flex;
+    flex-direction: column; /* 让每个条目竖直排列 */
+    gap: 12px; /* 增加条目之间的间距 */
+}
+
+.checkbox-item {
+    display: flex; /* 启用flex布局，这是对齐的关键 */
+    align-items: center; /* 垂直居中对齐 */
+    cursor: pointer;
+}
+
+.checkbox-item input[type="checkbox"] {
+    width: 20px; /* 放大复选框 */
+    height: 20px; /* 放大复选框 */
+    margin-right: 10px; /* 让复选框和文字之间有空隙 */
+}
+
+.checkbox-item label {
+    font-size: 16px; /* 调整文字大小 */
+}
+/* --- (终极修复) AI信息页-表情包分组选择样式 --- */
+#ai-sticker-groups-container {
+    display: flex;
+    flex-direction: column; 
+    gap: 15px; /* 增加条目之间的上下间距 */
+}
+
+.checkbox-item {
+    display: flex; 
+    align-items: center; /* 垂直居中对齐 */
+    cursor: pointer;
+}
+
+.checkbox-item input[type="checkbox"] {
+    /* 重置默认样式，确保它不影响布局 */
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
+
+    /* 手动绘制方框 */
+    width: 20px;
+    height: 20px;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+    
+    /* 关键：让它在flex容器中能完美对齐 */
+    position: relative; 
+    flex-shrink: 0; /* 防止被压缩 */
+    margin-right: 12px; /* 与文字的间距 */
+    cursor: pointer;
+}
+
+/* 绘制“打勾”后的样式 */
+.checkbox-item input[type="checkbox"]:checked {
+    background-color: var(--qq-blue);
+    border-color: var(--qq-blue);
+}
+
+/* 用伪元素绘制那个“√”号 */
+.checkbox-item input[type="checkbox"]:checked::before {
+    content: '✔';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.checkbox-item label {
+    font-size: 16px;
+    /* 确保label本身没有多余的边距影响对齐 */
+    margin: 0; 
+    padding: 0;
+}
+/* --- (全新) AI实时状态显示样式 (V2 - 修复版) --- */
+/* 步骤1: 让整行状态文字（包括“在线”和新状态）都变成普通字体 */
+#chat-ai-status-line {
+    font-weight: normal; 
+}
+
+/* 步骤2: 精细调整新状态的样式 */
+#chat-ai-activity-status {
+    font-size: 12px;     /* 保持你设置的小字号 */
+    margin-left: 1px;    /* 采用你调整的间距 */
+    opacity: 0.9;        
+}
+
+/* 步骤3: 保留自动添加“-”的小魔法 */
+#chat-ai-activity-status:not(:empty)::before {
+    content: "- ";
+    margin-right: 2px;
+}
+/* --- (全新) 记忆总结功能区样式 --- */
+.auto-summary-setting {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+#cs-auto-summary-threshold {
+    width: 60px;
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    text-align: center;
+}
+#cs-message-count {
+    font-weight: bold;
+    color: var(--qq-blue);
+}
+
+/* --- (全新) 记忆总结弹窗样式 --- */
+.modal-content.modal-lg {
+    max-width: 340px; /* 让弹窗更宽一点 */
+}
+#summary-editor-textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font-family: 'Courier New', Courier, monospace; /* 使用等宽字体，方便看YAML */
+    font-size: 13px;
+    line-height: 1.6;
+    resize: vertical;
+}
+.summary-status {
+    font-size: 13px;
+    color: #4CAF50;
+    text-align: center;
+    height: 15px; /* 预留高度防止跳动 */
+    margin-top: 5px;
+}
+/* --- (全新) 自动总结UI交互样式 --- */
+.summary-threshold-display {
+    padding: 4px 12px;
+    border: 1px solid transparent; /* 占位边框 */
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    color: var(--qq-blue);
+    background-color: #f0f2f5;
+}
+.summary-threshold-display:hover {
+    border-color: var(--border-color);
+}
+.summary-threshold-input {
+    width: 60px;
+    padding: 4px 8px;
+    border: 1px solid var(--qq-blue); /* 显示时用醒目边框 */
+    border-radius: 5px;
+    text-align: center;
+    -moz-appearance: textfield; /* 隐藏数字输入框的上下箭头 */
+}
+.summary-threshold-input::-webkit-outer-spin-button,
+.summary-threshold-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* --- (全新) 模式选择弹窗样式 --- */
+.mode-select-buttons {
+    display: flex;
+    flex-direction: column; /* 按钮竖直排列 */
+    gap: 10px; /* 按钮之间的间距 */
+    margin-top: 15px;
+}
+.mode-select-buttons .modal-button {
+    width: 100%;
+    padding: 12px;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    font-weight: bold;
+}
+.mode-select-buttons .modal-button.primary {
+    background-color: var(--qq-blue);
+    color: white;
+    border-color: var(--qq-blue);
+}
+.mode-select-buttons .modal-button.secondary {
+    background-color: white;
+    color: #333;
+}
+/* --- (全新) 全局Toast提示样式 --- */
+#global-toast {
+    position: fixed; /* 固定在屏幕上 */
+    top: 0;
+    left: 50%;
+    transform: translate(-50%, -100%); /* 默认藏在屏幕顶上 */
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 0 0 15px 15px; /* 底部圆角 */
+    z-index: 9999; /* 确保在最顶层 */
+    font-size: 14px;
+    transition: transform 0.4s ease-in-out;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+
+#global-toast.show {
+    transform: translate(-50%, 20px); /* 滑入到屏幕内 */
+}
+
+#global-toast.success {
+    background-color: #4CAF50; /* 成功状态是绿色 */
+}
+
+#global-toast.error {
+    background-color: #f44336; /* 失败状态是红色 */
+}
+/* --- (全新) 情侣关系标志样式 --- */
+.partner-icon {
+    margin-left: 6px;
+    font-size: 14px; /* 可以调整大小 */
+    filter: drop-shadow(0 0 1px rgba(0,0,0,0.3)); /* 给图标一点立体感 */
+}
+/* --- (全新) 关系卡片 V2.0 样式 --- */
+.message-relationship-card {
+    background-color: #f7f7f8;
+    border: 1px solid #e9e9eb;
+    border-radius: 10px;
+    padding: 15px !important;
+    width: 250px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.relationship-card-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.relationship-card-text h4 {
+    margin: 0 0 5px 0;
+    font-size: 16px;
+}
+.relationship-card-text p {
+    margin: 0;
+    font-size: 13px;
+    color: #8e8e93;
+}
+.relationship-card-icon img {
+    width: 50px;
+    height: 50px;
+}
+.relationship-card-footer {
+    border-top: 1px solid #e9e9eb;
+    margin-top: 12px;
+    padding-top: 8px;
+    font-size: 12px;
+    color: #b2b2b2;
+}
+.relationship-card-actions {
+    margin-top: 15px;
+    display: flex;
+    gap: 10px;
+}
+.relationship-card-actions button {
+    flex: 1;
+    padding: 8px;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    background-color: white;
+    cursor: pointer;
+    font-weight: bold;
+}
+.relationship-card-actions button.accept {
+    background-color: var(--qq-blue);
+    color: white;
+    border-color: var(--qq-blue);
+}
+.relationship-card-actions button:disabled {
+    background-color: #e0e0e0;
+    color: #a0a0a0;
+    cursor: not-allowed;
+    border-color: #d0d0d0;
+}
+/* --- (全新 V2.2) 分手卡片样式 --- */
+.message-breakup-card {
+    background-color: #f0f2f5;
+    border: 1px solid #e9e9eb;
+    border-radius: 10px;
+    padding: 15px !important;
+    width: 250px;
+}
+.message-breakup-card h4 {
+    margin: 0;
+    color: #555;
+}
+/* --- (全新) 文本编辑弹窗样式 --- */
+#text-editor-textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font-size: 15px;
+    line-height: 1.6;
+    resize: vertical;
+}
