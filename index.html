@@ -57,14 +57,16 @@
                     </div>
                     <button id="chat-settings-button" class="header-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button>
                 </div>
-                <div id="chat-header-select" class="hidden">
-                    <button id="cancel-select-button" class="header-button-text">取消</button>
-                    <span id="select-count">已选择0项</span>
-                    <div>
-                        <button id="edit-selected-button" class="header-button-text hidden">编辑</button>
-                        <button id="delete-selected-button" class="header-button-text">删除</button>
-                    </div>
+                <div id="chat-header-select" class="chat-header-actions hidden">
+                <button id="cancel-select-button" class="header-button">取消</button>
+                <span id="select-count"></span>
+                <div class="header-action-buttons">
+                    <button id="recall-selected-button" class="header-button" title="撤回">撤回</button>
+                    <button id="reply-selected-button" class="header-button" title="引用">引用</button>
+                    <button id="edit-selected-button" class="header-button" title="编辑">编辑</button>
+                    <button id="delete-selected-button" class="header-button" title="删除">删除</button>
                 </div>
+            </div>
             </div>
             <div id="message-container"></div>
             <div id="ai-suggestion-panel" class="suggestion-panel hidden">
