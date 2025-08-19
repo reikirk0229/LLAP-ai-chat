@@ -5,8 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>IDIC实验室</title>
     <link rel="stylesheet" href="style.css">
+
+    <style>
+            .message-context-menu { position: fixed; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 5px; z-index: 1000; display: none; }
+            .context-menu-item { padding: 8px 12px; cursor: pointer; font-size: 14px; border-radius: 5px; }
+            .context-menu-item:hover { background-color: #f0f0f0; }
+            .quoted-message-display { display: block; background-color: rgba(0,0,0,0.05); padding: 6px 10px; margin: -2px -2px 8px; border-radius: 8px 8px 0 0; font-size: 13px; color: #555; border-left: 3px solid var(--main-theme-color, #007bff);  }
+            .quoted-message-display .sender-name { font-weight: bold; }
+            .quoted-message-display .message-snippet { display: block; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+            .reply-indicator { background-color: #f0f4f8; padding: 5px 10px; font-size: 12px; color: #333; display: none; align-items: center; justify-content: space-between; }
+            .reply-indicator-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .cancel-reply-btn { cursor: pointer; font-size: 16px; font-weight: bold; padding: 0 5px; }
+            .message-recalled { color: #888; font-size: 12px; text-align: center; padding: 10px 0; width: 100%; }
+            .recalled-edit-btn { color: #007bff; cursor: pointer; margin-left: 5px; }
+        </style>
 </head>
 <body>
+    <div id="message-context-menu" class="message-context-menu">
+        <div class="context-menu-item" id="context-menu-reply">引用</div>
+        <div class="context-menu-item" id="context-menu-recall">撤回</div>
+    </div>
 
     <!-- 【【【全新：全局Toast提示】】】 -->
     <div id="global-toast" class="hidden">
@@ -63,6 +81,10 @@
                     <button id="emoji-btn" class="tool-button" title="表情"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg></button>
                     <button id="ai-helper-button" class="tool-button" title="AI帮回"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M20 12h-4"></path><path d="M12 20v-4"></path></svg></button>
                     <button id="more-functions-button" class="tool-button" title="更多"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
+                </div>
+                <div id="reply-indicator" class="reply-indicator">
+                    <span id="reply-indicator-text"></span>
+                    <span id="cancel-reply-btn" title="取消回复">&times;</span>
                 </div>
                 <div class="input-row">
                     <textarea id="chat-input" placeholder="输入消息..."></textarea>
