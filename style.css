@@ -220,16 +220,16 @@ body::before {
 .chat-list-item { 
     display: flex; 
     align-items: center; 
-    padding: 12px 15px; /* 【关键修改】减小了内边距，让条目变窄 */
+    padding: 12px 15px; 
     gap: 15px; 
     cursor: pointer; 
-    margin: 8px 15px;
-    border-radius: 16px; /* 【关键恢复】这就是你的圆角！ */
-    background: rgba(255, 255, 255, 0.8); /* 【关键恢复】恢复半透明背景 */
+    margin: 8px 10px; /* 【关键修改】左右外边距从15px缩小到10px */
+    border-radius: 16px; /* 您的圆角设计保持不变 */
+    background: rgba(255, 255, 255, 0.8); 
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2); /* 【关键恢复】恢复边框 */
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1); /* 【关键恢复】恢复阴影 */
+    border: 1px solid rgba(255, 255, 255, 0.2); 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
     transition: all 0.3s ease;
 }
 /* 【新增】置顶聊天的特殊背景色 */
@@ -266,7 +266,7 @@ body::before {
     overflow-y: auto; 
     display: flex; 
     flex-direction: column; 
-    gap: 10px; /* 【关键修改】把15px的间距缩小到10px，实现紧凑感！ */
+    gap: 15px; /* 【关键修改】把15px的间距缩小到10px，实现紧凑感！ */
     /* 【核心】移除背景色，让它彻底变透明！ */
     /* background-color: var(--background-light); */ 
 }
@@ -455,7 +455,14 @@ body::before {
     border-top: 1px solid var(--border-color); 
     position: relative; /* 【关键】为内部面板提供定位基准 */
 }
-.chat-functions-toolbar { padding: 6px 15px; display: flex; justify-content: space-around; }
+.chat-functions-toolbar { 
+    padding: 4px 15px; /* 【关键修改】上下内边距再次缩小，让它更扁 */
+    display: flex; 
+    justify-content: space-around;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-lg);
+    margin: 8px 15px 0; /* 上边距也稍微缩小一点 */
+}
 .input-row { padding: 8px 10px; display: flex; gap: 10px; align-items: flex-end; }
 .tool-button { 
     background: none; 
@@ -2493,21 +2500,20 @@ input:checked + .slider:before {
 }
 /* --- 【全新V2.0：搜索栏布局终极修复】 --- */
 .search-bar {
-    display: flex; /* 【核心】使用Flex布局 */
-    align-items: center; /* 垂直居中 */
-    position: relative; /* 为了筛选按钮定位 */
-    width: auto; /* 【关键修改】宽度不再是100%，而是自动适应 */
+    display: flex; 
+    align-items: center; 
+    position: relative; 
+    width: auto; 
     background: var(--glass-bg);
     backdrop-filter: blur(15px);
     -webkit-backdrop-filter: blur(15px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-xl);
-    padding: 12px 18px;
-    margin: 15px 20px; /* 【关键修改】左右边距从20px缩小到15px */
+    padding: 10px 18px; /* 上下内边距也稍微缩小一点 */
+    margin: 10px; /* 【关键修改】大幅缩小外边距，让它贴近边缘 */
     box-shadow: 0 4px 20px rgba(80, 151, 205, 0.15);
     transition: all 0.3s ease;
 }
-
 .search-bar:focus-within {
     box-shadow: 0 6px 25px rgba(80, 151, 205, 0.25);
     transform: translateY(-1px);
