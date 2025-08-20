@@ -776,12 +776,11 @@ function scrollToBottom() {
         views.forEach(view => view.classList.add('hidden'));
         document.getElementById(viewId).classList.remove('hidden');
         
-        // 【【【修复：导航栏在主要三个界面显示，其他子页面隐藏】】】
-        const mainViews = ['chat-list-view', 'moments-view', 'settings-view'];
-        if (mainViews.includes(viewId)) {
-            appNav.classList.remove('hidden');
+        // 【【【终极修复 V2.0：导航栏现在只在聊天列表页显示】】】
+        if (viewId === 'chat-list-view') {
+            appNav.classList.remove('hidden'); // 如果是聊天列表页，就显示导航栏
         } else {
-            appNav.classList.add('hidden');
+            appNav.classList.add('hidden'); // 否则，在所有其他页面都隐藏导航栏
         }
 
         // 确保底部按钮始终处于激活状态
