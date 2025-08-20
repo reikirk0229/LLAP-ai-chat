@@ -223,7 +223,7 @@ body::before {
     padding: 12px 15px; 
     gap: 15px; 
     cursor: pointer; 
-    margin: 8px 10px; /* 【关键修改】左右外边距从15px缩小到10px */
+    margin: 8px 20px; /* 【关键修改】左右外边距从15px缩小到10px */
     border-radius: 16px; /* 您的圆角设计保持不变 */
     background: rgba(255, 255, 255, 0.8); 
     backdrop-filter: blur(10px);
@@ -456,12 +456,12 @@ body::before {
     position: relative; /* 【关键】为内部面板提供定位基准 */
 }
 .chat-functions-toolbar { 
-    padding: 4px 15px; /* 【关键修改】上下内边距再次缩小，让它更扁 */
+    padding: 6px 15px; /* 上下稍微加一点回来，让图标不那么贴边 */
     display: flex; 
-    justify-content: space-around;
+    justify-content: space-around; /* 这行代码会自动保持图标的优雅间距 */
     background: rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-lg);
-    margin: 8px 15px 0; /* 上边距也稍微缩小一点 */
+    margin: 8px 30px 0; /* 【关键修改】左右外边距从15px猛增到30px，让整个栏变得更窄 */
 }
 .input-row { padding: 8px 10px; display: flex; gap: 10px; align-items: flex-end; }
 .tool-button { 
@@ -2510,7 +2510,7 @@ input:checked + .slider:before {
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-xl);
     padding: 10px 18px; /* 上下内边距也稍微缩小一点 */
-    margin: 10px; /* 【关键修改】大幅缩小外边距，让它贴近边缘 */
+    margin: 10px 25px; /* 【关键修改】大幅缩小外边距，让它贴近边缘 */
     box-shadow: 0 4px 20px rgba(80, 151, 205, 0.15);
     transition: all 0.3s ease;
 }
