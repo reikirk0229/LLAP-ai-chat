@@ -225,6 +225,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const textEditorTextarea = document.getElementById('text-editor-textarea');
     const cancelTextEditBtn = document.getElementById('cancel-text-edit-btn');
     const saveTextEditBtn = document.getElementById('save-text-edit-btn');
+    const mainHeaderAvatar = document.getElementById('main-header-avatar');
+    const mainHeaderUsername = document.getElementById('main-header-username');
+    const sideMenu = document.getElementById('side-menu');
+    const sideMenuAvatar = document.getElementById('side-menu-avatar');
+    const sideMenuUsername = document.getElementById('side-menu-username');
 
 function scrollToBottom() {
     // 这个函数只有一个使命：把聊天容器平滑地滚动到底部。
@@ -637,6 +642,19 @@ function scrollToBottom() {
         await dispatchAndDisplayUserMessage(breakupMessage);
     }
 
+    // ▼▼▼▼▼ 【全新】渲染主界面个人信息的核心函数 ▼▼▼▼▼
+    async function renderMainHeader() {
+        const user = appData.globalUserProfile;
+        const avatarBlob = await db.getImage(user.avatarKey);
+        const avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg'; // 提供一个默认头像
+
+        // 同步更新三个地方的头像和昵称
+        mainHeaderAvatar.src = avatarUrl;
+        mainHeaderUsername.textContent = user.name;
+        sideMenuAvatar.src = avatarUrl;
+        sideMenuUsername.textContent = user.name;
+    }
+
     /**
      * 【全新】一个专门用来刷新聊天顶栏的函数 (修复Bug 4, 6)
      */
@@ -650,6 +668,7 @@ function scrollToBottom() {
     async function initialize() {
         await db.init(); // 【核心新增】等待数据库仓库初始化完成
         loadAppData();
+        await renderMainHeader();
         await renderChatList();
         renderSettingsUI();
         bindEventListeners();
@@ -657,8 +676,24 @@ function scrollToBottom() {
     }
     function loadAppData() {
         const savedData = localStorage.getItem('myAiChatApp_V8_Data');
-        if (savedData) { appData = JSON.parse(savedData); } 
-        else { appData = { aiContacts: [], appSettings: { apiType: 'openai_proxy', apiUrl: '', apiKey: '', apiModel: '', contextLimit: 20 } }; }
+        
+        if (savedData) { 
+            appData = JSON.parse(savedData); 
+        } else { 
+            appData = { 
+                aiContacts: [], 
+                appSettings: { apiType: 'openai_proxy', apiUrl: '', apiKey: '', apiModel: '', contextLimit: 20 } 
+            }; 
+        }
+
+        // ▼▼▼▼▼ 【全新】全局用户信息初始化 (修正逻辑后) ▼▼▼▼▼
+        // 核心修正：现在，我们是在加载完所有旧数据之后，再来检查并补充新功能所需的数据。
+        if (!appData.globalUserProfile) {
+            appData.globalUserProfile = {
+                name: '默认昵称',
+                avatarKey: 'global_user_avatar' // 为全局头像设定一个固定的数据库Key
+            };
+        }
 
         if (appData.currentUser) {
             appData.aiContacts.forEach(contact => { if (!contact.userProfile) { contact.userProfile = appData.currentUser; } });
@@ -710,15 +745,15 @@ function scrollToBottom() {
         views.forEach(view => view.classList.add('hidden'));
         document.getElementById(viewId).classList.remove('hidden');
         
-        // 【【【核心修改】】】
-        // 现在，只在聊天列表页显示导航栏
-        if (viewId === 'chat-list-view') {
+        // 【【【核心终极修复：让导航栏在所有主页面都显示】】】
+        const mainViews = ['chat-list-view', 'moments-view', 'settings-view'];
+        if (mainViews.includes(viewId)) {
             appNav.classList.remove('hidden');
         } else {
             appNav.classList.add('hidden');
         }
 
-        appContainer.style.paddingBottom = '0px';
+        // 确保底部按钮始终处于激活状态
         navButtons.forEach(button => {
             button.classList.toggle('active', button.dataset.view === viewId);
         });
@@ -2220,6 +2255,18 @@ function closeTextEditorModal() {
     }
 
     function bindEventListeners() {
+        // ▼▼▼▼▼ 【全新】侧滑菜单交互 ▼▼▼▼▼
+        mainHeaderAvatar.addEventListener('click', (event) => {
+            event.stopPropagation(); // 阻止事件冒泡，防止立刻关闭
+            sideMenu.classList.add('open');
+        });
+
+        // 点击页面任何地方，关闭侧滑菜单
+        document.addEventListener('click', (event) => {
+            if (sideMenu.classList.contains('open') && !sideMenu.contains(event.target)) {
+                sideMenu.classList.remove('open');
+            }
+        });
         messageContainer.addEventListener('click', (e) => {
             const targetRow = e.target.closest('.message-row[data-action="open-red-packet"]');
             if (targetRow) {
