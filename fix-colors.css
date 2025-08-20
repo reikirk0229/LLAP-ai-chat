@@ -1,0 +1,526 @@
+/* 修复颜色问题的CSS */
+:root {
+    /* 星空主题颜色变量 */
+    --qq-blue: #5097CD;
+    --qq-light-blue: #CCE4F4;
+    --qq-bg-light: #EFF7FB;
+    --qq-dark: #2B3A4C;
+    
+    /* 毛玻璃效果变量 - 修复透明度问题 */
+    --glass-bg: rgba(255, 255, 255, 0.95);
+    --glass-border: rgba(255, 255, 255, 0.3);
+    --glass-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+    
+    /* 渐变变量 */
+    --gradient-primary: linear-gradient(135deg, #5097CD 0%, #3B83A2 100%);
+    --gradient-secondary: linear-gradient(135deg, #CCE4F4 0%, #EFF7FB 100%);
+    
+    /* 圆角变量 */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-full: 50%;
+}
+
+body {
+    background: linear-gradient(135deg, #EFF7FB 0%, #CCE4F4 50%, #5097CD 100%) !important;
+}
+
+/* 星空背景装饰 */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: 
+        radial-gradient(2px 2px at 20px 30px, #fff, transparent),
+        radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.8), transparent),
+        radial-gradient(1px 1px at 90px 40px, #fff, transparent),
+        radial-gradient(1px 1px at 130px 80px, rgba(255,255,255,0.6), transparent),
+        radial-gradient(2px 2px at 160px 30px, #fff, transparent);
+    background-repeat: repeat;
+    background-size: 200px 100px;
+    animation: twinkle 4s ease-in-out infinite alternate;
+    z-index: -1;
+}
+
+@keyframes twinkle {
+    0% { opacity: 0.3; }
+    100% { opacity: 1; }
+}
+
+/* 修复header - 使用蓝色渐变 */
+.header {
+    background: linear-gradient(135deg, #5097CD 0%, #3B83A2 100%) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+    color: white !important;
+}
+
+/* 修复header按钮颜色 - 白色文字在蓝色背景上 */
+.header-button, .header-button-text {
+    color: white !important;
+    font-weight: 600 !important;
+}
+
+/* 修复main-header样式 - 同样使用蓝色渐变 */
+.main-header {
+    background: linear-gradient(135deg, #5097CD 0%, #3B83A2 100%) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+    color: white !important;
+}
+
+/* 修复搜索栏样式 - 改回白色 */
+.search-bar {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(15px) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 修复搜索栏容器样式 - 改回白色 */
+.search-bar-container {
+    background: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+}
+
+/* 修复用户信息栏文字颜色 */
+.user-details span {
+    color: white !important;
+}
+
+/* 修复状态点样式 */
+.status-dot {
+    background: linear-gradient(135deg, #4CAF50, #45a049) !important;
+    box-shadow: 0 0 10px rgba(76, 175, 80, 0.5) !important;
+}
+
+/* 修复聊天输入区域 - 使用比背景更浅的蓝色 */
+.chat-input-area {
+    background: rgba(240, 248, 255, 0.95) !important;
+    backdrop-filter: blur(15px) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
+    border-top: 1px solid rgba(80, 151, 205, 0.2) !important;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 修复聊天输入框 - 使用更明显的边界 */
+#chat-input {
+    background: rgba(255, 255, 255, 0.9) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border: 2px solid rgba(80, 151, 205, 0.3) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 修复聊天列表项 - 保持白色 */
+.chat-list-item {
+    background: rgba(255, 255, 255, 0.9) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* 修复置顶聊天 - 使用浅蓝色背景区分 */
+.chat-list-item.pinned {
+    background: rgba(240, 248, 255, 0.95) !important;
+    border: 2px solid rgba(80, 151, 205, 0.3) !important;
+    box-shadow: 0 4px 15px rgba(80, 151, 205, 0.15) !important;
+}
+
+.chat-list-item.pinned::before {
+    content: '📌';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+/* 修复消息气泡 - 用户消息使用深蓝色 */
+.user-row .message {
+    background: linear-gradient(135deg, #5097CD 0%, #3B83A2 100%) !important;
+    color: white !important;
+    box-shadow: 0 4px 15px rgba(80, 151, 205, 0.3) !important;
+}
+
+/* 修复消息气泡 - AI消息改回白色 */
+.assistant-row .message {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+    color: #333 !important;
+}
+
+/* 修复底部导航栏 - 改回原来的颜色 */
+#app-nav {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 修复导航按钮 - 改回原来的颜色 */
+.nav-button {
+    color: #666 !important;
+    transition: all 0.3s ease !important;
+}
+
+.nav-button.active {
+    color: #5097CD !important;
+    background: rgba(80, 151, 205, 0.1) !important;
+    border-radius: var(--radius-md) !important;
+}
+
+/* 修复设置组样式 - 改回白色 */
+.settings-group {
+    background: rgba(255, 255, 255, 0.9) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 修复设置页面背景 - 使用稍微重一点的背景色 */
+#settings-form, #ai-editor-form, .contact-settings-container {
+    background: rgba(248, 250, 252, 0.95) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+}
+
+/* 修复设置页面输入框 - 增强边界和对比度 */
+#settings-form input[type="text"], 
+#settings-form select,
+#ai-editor-form input[type="text"],
+#ai-editor-form textarea,
+#ai-editor-form select {
+    background: rgba(255, 255, 255, 0.98) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border: 3px solid rgba(80, 151, 205, 0.4) !important;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.15) !important;
+    transition: all 0.3s ease !important;
+    color: #333 !important;
+}
+
+#settings-form input[type="text"]:focus, 
+#settings-form select:focus,
+#ai-editor-form input[type="text"]:focus,
+#ai-editor-form textarea:focus,
+#ai-editor-form select:focus {
+    border-color: #5097CD !important;
+    box-shadow: 0 4px 16px rgba(80, 151, 205, 0.4) !important;
+    transform: translateY(-2px) !important;
+    background: rgba(255, 255, 255, 1) !important;
+}
+
+/* 修复模态框样式 - 改回白色 */
+.modal-content {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* 修复筛选器面板 - 改回白色 */
+.search-filters-panel {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(15px) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 修复筛选器按钮 - 确保重置和应用按钮可见 */
+.filters-actions button {
+    background: rgba(255, 255, 255, 0.9) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    color: #666 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+#apply-filters-btn {
+    background: linear-gradient(135deg, #5097CD 0%, #3B83A2 100%) !important;
+    color: white !important;
+    border-color: #5097CD !important;
+    box-shadow: 0 2px 8px rgba(80, 151, 205, 0.3) !important;
+}
+
+/* 修复侧边栏 - 改回白色 */
+#side-menu {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 修复扩展功能面板 - 改回白色 */
+#extended-functions-panel {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(15px) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 修复功能图标 - 改回白色 */
+.function-icon {
+    background: rgba(255, 255, 255, 0.9) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* 修复全局提示 - 改回白色 */
+#global-toast {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(15px) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    color: #333 !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* 修复关系卡片 - 改回白色 */
+.message-relationship-card, .message-breakup-card {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(15px) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 修复文本编辑器 - 改回白色 */
+#text-editor-textarea {
+    background: rgba(255, 255, 255, 0.9) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* 修复更多功能抽屉 - 改回白色 */
+.more-functions-drawer {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+}
+
+.more-functions-content {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* 修复侧边栏覆盖层 - 保持星空效果 */
+.sidebar-overlay {
+    background: rgba(0, 0, 0, 0.3) !important;
+    backdrop-filter: blur(5px) !important;
+    -webkit-backdrop-filter: blur(5px) !important;
+}
+
+/* ================================ */
+/* 全新弹窗设计 - 现代化精致风格 */
+/* ================================ */
+
+/* 弹窗容器 */
+.modal-content {
+    max-width: 380px !important;
+    width: 90% !important;
+    border-radius: 20px !important;
+    overflow: hidden !important;
+    background: rgba(255, 255, 255, 0.98) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.4) !important;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* 弹窗头部 */
+.modal-header {
+    padding: 24px 24px 16px 24px !important;
+    background: linear-gradient(135deg, rgba(80, 151, 205, 0.05) 0%, rgba(59, 131, 162, 0.05) 100%) !important;
+    border-bottom: none !important;
+    border-radius: 20px 20px 0 0 !important;
+    position: relative !important;
+}
+
+.modal-header h3 {
+    color: #2B3A4C !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    margin: 0 !important;
+    text-align: center !important;
+    letter-spacing: 0.5px !important;
+}
+
+/* 关闭按钮 */
+.close-button {
+    position: absolute !important;
+    top: 20px !important;
+    right: 20px !important;
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    background: rgba(255, 255, 255, 0.9) !important;
+    border: none !important;
+    color: #666 !important;
+    font-size: 16px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+.close-button:hover {
+    background: rgba(240, 240, 240, 1) !important;
+    transform: scale(1.1) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* 弹窗内容区域 */
+.modal-body {
+    padding: 20px 24px 24px 24px !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+}
+
+.modal-body .form-group {
+    margin-bottom: 20px !important;
+}
+
+.modal-body .form-group:last-child {
+    margin-bottom: 0 !important;
+}
+
+.modal-body label {
+    color: #2B3A4C !important;
+    font-weight: 500 !important;
+    margin-bottom: 8px !important;
+    display: block !important;
+    font-size: 14px !important;
+    letter-spacing: 0.3px !important;
+}
+
+.modal-body input[type="text"],
+.modal-body textarea {
+    width: 100% !important;
+    padding: 14px 16px !important;
+    border: 2px solid rgba(80, 151, 205, 0.15) !important;
+    border-radius: 12px !important;
+    background: rgba(248, 250, 255, 0.8) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    color: #333 !important;
+    font-size: 14px !important;
+    box-sizing: border-box !important;
+    resize: none !important;
+    outline: none !important;
+}
+
+.modal-body input[type="text"]:focus,
+.modal-body textarea:focus {
+    border-color: #5097CD !important;
+    background: rgba(255, 255, 255, 1) !important;
+    box-shadow: 
+        inset 0 1px 3px rgba(0, 0, 0, 0.05), 
+        0 0 0 3px rgba(80, 151, 205, 0.1) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* 弹窗底部按钮区域 */
+.modal-footer,
+.modal-footer-split {
+    padding: 20px 24px 24px 24px !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    border-top: none !important;
+    border-radius: 0 0 20px 20px !important;
+    display: flex !important;
+    justify-content: center !important;
+    gap: 12px !important;
+}
+
+.modal-footer button,
+.modal-button {
+    min-width: 100px !important;
+    padding: 12px 24px !important;
+    border-radius: 12px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    border: none !important;
+    outline: none !important;
+    letter-spacing: 0.5px !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+/* 取消按钮 */
+.modal-button.secondary,
+.modal-footer button:first-child {
+    background: rgba(255, 255, 255, 0.9) !important;
+    color: #666 !important;
+    border: 2px solid rgba(200, 200, 200, 0.3) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+.modal-button.secondary:hover,
+.modal-footer button:first-child:hover {
+    background: rgba(245, 245, 245, 1) !important;
+    border-color: rgba(180, 180, 180, 0.5) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* 确定按钮 */
+.modal-button.primary,
+.modal-footer button:last-child {
+    background: linear-gradient(135deg, #5097CD 0%, #3B83A2 100%) !important;
+    color: white !important;
+    box-shadow: 0 4px 12px rgba(80, 151, 205, 0.3) !important;
+}
+
+.modal-button.primary:hover,
+.modal-footer button:last-child:hover {
+    background: linear-gradient(135deg, #4088BD 0%, #2B7392 100%) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 20px rgba(80, 151, 205, 0.4) !important;
+}
+
+/* 按钮按下效果 */
+.modal-button:active,
+.modal-footer button:active {
+    transform: translateY(0) !important;
+    transition: all 0.1s !important;
+}
+
+/* 特殊样式：分割按钮布局 */
+.modal-footer-split .modal-button {
+    flex: 1 !important;
+    max-width: 140px !important;
+} 
