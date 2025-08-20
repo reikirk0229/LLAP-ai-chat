@@ -36,10 +36,16 @@ body {
     /* 【核心】把浅灰色背景色移到body上，作为整个App的“墙纸” */
     background-color: #f0f2f5; 
     -webkit-tap-highlight-color: transparent;
+    /* ▼▼▼ 全新添加的代码 ▼▼▼ */
+    display: flex;
+    flex-direction: column;
+    /* ▲▲▲ 全新添加的代码 ▲▲▲ */
 }
 #app-container {
     width: 100%;
-    height: calc(100% - var(--nav-height)); /* 【终极修复】高度变为100%减去导航栏的高度 */
+    /* height: calc(100% - var(--nav-height)); 【这行代码被彻底修改了】 */
+    flex: 1; /* 【核心修改】命令此容器“占据所有剩余空间” */
+    min-height: 0; /* 【专业技巧】防止在某些浏览器中内容溢出 */
     /* 【核心】让主容器变透明，这样才能看到body的“墙纸” */
     background-color: transparent;
     display: flex;
