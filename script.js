@@ -2255,18 +2255,24 @@ function closeTextEditorModal() {
     }
 
     function bindEventListeners() {
-        // ▼▼▼▼▼ 【全新】侧滑菜单交互 ▼▼▼▼▼
+        // ▼▼▼▼▼ 【全新 V2.0】带遮罩层的侧滑菜单交互 ▼▼▼▼▼
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+        // --- 封装一个关闭菜单的函数，方便复用 ---
+        const closeSideMenu = () => {
+            sideMenu.classList.remove('open');
+            sidebarOverlay.classList.add('hidden');
+        };
+
+        // 1. 点击头像，打开侧滑菜单和遮罩层
         mainHeaderAvatar.addEventListener('click', (event) => {
-            event.stopPropagation(); // 阻止事件冒泡，防止立刻关闭
+            event.stopPropagation(); // 阻止事件冒泡
             sideMenu.classList.add('open');
+            sidebarOverlay.classList.remove('hidden');
         });
 
-        // 点击页面任何地方，关闭侧滑菜单
-        document.addEventListener('click', (event) => {
-            if (sideMenu.classList.contains('open') && !sideMenu.contains(event.target)) {
-                sideMenu.classList.remove('open');
-            }
-        });
+        // 2. 点击遮罩层，关闭菜单
+        sidebarOverlay.addEventListener('click', closeSideMenu);
         messageContainer.addEventListener('click', (e) => {
             const targetRow = e.target.closest('.message-row[data-action="open-red-packet"]');
             if (targetRow) {
@@ -2355,18 +2361,42 @@ function closeTextEditorModal() {
             }
             userStickerPanel.classList.toggle('is-open');
         });
+        // 【【【核心改造 V2.0：为扩展功能面板添加交互】】】
+        const extendedFunctionsPanel = document.getElementById('extended-functions-panel');
+        const closeExtendedFunctionsBtn = document.getElementById('close-extended-functions-btn');
+        const relationshipFunctionBtn = document.getElementById('fn-relationship');
+
+        // --- 封装一个关闭面板的函数，方便复用 ---
+        const closeFunctionsPanel = () => {
+            extendedFunctionsPanel.classList.remove('is-open');
+            moreFunctionsButton.classList.remove('hidden');
+            closeExtendedFunctionsBtn.classList.add('hidden');
+        };
+
+        // 1. 点击“三个点”按钮，打开面板并切换按钮
         moreFunctionsButton.addEventListener('click', () => {
+            extendedFunctionsPanel.classList.add('is-open');
+            moreFunctionsButton.classList.add('hidden');
+            closeExtendedFunctionsBtn.classList.remove('hidden');
+        });
+
+        // 2. 点击“X”按钮，关闭面板并切换按钮
+        closeExtendedFunctionsBtn.addEventListener('click', closeFunctionsPanel);
+        
+        // 3. 将“亲密关系”逻辑绑定到新按钮上
+        relationshipFunctionBtn.addEventListener('click', () => {
+            closeFunctionsPanel(); // 点击后先关闭面板
+            
+            // --- 你的原始逻辑保持不变 ---
             const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
             if (!contact) return;
             const currentPartnerId = appData.appSettings.partnerId;
 
             if (currentPartnerId === null) {
-                // 【V2.3 流程回归】先弹窗确认，再暂存卡片
-                showCustomConfirm('关系邀请', `确定要向 ${contact.remark} 发送情侣关系邀请吗？`, () => {
+                showCustomConfirm('关系邀请', `确定要向 ${contact.remark} 发送情-侣关系邀请吗？`, () => {
                     sendRelationshipProposal('user');
                 });
             } else if (currentPartnerId === contact.id) {
-                // 【V2.3 流程统一】分手也先弹窗确认，再暂存卡片
                 showCustomConfirm('解除关系', `你确定要向 ${contact.remark} 发送解除关系通知吗？这将会生成一张分手卡片待发送。`, () => {
                     handleEndRelationship();
                 });
@@ -2376,6 +2406,13 @@ function closeTextEditorModal() {
                 showCustomAlert('提示', `你当前的情侣是 ${partnerName}。\n请先与对方解除关系，才能开始新的恋情。`);
             }
         });
+
+        // 4. 其他功能按钮暂时只给一个提示
+        document.getElementById('fn-video-call').addEventListener('click', () => { alert('视频通话功能开发中...'); closeFunctionsPanel(); });
+        document.getElementById('fn-accounting').addEventListener('click', () => { alert('记账功能开发中...'); closeFunctionsPanel(); });
+        document.getElementById('fn-listen-together').addEventListener('click', () => { alert('一起听歌功能开发中...'); closeFunctionsPanel(); });
+        document.getElementById('fn-gift').addEventListener('click', () => { alert('礼物功能开发中...'); closeFunctionsPanel(); });
+        document.getElementById('fn-diary').addEventListener('click', () => { alert('日记本功能开发中...'); closeFunctionsPanel(); });
         aiHelperButton.addEventListener('click', () => {
             if (aiSuggestionPanel.classList.contains('hidden')) { displaySuggestions(); } 
             else { hideSuggestionUI(); }
