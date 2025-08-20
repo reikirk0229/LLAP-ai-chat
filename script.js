@@ -776,7 +776,7 @@ function scrollToBottom() {
         views.forEach(view => view.classList.add('hidden'));
         document.getElementById(viewId).classList.remove('hidden');
         
-        // 【【【核心终极修复：让导航栏在所有主页面都显示】】】
+        // 【【【修复：导航栏在主要三个界面显示，其他子页面隐藏】】】
         const mainViews = ['chat-list-view', 'moments-view', 'settings-view'];
         if (mainViews.includes(viewId)) {
             appNav.classList.remove('hidden');
