@@ -100,6 +100,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let longPressTimer;
     let lastRenderedTimestamp = 0;
     let loadingBubbleElement = null;
+    const MESSAGES_PER_PAGE = 50; // 每次加载50条
+    let currentMessagesOffset = 0;  // 记录当前已经加载了多少条
     let stagedStickerFile = null;
     let activeContextMenuMessageId = null; // 追踪当前哪个消息被右键点击了
     let stagedQuoteData = null; // 暂存准备要引用的消息数据
@@ -326,6 +328,17 @@ function scrollToBottom() {
         } else {
             return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${minutes}`;
         }
+    }
+    /**
+     * 【【【全新辅助函数：将时间戳格式化为 YYYY-MM-DD】】】
+     */
+    function formatTimestampToDateString(timestamp) {
+        if (!timestamp) return '';
+        const date = new Date(timestamp);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0'); // 月份从0开始，所以+1
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     }
 
     function openAiImageModal(description) {
@@ -668,6 +681,7 @@ function scrollToBottom() {
     async function initialize() {
         await db.init(); // 【核心新增】等待数据库仓库初始化完成
         loadAppData();
+        populateSearchFilters();
         await renderMainHeader();
         await renderChatList();
         renderSettingsUI();
@@ -737,6 +751,23 @@ function scrollToBottom() {
 
         saveAppData();
     }
+    /**
+     * 【全新】填充搜索筛选器中的角色下拉列表
+     */
+    function populateSearchFilters() {
+        const charSelect = document.getElementById('char-filter-select');
+        if (!charSelect) return;
+
+        charSelect.innerHTML = '<option value="all">所有角色</option>'; // 重置并添加默认选项
+
+        appData.aiContacts.forEach(contact => {
+            const option = document.createElement('option');
+            option.value = contact.remark.toLowerCase(); // 用小写备注作为值
+            option.textContent = contact.remark;
+            charSelect.appendChild(option);
+        });
+    }
+
     function saveAppData() {
         localStorage.setItem('myAiChatApp_V8_Data', JSON.stringify(appData));
     }
@@ -759,30 +790,72 @@ function scrollToBottom() {
         });
     }
 
-    async function renderChatList() {
+    async function renderChatList(itemsToRender = appData.aiContacts) {
         chatListContainer.innerHTML = '';
-        if (!appData.aiContacts || appData.aiContacts.length === 0) { 
-            chatListContainer.innerHTML = '<p style="text-align:center; color:#999; margin-top:20px;">点击右上角+号添加AI联系人</p>';
-            return; 
+
+        // 【【【核心重构：判断当前是搜索模式还是默认模式】】】
+        const isSearching = itemsToRender.length > 0 && itemsToRender[0].message;
+
+        if (!itemsToRender || itemsToRender.length === 0) {
+            if (document.getElementById('chat-list-search-input')?.value) {
+                chatListContainer.innerHTML = '<p style="text-align:center; color:#999; margin-top:20px;">未找到相关联系人或聊天记录</p>';
+            } else {
+                chatListContainer.innerHTML = '<p style="text-align:center; color:#999; margin-top:20px;">点击右上角+号添加AI联系人</p>';
+            }
+            return;
         }
-        const sortedContacts = [...appData.aiContacts].sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
-        for (const contact of sortedContacts) {
-            // 【核心修改】从大仓库根据标签取回头像
-            const avatarBlob = await db.getImage(`${contact.id}_avatar`);
-            const avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
-            
-            const lastMessage = (contact.chatHistory && contact.chatHistory.length > 0) ? contact.chatHistory[contact.chatHistory.length - 1] : { content: '...' };
-            const item = document.createElement('div');
-            item.className = 'chat-list-item';
-            if (contact.isPinned) { item.classList.add('pinned'); }
-            item.dataset.contactId = contact.id;
 
-            const isPartner = appData.appSettings.partnerId === contact.id;
-            const partnerIcon = isPartner ? '<span class="partner-icon">💖</span>' : '';
+        // ▼▼▼ 搜索模式的渲染逻辑 ▼▼▼
+        if (isSearching) {
+            for (const result of itemsToRender) {
+                const contact = result.contact;
+                const message = result.message;
 
-            item.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="avatar"><div class="chat-list-item-info"><div class="chat-list-item-top"><span class="chat-list-item-name">${contact.remark}${partnerIcon}</span><span class="chat-list-item-time">昨天</span></div><div class="chat-list-item-msg">${lastMessage.content || '...'}</div></div>`;
-            item.addEventListener('click', () => openChat(contact.id));
-            chatListContainer.appendChild(item);
+                const avatarBlob = await db.getImage(`${contact.id}_avatar`);
+                const avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
+
+                const item = document.createElement('div');
+                item.className = 'chat-list-item';
+                item.dataset.contactId = contact.id;
+                item.dataset.foundMessageId = message.id; // 存储找到的消息ID
+
+                const isPartner = appData.appSettings.partnerId === contact.id;
+                const partnerIcon = isPartner ? '<span class="partner-icon">💖</span>' : '';
+                
+                let displayContent = (message.content || '...').replace(/\[[^\]]+\]/g, '');
+                if (displayContent.length > 20) displayContent = displayContent.substring(0, 20) + '...';
+                displayContent = `<span class="search-match-tag">[聊天记录]</span> ${displayContent}`;
+                
+                const displayTime = formatMessageTimestamp(message.timestamp || Date.now());
+
+                item.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="avatar"><div class="chat-list-item-info"><div class="chat-list-item-top"><span class="chat-list-item-name">${contact.remark}${partnerIcon}</span><span class="chat-list-item-time">${displayTime}</span></div><div class="chat-list-item-msg">${displayContent}</div></div>`;
+                
+                item.addEventListener('click', () => {
+                    openChat(item.dataset.contactId, item.dataset.foundMessageId);
+                });
+                chatListContainer.appendChild(item);
+            }
+        } 
+        // ▼▼▼ 默认模式的渲染逻辑 (和原来基本一样) ▼▼▼
+        else {
+            const sortedContacts = [...itemsToRender].sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
+            for (const contact of sortedContacts) {
+                const avatarBlob = await db.getImage(`${contact.id}_avatar`);
+                const avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
+                
+                const lastMessage = (contact.chatHistory && contact.chatHistory.length > 0) ? contact.chatHistory[contact.chatHistory.length - 1] : { content: '...' };
+                const item = document.createElement('div');
+                item.className = 'chat-list-item';
+                if (contact.isPinned) { item.classList.add('pinned'); }
+                item.dataset.contactId = contact.id;
+
+                const isPartner = appData.appSettings.partnerId === contact.id;
+                const partnerIcon = isPartner ? '<span class="partner-icon">💖</span>' : '';
+
+                item.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="avatar"><div class="chat-list-item-info"><div class="chat-list-item-top"><span class="chat-list-item-name">${contact.remark}${partnerIcon}</span><span class="chat-list-item-time">${formatMessageTimestamp(lastMessage.timestamp || Date.now())}</span></div><div class="chat-list-item-msg">${(lastMessage.content || '...').substring(0, 25)}</div></div>`;
+                item.addEventListener('click', () => openChat(contact.id));
+                chatListContainer.appendChild(item);
+            }
         }
     }
     
@@ -804,56 +877,56 @@ function scrollToBottom() {
         const modelArea = document.getElementById('model-area');
         modelArea.style.display = apiTypeSelect.value === 'gemini_direct' ? 'none' : 'block';
     }
-    async function loadAndDisplayHistory(contactId) {
-        const contact = appData.aiContacts.find(c => c.id === contactId);
-        if (!contact) return;
+    async function loadAndDisplayHistory(isInitialLoad = false) {
+    const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+    if (!contact || !contact.chatHistory) return;
 
-        messageContainer.innerHTML = '';
+    const loadMoreBtn = document.getElementById('load-more-btn');
+    const allMessages = contact.chatHistory;
+    const totalMessages = allMessages.length;
 
-        // 步骤1: 快速地把所有消息的“空盘子”都摆上桌
-        contact.chatHistory.forEach((msg, index) => {
-            msg.id = msg.id || `${Date.now()}-${index}`;
-            displayMessage(msg.content, msg.role, { isNew: false, ...msg });
-        });
+    const startIndex = Math.max(0, totalMessages - currentMessagesOffset - MESSAGES_PER_PAGE);
+    const endIndex = totalMessages - currentMessagesOffset;
+    const messagesToLoad = allMessages.slice(startIndex, endIndex);
 
-        // 【【【终极核心修复：为监工升级工作手册】】】
-        // 步骤2: 找出所有需要“后厨现做”的“热菜”（包括图片和表情包）
-        const imageLoadPromises = contact.chatHistory
-            .filter(msg => (msg.type === 'image' && msg.imageId) || (msg.type === 'sticker' && msg.stickerId))
-            .map(msg => {
-                // 步骤3: 为每一道“热菜”都创建一个独立的“上菜”任务
-                return new Promise(resolve => {
-                    const id = msg.imageId || msg.stickerId;
-                    // 关键一步：我们现在是根据“订单号”(id)去找到那个盘子，而不是盲目地找
-                    const imgElement = messageContainer.querySelector(`[data-image-id="${id}"], [data-sticker-id="${id}"]`);
-                    
-                    if (!imgElement) {
-                        resolve(); // 如果盘子没找到，直接算这道菜“上完了”
-                        return;
-                    }
-
-                    // 监工的指令：如果这张图片已经碰巧加载完了，就立刻报告
-                    if (imgElement.complete) {
-                        resolve();
-                    } else {
-                        // 否则，就一直等到它“上好菜”（加载完）或“打翻了”（加载失败）
-                        imgElement.onload = () => resolve();
-                        imgElement.onerror = () => resolve(); // 即使失败，也要报告，不能卡住整个宴会
-                    }
-                });
-            });
-
-        // 步骤4: “监工”开始工作，等待所有“上菜”任务都完成
-        if (imageLoadPromises.length > 0) {
-            await Promise.all(imageLoadPromises);
-        }
-
-        // 步骤5: 所有菜已上齐，现在可以去打聚光灯了！
-        scrollToBottom();
+    if (messagesToLoad.length === 0) {
+        loadMoreBtn.classList.add('hidden');
+        return;
     }
 
-async function openChat(contactId) {
-    activeChatContactId = contactId;
+    const oldScrollHeight = messageContainer.scrollHeight;
+    
+    const fragment = document.createDocumentFragment();
+    // 【【【核心修复：我们现在从 0 开始正着数！！！】】】
+    for (let i = 0; i < messagesToLoad.length; i++) {
+        const msg = messagesToLoad[i];
+        msg.id = msg.id || `${Date.now()}-history-${i}`;
+        const messageElement = await createMessageElement(msg.content, msg.role, { isNew: false, ...msg });
+        fragment.appendChild(messageElement);
+    }
+    loadMoreBtn.after(fragment);
+    
+    currentMessagesOffset += messagesToLoad.length;
+    
+    if (isInitialLoad) {
+        scrollToBottom();
+    } else {
+        messageContainer.scrollTop += (messageContainer.scrollHeight - oldScrollHeight);
+    }
+
+    if (currentMessagesOffset < totalMessages) {
+        loadMoreBtn.classList.remove('hidden');
+    } else {
+        loadMoreBtn.classList.add('hidden');
+    }
+}
+
+async function openChat(contactId, messageIdToHighlight = null) {
+    const numericContactId = Number(contactId);
+    activeChatContactId = numericContactId;
+
+    currentMessagesOffset = 0; 
+    
     exitSelectMode();
     lastReceivedSuggestions = [];
     stagedUserMessages = [];
@@ -861,9 +934,11 @@ async function openChat(contactId) {
     aiSuggestionPanel.classList.add('hidden');
     userStickerPanel.classList.remove('is-open');
 
-    const contact = appData.aiContacts.find(c => c.id === contactId);
+    const contact = appData.aiContacts.find(c => c.id === numericContactId);
     if (!contact) return;
 
+    messageContainer.innerHTML = '<div id="load-more-btn" class="load-more-btn hidden">加载更早的记录</div>';
+    
     const avatarBlob = await db.getImage(`${contact.id}_avatar`);
     contact.avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
     const userAvatarBlob = await db.getImage(`${contact.id}_user_avatar`);
@@ -874,269 +949,196 @@ async function openChat(contactId) {
     
     switchToView('chat-window-view');
     
-    await loadAndDisplayHistory(contactId);
+    await loadAndDisplayHistory(true);
+
+    if (messageIdToHighlight) {
+        const targetMessage = messageContainer.querySelector(`[data-message-id="${messageIdToHighlight}"]`);
+        if (targetMessage) {
+            targetMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetMessage.classList.add('message-row--highlighted');
+            setTimeout(() => {
+                targetMessage.classList.remove('message-row--highlighted');
+            }, 2000);
+        }
+    }
 }
     
-        function displayMessage(text, role, options = {}) {
-        const { isNew = false, isLoading = false, type = 'text', isStaged = false, id = null, timestamp = null, quotedMessage = null } = options;
-        
-        const messageId = id || `${Date.now()}-${Math.random()}`;
-        const currentTimestamp = timestamp || Date.now();
-        const TIME_GAP = 3 * 60 * 1000;
-        let timestampDiv = null;
-        if (!isLoading && (lastRenderedTimestamp === 0 || currentTimestamp - lastRenderedTimestamp > TIME_GAP)) {
-            timestampDiv = document.createElement('div');
-            timestampDiv.className = 'timestamp-display';
-            timestampDiv.textContent = formatMessageTimestamp(currentTimestamp);
-        }
-        if (!isLoading) { lastRenderedTimestamp = currentTimestamp; }
-        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+async function createMessageElement(text, role, options = {}) {
+    const { isNew = false, isLoading = false, type = 'text', isStaged = false, id = null, timestamp = null, quotedMessage = null } = options;
+    const messageId = id || `${Date.now()}-${Math.random()}`;
+    const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+    const fragment = document.createDocumentFragment();
+    const currentTimestamp = timestamp || Date.now();
+    const TIME_GAP = 3 * 60 * 1000;
+    if (!isLoading && (lastRenderedTimestamp === 0 || currentTimestamp - lastRenderedTimestamp > TIME_GAP)) {
+        const timestampDiv = document.createElement('div');
+        timestampDiv.className = 'timestamp-display';
+        timestampDiv.textContent = formatMessageTimestamp(currentTimestamp);
+        fragment.appendChild(timestampDiv);
+    }
+    if (!isLoading) { lastRenderedTimestamp = currentTimestamp; }
 
+    if (type === 'recalled' || type === 'system') {
+        const systemDiv = document.createElement('div');
         if (type === 'recalled') {
-            const recallerName = role === 'user' ? '你' : contact.remark;
-            const systemDiv = document.createElement('div');
+            const recallerName = role === 'user' ? '你' : (contact ? contact.remark : '对方');
             systemDiv.className = 'message-recalled';
             systemDiv.innerHTML = `${recallerName}撤回了一条消息`;
-            if (timestampDiv) messageContainer.appendChild(timestampDiv);
-            messageContainer.appendChild(systemDiv);
-            scrollToBottom();
-            return Promise.resolve(); // 直接结束，不再执行后续渲染
-        }
-
-
-        if (type === 'system') {
-            const systemDiv = document.createElement('div');
+        } else {
             systemDiv.className = 'system-message';
             systemDiv.textContent = text;
-            if (timestampDiv) messageContainer.appendChild(timestampDiv);
-            messageContainer.appendChild(systemDiv);
-            scrollToBottom(); // 系统消息是即时的，可以直接滚动
-            if (isNew && !isStaged && contact) {
-                 contact.chatHistory.push({ id: messageId, role: 'system', content: text, type: 'system', timestamp: currentTimestamp });
-                 saveAppData();
+        }
+        fragment.appendChild(systemDiv);
+        return fragment;
+    }
+
+    const messageRow = document.createElement('div');
+    messageRow.className = `message-row ${role}-row`;
+    messageRow.dataset.messageId = messageId;
+    messageRow.dataset.role = role;
+    if (isLoading && role === 'assistant') { loadingBubbleElement = messageRow; }
+    if (isStaged) { messageRow.dataset.staged = 'true'; }
+
+    const avatarUrl = role === 'user' ? (contact ? contact.userAvatarUrl : '') : (contact ? contact.avatarUrl : '');
+    let messageContentHTML = '';
+    let quoteHTML = '';
+    if (quotedMessage) {
+        quoteHTML = `<div class="quoted-message-display"><span class="sender-name">${quotedMessage.sender}</span><span class="message-snippet">${quotedMessage.content}</span></div>`;
+    }
+
+    switch(type) {
+        case 'image':
+            const escapedDescription = text ? text.replace(/"/g, '&quot;') : '';
+            if (role === 'user' && options.imageId) {
+                messageContentHTML = `<div class="message message-image-user"><img data-image-id="${options.imageId}" src="" alt="${text}"></div>`;
+            } else {
+                messageContentHTML = `<div class="message message-image-ai-direct" data-description="${escapedDescription}"><img src="https://i.postimg.cc/vTdmV48q/a31b84cf45ff18f18b320470292a02c8.jpg" alt="模拟的图片"></div>`;
             }
-            return Promise.resolve(); // 对于系统消息，返回一个立刻完成的“凭证”
-        }
-
-        const messageRow = document.createElement('div');
-        messageRow.className = `message-row ${role}-row`;
-        messageRow.dataset.messageId = messageId;
-        messageRow.dataset.role = role;
-        if (isLoading && role === 'assistant') { loadingBubbleElement = messageRow; }
-        if (isStaged) { messageRow.dataset.staged = 'true'; }
-
-        const avatarUrl = role === 'user' ? (contact ? contact.userAvatarUrl : '') : (contact ? contact.avatarUrl : '');
-        let messageContentHTML = '';
-        let quoteHTML = '';
-        if (quotedMessage) {
-            quoteHTML = `
-                <div class="quoted-message-display">
-                    <span class="sender-name">${quotedMessage.sender}</span>
-                    <span class="message-snippet">${quotedMessage.content}</span>
-                </div>
-            `;
-        }
-
-        // 【说明】下面的 switch case 结构和你原来的是一样的，只是为了完整性
-        switch(type) {
-            case 'image':
-                const escapedDescription = text ? text.replace(/"/g, '&quot;') : '';
-                if (role === 'user' && options.imageId) {
-                    messageContentHTML = `<div class="message message-image-user"><img data-image-id="${options.imageId}" src="" alt="${text}"></div>`;
-                } else {
-                    messageContentHTML = `<div class="message message-image-ai-direct" data-description="${escapedDescription}"><img src="https://i.postimg.cc/vTdmV48q/a31b84cf45ff18f18b320470292a02c8.jpg" alt="模拟的图片"></div>`;
-                }
-                break;
-            case 'voice':
-                const duration = Math.max(1, Math.round((text || '').length / 4));
-                const bubbleWidth = Math.min(220, 100 + duration * 10);
-                let waveBarsHTML = Array.from({length: 15}, () => `<div class="wave-bar" style="height: ${Math.random() * 80 + 20}%;"></div>`).join('');
-                messageContentHTML = `
-                    <div class="message message-voice" style="width: ${bubbleWidth}px;">
-                        <div class="play-icon-container"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg></div>
-                        <div class="sound-wave">${waveBarsHTML}</div>
-                        <span class="voice-duration">${duration}"</span>
-                    </div>
-                    <div class="voice-text-content">${text}</div>
-                `;
-                break;
-            case 'red-packet':
-                 const packet = options.redPacketData || {};
-                const isOpened = packet.isOpened || false;
-                const bubbleClass = isOpened ? 'message-red-packet opened' : 'message-red-packet';
-                messageRow.dataset.action = 'open-red-packet';
-                messageRow.dataset.messageId = messageId;
-                messageContentHTML = `
-                    <div class="${bubbleClass}">
-                        <div class="rp-bubble-content">
-                            <span class="rp-bubble-icon">🧧</span>
-                            <div class="rp-bubble-info">
-                                <p>${text || '恭喜发财'}</p>
-                                <span>${isOpened ? '已被领取' : '点击领取红包'}</span>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                break;
-            case 'sticker':
-                const stickerId = options.stickerId || (options.stickerUrl ? options.stickerUrl.split('/').pop() : '');
-                messageContentHTML = `<div class="message message-sticker"><img data-sticker-id="${stickerId}" src="" alt="sticker"></div>`;
-                break;
-            case 'relationship_proposal':
-                // ... 这部分关系卡片的逻辑和你原来的一样，保持不变 ...
-                const cardData = options.relationshipData || {};
-                let title, subtitle;
-                if (cardData.status === 'pending') {
-                    if (role === 'user') {
-                        title = '已发送情侣关系邀请';
-                        subtitle = '等待对方同意...';
-                    } else {
-                        title = '想和你建立情侣关系';
-                        subtitle = '和Ta成为情侣，让爱意点滴记录';
-                    }
-                } else if (cardData.status === 'accepted') {
-                    if (cardData.proposer === role) {
-                        title = '我们已经成功建立情侶关系';
-                        subtitle = '我已同意了你的邀请，现在我们是情侣啦';
-                    } else {
-                        title = '对方已同意';
-                        subtitle = '你们现在是情侣关系了';
-                    }
-                }
-                const isClickable = (cardData.proposer === 'assistant' && cardData.status === 'pending');
-                const clickAction = isClickable ? `onclick="openRelationshipModal('${messageId}')"` : '';
-                messageContentHTML = `
-                    <div class="message message-relationship-card" ${clickAction} style="${isClickable ? 'cursor:pointer;' : ''}">
-                        <div class="relationship-card-content">
-                            <div class="relationship-card-text">
-                                <h4>${title}</h4>
-                                <p>${subtitle}</p>
-                            </div>
-                            <div class="relationship-card-icon"><img src="https://i.postimg.cc/P5Lg62Vq/lollipop.png" alt="icon"></div>
-                        </div>
-                        <div class="relationship-card-footer">亲密关系</div>
-                    </div>
-                `;
-                break;
-                case 'relationship_breakup':
-                messageContentHTML = `
-                    <div class="message message-relationship-card">
-                        <div class="relationship-card-content">
-                            <div class="relationship-card-text">
-                                <h4>解除亲密关系</h4>
-                                <p>我们之间的亲密关系已解除</p>
-                            </div>
-                            <div class="relationship-card-icon"><img src="https://i.postimg.cc/P5Lg62Vq/lollipop.png" alt="icon"></div>
-                        </div>
-                        <div class="relationship-card-footer">亲密关系</div>
-                    </div>
-                `;
-                break;
-            default:
-                messageContentHTML = `<div class="message">${text}</div>`;
-        }
-        // 统一添加引用和外层包裹
-        const finalContentHTML = `
-            <div class="select-checkbox hidden"></div>
-            <img class="avatar" src="${avatarUrl}">
-            <div class="message-content">${quoteHTML}${messageContentHTML}</div>
-        `;
-        messageRow.innerHTML = finalContentHTML;
-        
-        addSelectListeners(messageRow);
-        
-        if (type === 'voice') {
-            const voiceBubble = messageRow.querySelector('.message-voice');
-            const voiceTextContent = messageRow.querySelector('.voice-text-content');
-            setTimeout(() => voiceBubble.classList.add('playing'), 100);
-            voiceBubble.addEventListener('click', () => {
-                const isHidden = voiceTextContent.style.display === 'none' || voiceTextContent.style.display === '';
-                voiceTextContent.style.display = isHidden ? 'block' : 'none';
-            });
-        }
-        
-        if (timestampDiv) { messageContainer.appendChild(timestampDiv); }
-        messageContainer.appendChild(messageRow);
-
-        const aiImageBubble = messageRow.querySelector('.message-image-ai-direct');
-        if (aiImageBubble) {
-            aiImageBubble.addEventListener('click', () => {
-                const description = aiImageBubble.dataset.description;
-                openAiImageModal(description);
-            });
-        }
-
-        // 【【【核心修改部分】】】
-        return new Promise(resolve => {
-            let isAsync = false;
-
-            if (type === 'image' && options.imageId) {
-                isAsync = true;
-                const imageElement = messageRow.querySelector(`[data-image-id="${options.imageId}"]`);
-                if (imageElement) {
-                    imageElement.onload = () => resolve();
-                    imageElement.onerror = () => resolve();
-                    db.getImage(options.imageId).then(blob => {
-                        if (blob) {
-                            imageElement.src = URL.createObjectURL(blob);
-                        } else {
-                            resolve(); // 即使数据库没找到，也算完成
-                        }
-                    }).catch(() => resolve()); // 如果数据库读取失败，也算完成
-                } else {
-                    resolve();
-                }
+            break;
+        case 'voice':
+            const duration = Math.max(1, Math.round((text || '').length / 4));
+            const bubbleWidth = Math.min(220, 100 + duration * 10);
+            let waveBarsHTML = Array.from({length: 15}, () => `<div class="wave-bar" style="height: ${Math.random() * 80 + 20}%;"></div>`).join('');
+            messageContentHTML = `<div class="message message-voice" style="width: ${bubbleWidth}px;"><div class="play-icon-container"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg></div><div class="sound-wave">${waveBarsHTML}</div><span class="voice-duration">${duration}"</span></div><div class="voice-text-content">${text}</div>`;
+            break;
+        case 'red-packet':
+            const packet = options.redPacketData || {};
+            const isOpened = packet.isOpened || false;
+            const bubbleClass = isOpened ? 'message-red-packet opened' : 'message-red-packet';
+            messageRow.dataset.action = 'open-red-packet';
+            messageRow.dataset.messageId = messageId;
+            messageContentHTML = `<div class="${bubbleClass}"><div class="rp-bubble-content"><span class="rp-bubble-icon">🧧</span><div class="rp-bubble-info"><p>${text || '恭喜发财'}</p><span>${isOpened ? '已被领取' : '点击领取红包'}</span></div></div></div>`;
+            break;
+        case 'sticker':
+            const stickerId = options.stickerId || (options.stickerUrl ? options.stickerUrl.split('/').pop() : '');
+            messageContentHTML = `<div class="message message-sticker"><img data-sticker-id="${stickerId}" src="" alt="sticker"></div>`;
+            break;
+        case 'relationship_proposal':
+            const cardData = options.relationshipData || {};
+            let title, subtitle;
+            if (cardData.status === 'pending') {
+                title = role === 'user' ? '已发送情侣关系邀请' : '想和你建立情侣关系';
+                subtitle = role === 'user' ? '等待对方同意...' : '和Ta成为情侣，让爱意点滴记录';
+            } else if (cardData.status === 'accepted') {
+                title = cardData.proposer === role ? '我们已经成功建立情侶关系' : '对方已同意';
+                subtitle = cardData.proposer === role ? '我已同意了你的邀请，现在我们是情侣啦' : '你们现在是情侣关系了';
+            }
+            const isClickable = (cardData.proposer === 'assistant' && cardData.status === 'pending');
+            
+            // 【【【核心改造：废弃 onclick，改用标准化的 data-action】】】
+            let actionAttrs = '';
+            if (isClickable) {
+                // 我们现在给它打上“电子门票”，并把消息ID也存进去
+                actionAttrs = `data-action="open-relationship-proposal" data-message-id="${messageId}" style="cursor:pointer;"`;
             }
             
-            if (type === 'sticker' && options.stickerId) {
-                isAsync = true;
-                const stickerElement = messageRow.querySelector(`[data-sticker-id="${options.stickerId}"]`);
-                if (stickerElement) {
-                    stickerElement.onload = () => resolve();
-                    stickerElement.onerror = () => resolve();
-                    db.getImage(options.stickerId).then(blob => {
-                        if (blob) {
-                            stickerElement.src = URL.createObjectURL(blob);
-                        } else {
-                            resolve();
-                        }
-                    }).catch(() => resolve());
-                } else {
-                    resolve();
-                }
-            }
-            
-            if (isNew && !isLoading && !isStaged && contact) {
-                const messageToSave = { 
-                    id: messageId, 
-                    role: role, 
-                    content: text, 
-                    type: type, 
-                    timestamp: currentTimestamp 
-                };
-                
-                // --- 档案补录清单 ---
-                if (options.imageId) { messageToSave.imageId = options.imageId; }
-                if (options.redPacketData) { messageToSave.redPacketData = options.redPacketData; }
-                if (options.stickerId) { messageToSave.stickerId = options.stickerId; }
-                if (options.relationshipData) { messageToSave.relationshipData = options.relationshipData; }
-                
-                // 【【【核心终极修复：把被遗忘的“引用注释”也登记进去！】】】
-                if (options.quotedMessage) {
-                    messageToSave.quotedMessage = options.quotedMessage;
-                }
-                
-                contact.chatHistory.push(messageToSave);
-                saveAppData();
-                renderChatList();
-            }
-
-            // 如果不是图片或表情包这种“慢活儿”，就立刻返回“完工凭证”
-            if (!isAsync) {
-                resolve();
-            }
+            messageContentHTML = `<div class="message message-relationship-card" ${actionAttrs}><div class="relationship-card-content"><div class="relationship-card-text"><h4>${title}</h4><p>${subtitle}</p></div><div class="relationship-card-icon"><img src="https://i.postimg.cc/P5Lg62Vq/lollipop.png" alt="icon"></div></div><div class="relationship-card-footer">亲密关系</div></div>`;
+            break;
+        case 'relationship_breakup':
+            messageContentHTML = `<div class="message message-relationship-card"><div class="relationship-card-content"><div class="relationship-card-text"><h4>解除亲密关系</h4><p>我们之间的亲密关系已解除</p></div><div class="relationship-card-icon"><img src="https://i.postimg.cc/P5Lg62Vq/lollipop.png" alt="icon"></div></div><div class="relationship-card-footer">亲密关系</div></div>`;
+            break;
+        default:
+            messageContentHTML = `<div class="message">${text}</div>`;
+    }
+    
+    const finalContentHTML = `<div class="select-checkbox hidden"></div><img class="avatar" src="${avatarUrl}"><div class="message-content">${quoteHTML}${messageContentHTML}</div>`;
+    messageRow.innerHTML = finalContentHTML;
+    
+    addSelectListeners(messageRow);
+    
+    if (type === 'voice') {
+        const voiceBubble = messageRow.querySelector('.message-voice');
+        const voiceTextContent = messageRow.querySelector('.voice-text-content');
+        setTimeout(() => voiceBubble.classList.add('playing'), 100);
+        voiceBubble.addEventListener('click', () => {
+            const isHidden = voiceTextContent.style.display === 'none' || voiceTextContent.style.display === '';
+            voiceTextContent.style.display = isHidden ? 'block' : 'none';
         });
     }
+
+    const aiImageBubble = messageRow.querySelector('.message-image-ai-direct');
+    if (aiImageBubble) {
+        aiImageBubble.addEventListener('click', () => {
+            const description = aiImageBubble.dataset.description;
+            openAiImageModal(description);
+        });
+    }
+    
+    if (type === 'image' && options.imageId) {
+        const imageElement = messageRow.querySelector(`[data-image-id="${options.imageId}"]`);
+        if (imageElement) {
+            db.getImage(options.imageId).then(blob => {
+                if (blob) imageElement.src = URL.createObjectURL(blob);
+            });
+        }
+    }
+    
+    if (type === 'sticker' && options.stickerId) {
+        const stickerElement = messageRow.querySelector(`[data-sticker-id="${options.stickerId}"]`);
+        if (stickerElement) {
+            db.getImage(options.stickerId).then(blob => {
+                if (blob) stickerElement.src = URL.createObjectURL(blob);
+            });
+        }
+    }
+
+    fragment.appendChild(messageRow);
+    return fragment;
+}
+
+async function displayMessage(text, role, options = {}) {
+    const { isNew = true, isStaged = false, type = 'text', isLoading = false } = options;
+
+    const messageElement = await createMessageElement(text, role, options);
+
+    messageContainer.appendChild(messageElement);
+
+    if (!isLoading) {
+        scrollToBottom();
+    }
+    
+    if (isNew && !isStaged && !isLoading) {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (contact) {
+            const messageRow = messageElement.querySelector('.message-row');
+            const messageToSave = {
+                id: messageRow ? messageRow.dataset.messageId : `${Date.now()}-${Math.random()}`,
+                role: role,
+                content: text,
+                type: type,
+                timestamp: options.timestamp || Date.now()
+            };
+
+            // 把所有附加数据都合并到要保存的对象里
+            Object.assign(messageToSave, options);
+            delete messageToSave.isNew; // 清理掉临时的option
+
+            contact.chatHistory.push(messageToSave);
+            saveAppData();
+            renderChatList();
+        }
+    }
+}
 
     function removeLoadingBubble() {
         if (loadingBubbleElement) { loadingBubbleElement.remove(); loadingBubbleElement = null; }
@@ -2273,12 +2275,38 @@ function closeTextEditorModal() {
 
         // 2. 点击遮罩层，关闭菜单
         sidebarOverlay.addEventListener('click', closeSideMenu);
-        messageContainer.addEventListener('click', (e) => {
-            const targetRow = e.target.closest('.message-row[data-action="open-red-packet"]');
-            if (targetRow) {
-                openRedPacket(targetRow.dataset.messageId);
-            }
-        });
+        // 【【【全新V2.0：统一的聊天窗口事件指挥中心】】】
+        if (messageContainer) {
+            messageContainer.addEventListener('click', (event) => {
+                const target = event.target;
+        
+                // 指挥任务 #1：检查是否点击了“加载更多”
+                if (target.id === 'load-more-btn') {
+                    loadAndDisplayHistory();
+                    return; // 任务完成，结束指挥
+                }
+        
+                // 指挥任务 #2：检查是否点击了“红包”
+                const redPacketRow = target.closest('.message-row[data-action="open-red-packet"]');
+                if (redPacketRow) {
+                    openRedPacket(redPacketRow.dataset.messageId);
+                    return; // 任务完成，结束指挥
+                }
+                
+                // 指挥任务 #3：检查是否点击了“情侣邀请”
+                const proposalCard = target.closest('[data-action="open-relationship-proposal"]');
+                if (proposalCard) {
+                    // 我们现在从“电子门票”上读取消息ID
+                    window.openRelationshipModal(proposalCard.dataset.messageId);
+                    return; // 任务完成，结束指挥
+                }
+        
+                // 如果以上都不是，执行默认任务：关闭可能打开的表情面板
+                if (userStickerPanel.classList.contains('is-open')) {
+                    userStickerPanel.classList.remove('is-open');
+                }
+            });
+        }
 
         navButtons.forEach(button => button.addEventListener('click', () => switchToView(button.dataset.view)));
         backToListButton.addEventListener('click', () => switchToView('chat-list-view'));
@@ -2526,11 +2554,6 @@ function closeTextEditorModal() {
         document.getElementById('close-rp-modal-button').addEventListener('click', () => {
             document.getElementById('red-packet-modal').classList.add('hidden');
         });
-        messageContainer.addEventListener('click', () => {
-            if (userStickerPanel.classList.contains('is-open')) {
-                userStickerPanel.classList.remove('is-open');
-            }
-        });
 
         // 【【【全新：用户表情包删除逻辑】】】
         userStickerPanel.addEventListener('click', (e) => {
@@ -2570,8 +2593,116 @@ function closeTextEditorModal() {
             closeContextMenu();
         });
         document.getElementById('cancel-reply-btn').addEventListener('click', cancelQuoteReply);
+   // 【【【全新V5.0：集成日历筛选的终极版搜索逻辑】】】
+        const searchInput = document.getElementById('chat-list-search-input');
+        const charFilterSelect = document.getElementById('char-filter-select');
+        const dateFilterInput = document.getElementById('date-filter-input');
+        const toggleFiltersBtn = document.getElementById('toggle-filters-btn');
+        const filtersPanel = document.getElementById('search-filters-panel');
+        const applyFiltersBtn = document.getElementById('apply-filters-btn');
+        const resetFiltersBtn = document.getElementById('reset-filters-btn');
+
+        // performSearch 函数保持不变，它非常完美
+        const performSearch = () => {
+            const keyword = searchInput.value.trim().toLowerCase();
+            const charFilter = charFilterSelect.value;
+            const dateFilter = dateFilterInput.value.trim().toLowerCase();
+
+            if (!keyword && charFilter === 'all' && !dateFilter) {
+                renderChatList();
+                return;
+            }
+
+            let contactsToSearch = appData.aiContacts;
+            if (charFilter !== 'all') {
+                contactsToSearch = appData.aiContacts.filter(c => c.remark.toLowerCase() === charFilter);
+            }
+
+            const allFoundMessages = contactsToSearch.flatMap(contact => {
+                const matchingMessages = contact.chatHistory.filter(message => {
+                    let dateMatch = true;
+                    let keywordMatch = true;
+                    if (dateFilter) {
+                        // 【核心升级】判断用户输入的是不是一个标准日期
+                        const isStandardDate = /^\d{4}-\d{2}-\d{2}$/.test(dateFilter);
+
+                        if (isStandardDate) {
+                            // 如果是标准日期，就用新“公历”进行精确比对
+                            dateMatch = formatTimestampToDateString(message.timestamp) === dateFilter;
+                        } else {
+                            // 否则，还是用旧“字典”进行模糊的文字匹配（为了兼容"昨天"等）
+                            dateMatch = formatMessageTimestamp(message.timestamp).toLowerCase().includes(dateFilter);
+                        }
+                    }
+                    if (keyword) {
+                        keywordMatch = typeof message.content === 'string' && message.content.toLowerCase().includes(keyword);
+                    }
+                    return dateMatch && keywordMatch;
+                });
+                return matchingMessages.map(message => ({
+                    contact: contact,
+                    message: message
+                }));
+            });
+            renderChatList(allFoundMessages);
+        };
+
+        // --- 核心交互逻辑修改 ---
+        // 1. 主输入框的实时搜索逻辑保持不变
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                if (!filtersPanel.classList.contains('is-open')) {
+                    performSearch();
+                }
+            });
+        }
+
+        // 2. 点击“应用筛选”按钮的逻辑保持不变
+        if (applyFiltersBtn) {
+            applyFiltersBtn.addEventListener('click', () => {
+                performSearch();
+                filtersPanel.classList.remove('is-open');
+            });
+        }
+
+        // 3. 【【【核心升级：改造“重置”按钮和日期输入框】】】
+        // 我们不再给下拉菜单绑定实时搜索，让用户设置好后统一点击“应用筛选”
+        // if (charFilterSelect) charFilterSelect.addEventListener('change', performSearch); // 这行可以保留，也可以删除，看你想要的交互效果
+
+        if (dateFilterInput) {
+            // 用 flatpickr 接管日期输入框
+            flatpickr(dateFilterInput, {
+                locale: "zh",
+                dateFormat: "Y-m-d",
+                // 我们不再需要 onChange 实时搜索，因为有“应用筛选”按钮
+            });
+        }
+
+        if (resetFiltersBtn) {
+            resetFiltersBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                charFilterSelect.value = 'all';
+                
+                // 【关键】使用日历的专用方法来清空
+                if (dateFilterInput._flatpickr) {
+                    dateFilterInput._flatpickr.clear();
+                }
+                
+                performSearch(); // 执行清空后的“搜索”，恢复完整列表
+            });
+        }
+        
+        // 4. 筛选按钮的展开/收起逻辑保持不变
+        if (toggleFiltersBtn) {
+            toggleFiltersBtn.addEventListener('click', () => {
+                filtersPanel.classList.toggle('is-open');
+            });
+        }
+
+        // 5. 【【【全新：为“加载更多”按钮绑定事件】】】
+        // 使用事件委托，因为按钮是动态添加的
+        
     }
-    
     // --- AI表情包管理系统 ---
         const stickerManagerView = document.getElementById('ai-sticker-manager-view');
         const stickerUploadModal = document.getElementById('sticker-upload-modal');
@@ -3207,6 +3338,14 @@ ${chatLog}
             message = stagedUserMessages.find(msg => msg.id === messageId);
         }
         return message;
+        // 5. 【【【全新：为“加载更多”按钮绑定事件】】】
+        const loadMoreBtn = document.getElementById('load-more-btn');
+        if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', () => {
+                // 直接调用加载函数即可，它会自动加载下一页
+                loadAndDisplayHistory();
+            });
+        }
     }
 
     initialize();
