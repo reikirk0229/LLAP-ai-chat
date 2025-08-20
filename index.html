@@ -19,6 +19,9 @@
             .message-recalled { color: #888; font-size: 12px; text-align: center; padding: 10px 0; width: 100%; }
             .recalled-edit-btn { color: #3B83A2; cursor: pointer; margin-left: 5px; }
         </style>
+     <link rel="stylesheet" href="style.css">
+    <!-- ▼▼▼ 【【【全新：引入flatpickr日历样式】】】 ▼▼▼ -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 </head>
 <body>
     <div id="app-wrapper"></div>
@@ -83,8 +86,33 @@
                 <button id="add-contact-button" class="header-button">+</button>
             </div>
             <div class="search-bar-container">
-                <input type="text" class="search-input" placeholder="🔍 搜索">
+                <div class="search-bar">
+                    <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input type="text" id="chat-list-search-input" class="search-input" placeholder="搜索聊天记录...">
+                    <button id="toggle-filters-btn" class="tool-button" title="筛选"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M7 12h10M10 18h4"></path></svg></button>
+                </div>
+                <!-- ▼▼▼ 【【【全新：高级搜索筛选器面板】】】 ▼▼▼ -->
+            <div id="search-filters-panel" class="search-filters-panel">
+                <div class="filters-content"> <!-- ▼▼▼ 在这里增加一个 div ▼▼▼ -->
+                    <div class="filter-group">
+                        <label for="char-filter-select">指定角色</label>
+                        <select id="char-filter-select">...</select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="date-filter-input">指定日期</label>
+                        <input type="text" id="date-filter-input" placeholder="点击选择日期..." readonly>
+                    </div>
+                </div> <!-- ▲▲▲ 增加的 div 在这里结束 ▲▲▲ -->
+                <!-- ▼▼▼ 【全新】筛选操作按钮 ▼▼▼ -->
+                <div class="filters-actions">
+                    <button id="reset-filters-btn">重置</button>
+                    <button id="apply-filters-btn">应用筛选</button>
+                </div>
+                <!-- ▲▲▲▲▲ 操作按钮结束 ▲▲▲▲▲ -->
             </div>
+            <!-- ▲▲▲▲▲ 筛选器面板结束 ▲▲▲▲▲ -->
+            </div>
+            
             <div id="chat-list-container" class="chat-list">
                 <!-- 聊天列表将由JS动态生成在这里 -->
             </div>
@@ -116,7 +144,9 @@
                 </div>
             </div>
             </div>
-            <div id="message-container"></div>
+            <div id="message-container">
+                <div id="load-more-btn" class="load-more-btn hidden">加载更早的记录</div>
+            </div>
             <div id="ai-suggestion-panel" class="suggestion-panel hidden">
             </div>
             <div class="chat-input-area">
@@ -654,6 +684,9 @@
     </div>
 
 
+    <!-- ▼▼▼ 【【【全新：引入flatpickr日历功能】】】 ▼▼▼ -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script> <!-- 引入中文语言包 -->
     <script src="script.js"></script>
 
 </body>
