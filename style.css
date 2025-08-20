@@ -224,12 +224,12 @@ body::before {
     gap: 15px; 
     cursor: pointer; 
     margin: 8px 15px;
-    border-radius: var(--radius-lg);
-    background: var(--glass-bg);
+    border-radius: 16px; /* 【关键恢复】这就是你的圆角！ */
+    background: rgba(255, 255, 255, 0.8); /* 【关键恢复】恢复半透明背景 */
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: 1px solid var(--glass-border);
-    box-shadow: 0 4px 15px rgba(80, 151, 205, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2); /* 【关键恢复】恢复边框 */
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1); /* 【关键恢复】恢复阴影 */
     transition: all 0.3s ease;
 }
 /* 【新增】置顶聊天的特殊背景色 */
@@ -266,7 +266,7 @@ body::before {
     overflow-y: auto; 
     display: flex; 
     flex-direction: column; 
-    gap: 15px; 
+    gap: 7px; /* 【关键修改】把15px的间距缩小到10px，实现紧凑感！ */
     /* 【核心】移除背景色，让它彻底变透明！ */
     /* background-color: var(--background-light); */ 
 }
@@ -283,7 +283,7 @@ body::before {
 .message-content { display: flex; flex-direction: column; gap: 3px; max-width: calc(100% - 100px); position: relative; }
 .message { 
     padding: 12px 16px; 
-    border-radius: var(--radius-lg); 
+    border-radius: var(--radius-lg); /* 【关键恢复】改回 lg，让您的大圆角回来！ */
     line-height: 1.5; 
     word-break: break-word; 
     position: relative;
@@ -390,17 +390,7 @@ body::before {
 }
 
 .assistant-row .message::before { 
-    content: ''; 
-    position: absolute; 
-    left: -8px;
-    top: 12px; 
-    width: 0; 
-    height: 0; 
-    border-style: solid; 
-    border-width: 6px 8px 6px 0; 
-    /* 【【【核心修复】】】小尾巴的颜色永远跟随气泡的背景色 */
-    border-color: transparent var(--glass-bg) transparent transparent; 
-    z-index: 1;
+    display: none; /* 【关键修改】让这个小尾巴彻底隐身 */
 }
 .user-row { justify-content: flex-end; }
 .user-row .avatar { order: 2; }
@@ -411,7 +401,9 @@ body::before {
     align-self: flex-end;
     box-shadow: 0 4px 15px rgba(80, 151, 205, 0.3);
 }
-.user-row .message::after { content: ''; position: absolute; right: -6px; top: 12px; width: 0; height: 0; border-style: solid; border-width: 6px 0 6px 8px; border-color: transparent transparent transparent var(--qq-blue); }
+.user-row .message::after { 
+    display: none; /* 【关键修改】同样，让这个小尾巴也彻底隐身 */
+}
 .select-checkbox { width: 18px; height: 18px; border: 1px solid var(--border-color); border-radius: 50%; flex-shrink: 0; transition: all 0.2s; }
 .select-checkbox.checked { background-color: var(--qq-blue); border-color: var(--qq-blue); background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3e%3cpath d='M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022Z'/%3e%3c/svg%3e"); }
 .message-row.in-select-mode { cursor: pointer; padding: 5px; border-radius: 8px; }
@@ -457,26 +449,22 @@ body::before {
     display: flex; 
     flex-direction: column; 
     flex-shrink: 0; 
-    background: var(--glass-bg);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-top: 1px solid var(--glass-border); 
+    background-color: rgba(247, 247, 247, 0.85); 
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border-color); 
     position: relative; /* 【关键】为内部面板提供定位基准 */
-    box-shadow: 0 -4px 20px rgba(80, 151, 205, 0.1);
 }
 .chat-functions-toolbar { 
-    padding: 12px 20px; 
+    padding: 8px 15px; 
     display: flex; 
-    justify-content: space-around;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: var(--radius-lg);
-    margin: 10px 15px;
+    justify-content: space-around; 
 }
 .input-row { 
-    padding: 15px 20px; 
+    padding: 10px; 
     display: flex; 
-    gap: 15px; 
-    align-items: flex-end;
+    gap: 10px; 
+    align-items: flex-end; 
 }
 .tool-button { 
     background: none; 
@@ -506,28 +494,22 @@ body::before {
 #chat-input { 
     flex-grow: 1; 
     border: none; 
-    background: var(--glass-bg);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-lg); 
-    padding: 12px 16px; 
+    background-color: var(--background-white); 
+    border-radius: 12px; 
+    padding: 10px 15px; 
     font-size: 16px; 
     resize: none; 
-    max-height: 100px;
-    box-shadow: 0 2px 8px rgba(80, 151, 205, 0.1);
+    max-height: 100px; 
 }
 #send-button { 
     border: none; 
-    background: var(--gradient-primary); 
+    background-color: var(--qq-blue); 
     color: var(--text-light); 
-    border-radius: var(--radius-md); 
+    border-radius: 8px; 
     cursor: pointer; 
     font-weight: bold; 
-    padding: 12px 24px; 
-    flex-shrink: 0;
-    box-shadow: 0 4px 15px rgba(80, 151, 205, 0.3);
-    transition: all 0.3s ease;
+    padding: 10px 20px; 
+    flex-shrink: 0; 
 }
 
 #send-button:hover {
@@ -588,18 +570,21 @@ body::before {
     gap: 15px; 
     align-items: center;
 }
-#fetch-models-button { 
-    padding: 0 20px; 
-    border: none; 
-    background: var(--gradient-primary); 
-    color: var(--text-light); 
-    border-radius: var(--radius-md); 
-    cursor: pointer; 
-    flex-shrink: 0;
-    box-shadow: 0 4px 15px rgba(80, 151, 205, 0.3);
-    transition: all 0.3s ease;
+.search-bar-container {
+    padding: 10px 15px;
+    background-color: #fff;
+    border-bottom: 1px solid #f0f0f0;
 }
-
+#fetch-models-button { 
+    padding: 10px 20px; /* 关键：这行代码让按钮变高变胖 */
+    border: none; 
+    background-color: var(--qq-blue); 
+    color: var(--text-light); 
+    border-radius: 5px; 
+    cursor: pointer; 
+    flex-shrink: 0; 
+    font-weight: bold; /* 让文字加粗，更有力 */
+}
 #fetch-models-button:hover {
     transform: translateY(-1px);
     box-shadow: 0 6px 20px rgba(80, 151, 205, 0.4);
@@ -2520,14 +2505,14 @@ input:checked + .slider:before {
     display: flex; /* 【核心】使用Flex布局 */
     align-items: center; /* 垂直居中 */
     position: relative; /* 为了筛选按钮定位 */
-    width: 100%;
+    width: auto; /* 【关键修改】宽度不再是100%，而是自动适应 */
     background: var(--glass-bg);
     backdrop-filter: blur(15px);
     -webkit-backdrop-filter: blur(15px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-xl);
     padding: 12px 18px;
-    margin: 15px 20px;
+    margin: 15px 20px; /* 【关键修改】左右边距从20px缩小到15px */
     box-shadow: 0 4px 20px rgba(80, 151, 205, 0.15);
     transition: all 0.3s ease;
 }
@@ -2548,15 +2533,14 @@ input:checked + .slider:before {
 }
 
 .search-input {
-    flex-grow: 1; /* 【核心】占据所有剩余空间 */
+    width: 100%;
+    padding: 8px 15px;
     border: none;
-    background: none; /* 输入框背景透明 */
-    padding: 10px 0; /* 调整一下上下内边距 */
-    font-size: 15px;
-    text-align: left; /* 【核心】文字改回左对齐 */
-    color: var(--text-dark);
+    background-color: #f0f2f5;
+    border-radius: 8px;
+    font-size: 14px;
+    text-align: center;
 }
-
 .search-input::placeholder {
     color: var(--text-secondary);
     opacity: 0.7;
@@ -2584,7 +2568,7 @@ input:checked + .slider:before {
 /* --- 【全新】高级搜索筛选器样式 --- */
 #toggle-filters-btn {
     position: absolute;
-    right: 5px;
+    right: 15px; /* 【关键修改】将5px增加到15px，按钮就向左移动了 */
     top: 50%;
     transform: translateY(-50%);
 }
