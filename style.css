@@ -43,9 +43,9 @@ body {
 }
 #app-container {
     width: 100%;
-    /* height: calc(100% - var(--nav-height)); 【这行代码被彻底修改了】 */
-    flex: 1; /* 【核心修改】命令此容器“占据所有剩余空间” */
-    min-height: 0; /* 【专业技巧】防止在某些浏览器中内容溢出 */
+    /* height: calc(100% - var(--nav-height)); 【【【核心修改：删除了这行冲突的命令】】】 */
+    flex: 1; /* 【【【核心修改：换上了更智能的 flex 命令】】】 */
+    min-height: 0; /* 一个专业技巧，防止 flex 布局在某些情况下溢出 */
     /* 【核心】让主容器变透明，这样才能看到body的“墙纸” */
     background-color: transparent;
     display: flex;
@@ -53,7 +53,6 @@ body {
     overflow: hidden;
     position: relative; 
 }
-
 .view {
     width: 100%;
     flex: 1 1 auto; /* 【核心修正】解除了强制占满空间的霸权 */
@@ -1725,4 +1724,133 @@ input:checked + .slider:before { transform: translateX(20px); }
     display: flex;
     align-items: center;
     justify-content: center;
+}
+/* --- 【全新V2.0：搜索栏布局终极修复】 --- */
+.search-bar {
+    display: flex; /* 【核心】使用Flex布局 */
+    align-items: center; /* 垂直居中 */
+    position: relative; /* 为了筛选按钮定位 */
+    width: 100%;
+    background-color: #f0f2f5; /* 把背景色给容器 */
+    border-radius: 8px; /* 把圆角给容器 */
+}
+
+.search-icon {
+    /* 移除所有定位代码 */
+    flex-shrink: 0; /* 防止被压缩 */
+    margin: 0 8px 0 12px; /* 设置外边距 */
+    width: 18px;
+    height: 18px;
+    stroke: #999;
+}
+
+.search-input {
+    flex-grow: 1; /* 【核心】占据所有剩余空间 */
+    border: none;
+    background: none; /* 输入框背景透明 */
+    padding: 8px 0; /* 调整一下上下内边距 */
+    font-size: 14px;
+    text-align: left; /* 【核心】文字改回左对齐 */
+}
+
+/* 覆盖掉全局的 input 样式，确保搜索框没边框 */
+#chat-list-view .search-input {
+    border: none;
+    padding-left: 0;
+}
+/* --- 【全新】搜索结果高亮 & 标签样式 --- */
+.message-row--highlighted {
+    background-color: #fff8e1 !important; /* 一个淡黄色作为高亮背景 */
+    transition: background-color 0.5s ease;
+}
+
+.search-match-tag {
+    background-color: #e0e0e0;
+    color: #555;
+    font-size: 10px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    margin-right: 4px;
+}
+/* --- 【全新】高级搜索筛选器样式 --- */
+#toggle-filters-btn {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+#toggle-filters-btn svg {
+    stroke: #888;
+}
+
+.search-filters-panel {
+    background-color: #f9f9f9;
+    border-bottom: 1px solid #e0e0e0; /* 【核心修复】给整个面板加一个底边框 */
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-in-out;
+}
+.filters-content {
+    padding: 10px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    /* border-bottom: 1px solid #f0f0f0; 【删除】边框上移了 */
+}
+/* 【全新】为筛选操作按钮添加样式 */
+.filters-actions {
+    display: flex;
+    gap: 10px;
+    padding: 10px 15px;
+}
+.filters-actions button {
+    flex: 1;
+    padding: 8px;
+    border-radius: 5px;
+    font-size: 14px;
+    cursor: pointer;
+    border: 1px solid #ccc;
+}
+#apply-filters-btn {
+    background-color: var(--qq-blue);
+    color: white;
+    border-color: var(--qq-blue);
+}
+
+.search-filters-panel.is-open {
+    max-height: 150px; /* 一个足够大的高度 */
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.filter-group label {
+    flex-shrink: 0;
+    font-size: 14px;
+    color: #333;
+}
+.filter-group select, .filter-group input {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 14px;
+}
+/* --- 【全新】加载更多消息按钮样式 --- */
+.load-more-btn {
+    text-align: center;
+    padding: 10px 0;
+    font-size: 14px;
+    color: var(--qq-blue);
+    cursor: pointer;
+    background-color: #f0f2f5;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+.load-more-btn:hover {
+    opacity: 1;
 }
