@@ -334,6 +334,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-top: 1px solid var(--border-color); 
+    position: relative; /* 【关键】为内部面板提供定位基准 */
 }
 .chat-functions-toolbar { padding: 8px 15px; display: flex; justify-content: space-around; }
 .input-row { padding: 10px; display: flex; gap: 10px; align-items: flex-end; }
@@ -1558,4 +1559,170 @@ input:checked + .slider:before { transform: translateX(20px); }
 
 .side-menu-footer > span {
     cursor: pointer;
+}
+/* --- 【全新】更多功能抽屉样式 --- */
+.more-functions-drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4); /* 半透明黑色背景 */
+    z-index: 1500; /* 层级要比聊天界面高 */
+    display: flex;
+    justify-content: center;
+    align-items: flex-end; /* 让内容从底部出现 */
+    opacity: 0; /* 默认完全透明 */
+    transition: opacity 0.3s ease-in-out;
+}
+
+/* 当抽屉显示时，改变透明度 */
+.more-functions-drawer:not(.hidden) {
+    opacity: 1;
+}
+
+.more-functions-content {
+    background-color: #f7f7f7;
+    width: 100%;
+    max-width: 360px; /* 限制最大宽度，和你的App主体一致 */
+    padding: 20px 20px 10px;
+    border-radius: 16px 16px 0 0; /* 顶部圆角 */
+    box-shadow: 0 -5px 15px rgba(0,0,0,0.1);
+    transform: translateY(100%); /* 默认藏在屏幕下方 */
+    transition: transform 0.3s ease-in-out;
+}
+
+/* 当抽屉显示时，滑上来 */
+.more-functions-drawer:not(.hidden) .more-functions-content {
+    transform: translateY(0);
+}
+
+.more-functions-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr); /* 4列网格布局 */
+    gap: 20px; /*图标间距*/
+    padding-bottom: 20px;
+}
+
+.function-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    text-align: center;
+}
+
+.function-icon {
+    width: 56px;
+    height: 56px;
+    background-color: white;
+    border-radius: 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 28px; /* Emoji图标大小 */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    margin-bottom: 8px;
+}
+
+.function-label {
+    font-size: 13px;
+    color: #555;
+}
+
+.more-functions-footer {
+    border-top: 1px solid #e0e0e0;
+    margin: 0 -20px; /* 让分割线撑满宽度 */
+    padding: 10px 20px 0;
+}
+
+#close-functions-drawer-btn {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    background: white;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+}
+/* --- 【全新 V2.0】扩展功能面板样式 --- */
+#extended-functions-panel {
+    background-color: #f7f7f7;
+    /* padding: 20px 20px 10px; 【关键修改】这行被删除了 */
+    max-height: 0;
+    overflow: hidden; 
+    transition: max-height 0.3s ease-in-out; 
+}
+
+#extended-functions-panel.is-open {
+    max-height: 250px; 
+}
+
+.more-functions-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr); 
+    gap: 20px; 
+    padding: 20px 20px 10px; /* 【关键修改】内边距被移动到了这里 */
+}
+
+.function-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    text-align: center;
+}
+
+.function-icon {
+    width: 56px;
+    height: 56px;
+    background-color: white;
+    border-radius: 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    margin-bottom: 8px;
+}
+
+.function-icon svg {
+    width: 28px;
+    height: 28px;
+    stroke: #333; /* SVG线条颜色 */
+}
+
+.function-label {
+    font-size: 13px;
+    color: #555;
+}
+/* --- 【全新】侧滑菜单遮罩层样式 --- */
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4); /* 半透明黑色 */
+    z-index: 1999; /* 层级比内容高，但比侧边栏低 */
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+}
+
+/* 当遮罩层需要显示时（即不再有.hidden类），让它淡入 */
+.sidebar-overlay:not(.hidden) {
+    opacity: 1;
+}
+
+/* --- 【全新】侧滑菜单SVG图标样式微调 --- */
+.side-menu-item .menu-icon svg {
+    width: 24px;
+    height: 24px;
+    stroke: #555; /* SVG线条颜色 */
+    stroke-width: 2;
+}
+/* --- 【【【布局微调：完美对齐侧边栏图标与文字】】】 --- */
+.side-menu-item .menu-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
