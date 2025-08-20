@@ -220,10 +220,10 @@ body::before {
 .chat-list-item { 
     display: flex; 
     align-items: center; 
-    padding: 12px 15px; 
+    padding: 10px 15px; /* 【终极修改】只调小上下的 padding */
     gap: 15px; 
     cursor: pointer; 
-    margin: 8px 40px; /* 【终极修改】同样增加到 40px，与搜索栏完美对齐！ */
+    margin: 6px 15px; /* 上下 margin 也调小，左右保持宽敞 */
     border-radius: 16px; 
     background: rgba(255, 255, 255, 0.8); 
     backdrop-filter: blur(10px);
@@ -456,12 +456,12 @@ body::before {
     position: relative; /* 【关键】为内部面板提供定位基准 */
 }
 .chat-functions-toolbar { 
-    padding: 6px 15px;
+    padding: 2px 15px; /* 【终极修改】大幅调小上下的 padding */
     display: flex; 
     justify-content: space-around;
     background: rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-lg);
-    margin: 8px 40px 0; /* 【终极修改】左右外边距大胆增加到 40px！ */
+    margin: 5px 15px 0; /* 上下 margin 也调小，左右保持宽敞 */
 }
 .input-row { 
     padding: 8px 10px; 
@@ -2515,8 +2515,8 @@ input:checked + .slider:before {
     -webkit-backdrop-filter: blur(15px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-xl);
-    padding: 10px 18px;
-    margin: 10px 40px; /* 【终极修改】左右外边距大胆增加到 40px！ */
+    padding: 8px 18px; /* 【终极修改】只调小上下的 padding */
+    margin: 10px 20px; /* 上下 margin 也调小，左右保持宽敞 */
     box-shadow: 0 4px 20px rgba(80, 151, 205, 0.15);
     transition: all 0.3s ease;
 }
