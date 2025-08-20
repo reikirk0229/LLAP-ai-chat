@@ -21,6 +21,39 @@
         </style>
 </head>
 <body>
+    <div id="app-wrapper"></div>
+    <!-- ▼▼▼▼▼ 【全新】侧滑菜单 (个人中心) ▼▼▼▼▼ -->
+    <div id="side-menu" class="side-menu">
+        <div class="side-menu-profile">
+            <img id="side-menu-avatar" class="avatar-large" src="https://i.postimg.cc/cLPP10Vm/4.jpg">
+            <span id="side-menu-username">你的昵称</span>
+            <!-- 可以在这里加更多个人信息 -->
+        </div>
+        <div class="side-menu-list">
+            <div class="side-menu-item" id="side-menu-wallet">
+                <span class="menu-icon">💰</span>
+                <span>钱包</span>
+            </div>
+            <div class="side-menu-item" id="side-menu-accounting">
+                <span class="menu-icon">🧾</span>
+                <span>记账</span>
+            </div>
+            <div class="side-menu-item" id="side-menu-favorites">
+                <span class="menu-icon">⭐</span>
+                <span>收藏</span>
+            </div>
+            <div class="side-menu-item" id="side-menu-themes">
+                <span class="menu-icon">🎨</span>
+                <span>个性装扮</span>
+            </div>
+        </div>
+        <div class="side-menu-footer">
+            <span>设置</span>
+            <span>夜间</span>
+            <span>--_--</span>
+        </div>
+    </div>
+    <!-- ▲▲▲▲▲ 侧滑菜单结束 ▲▲▲▲▲ -->
     <div id="message-context-menu" class="message-context-menu">
         <div class="context-menu-item" id="context-menu-reply">引用</div>
         <div class="context-menu-item" id="context-menu-recall">撤回</div>
@@ -34,12 +67,23 @@
     <div id="app-container">
 
         <!-- 视图1: 消息列表 (默认视图) -->
-        <div id="chat-list-view" class="view">
-            <div class="header">
-                <span>消息</span>
+        <div id="chat-list-view" class="view hidden">
+            <div class="main-header">
+                <div id="main-header-user-info" class="user-info-bar">
+                    <img id="main-header-avatar" class="avatar" src="https://i.postimg.cc/cLPP10Vm/4.jpg">
+                    <div class="user-details">
+                        <span id="main-header-username">你的昵称</span>
+                        <span class="user-status"><span class="status-dot"></span>在线 - 5G</span>
+                    </div>
+                </div>
                 <button id="add-contact-button" class="header-button">+</button>
             </div>
-            <div id="chat-list-container"></div>
+            <div class="search-bar-container">
+                <input type="text" class="search-input" placeholder="🔍 搜索">
+            </div>
+            <div id="chat-list-container" class="chat-list">
+                <!-- 聊天列表将由JS动态生成在这里 -->
+            </div>
         </div>
 
         <!-- 视图2: 聊天窗口 -->
@@ -278,19 +322,19 @@
             <button id="add-sticker-group-btn" class="fab">+</button>
         </div>
 
-        <!-- 【【【核心修正：导航栏现在是app-container的最后一个孩子】】】 -->
-        <div id="app-nav">
-            <div class="nav-button active" data-view="chat-list-view">消息</div>
-            <div class="nav-button" data-view="moments-view">动态</div>
-            <div class="nav-button" data-view="settings-view">设置</div>
-        </div>
+        </div> <!-- ▲▲▲ #app-container 到此彻底结束 ▲▲▲ -->
 
-    </div> <!-- ▲▲▲ #app-container 到此彻底结束 ▲▲▲ -->
+    <!-- 【【【核心终极修复：导航栏现在是 app-container 的兄弟！】】】 -->
+    <div id="app-nav">
+        <div class="nav-button active" data-view="chat-list-view">消息</div>
+        <div class="nav-button" data-view="moments-view">动态</div>
+        <div class="nav-button" data-view="settings-view">设置</div>
+    </div>
 
     <!-- ############################################################### -->
     <!-- #####          所有的弹窗(Modal)都应该放在这里            ##### -->
-    <!-- #####         作为 app-container 的兄弟，而不是孩子         ##### -->
     <!-- ############################################################### -->
+
 
     <!-- 用户信息修改弹窗 -->
     <div id="user-profile-modal" class="modal-overlay hidden">
