@@ -62,10 +62,51 @@ body::before {
     color: white !important;
 }
 
-/* 修复header按钮颜色 - 白色文字在蓝色背景上 */
-.header-button, .header-button-text {
+/* 修复header按钮颜色和样式 */
+.header-button-text {
     color: white !important;
     font-weight: 600 !important;
+    background: none !important;
+    border: none !important;
+    padding: 8px 12px !important;
+    font-size: 16px !important;
+}
+
+/* 【全新】为顶部操作图标按钮设计现代样式 */
+.header-action-buttons .header-button {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 50% !important; /* 让按钮变成完美的圆形 */
+    
+    /* ▼▼▼ 【【【核心修复：擦掉这里的 !important 圣旨！！！】】】 ▼▼▼ */
+    display: flex; 
+    
+    align-items: center !important;
+    justify-content: center !important;
+    background: rgba(255, 255, 255, 0.15) !important; /* 半透明背景，增加层次感 */
+    transition: all 0.2s ease !important; /* 【优化】让过渡更平滑 */
+    padding: 0 !important; /* 清除默认的内边距 */
+    margin: 0 4px !important; /* 增加按钮之间的左右间距 */
+}
+
+/* 鼠标悬停时的效果 (电脑端) */
+.header-action-buttons .header-button:hover {
+    background: rgba(255, 255, 255, 0.3) !important; /* 悬停时背景变亮 */
+}
+
+/* 【【【核心新增：手机触摸按下时的效果】】】 */
+.header-action-buttons .header-button:active {
+    background: rgba(0, 0, 0, 0.1) !important; /* 按下时，背景叠加一层淡淡的黑色，效果更明显 */
+    transform: scale(0.95) !important; /* 同时让按钮有微微被按下去的感觉 */
+}
+
+
+/* 图标本身的样式 */
+.header-action-buttons .header-button svg {
+    width: 20px !important;
+    height: 20px !important;
+    stroke: white !important; /* 图标线条颜色为白色 */
+    stroke-width: 2px !important;
 }
 
 /* 修复main-header样式 - 同样使用蓝色渐变 */
