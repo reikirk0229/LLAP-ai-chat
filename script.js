@@ -936,7 +936,7 @@ async function openChat(contactId, messageIdToHighlight = null) {
     const contact = appData.aiContacts.find(c => c.id === numericContactId);
     if (!contact) return;
 
-    messageContainer.innerHTML = '<div id="load-more-btn" class="load-more-btn hidden">加载更早的记录</div>';
+    messageContainer.innerHTML = '<div id="load-more-btn" class="load-more-btn hidden"></div>';
     
     const avatarBlob = await db.getImage(`${contact.id}_avatar`);
     contact.avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
@@ -948,10 +948,24 @@ async function openChat(contactId, messageIdToHighlight = null) {
     
     switchToView('chat-window-view');
     
+    // 我们依然先加载最新的一页历史记录
     await loadAndDisplayHistory(true);
 
+    // 【【【核心修复逻辑】】】
+    // 如果需要高亮某条消息，我们从这里开始特殊处理
     if (messageIdToHighlight) {
-        const targetMessage = messageContainer.querySelector(`[data-message-id="${messageIdToHighlight}"]`);
+        let targetMessage = messageContainer.querySelector(`[data-message-id="${messageIdToHighlight}"]`);
+        
+        // 【全新】如果第一页没找到，就启动“智能加载”循环
+        const loadMoreBtn = document.getElementById('load-more-btn');
+        let safetyCounter = 0; // 设置一个“安全阀”，防止意外情况下发生无限循环
+        while (!targetMessage && !loadMoreBtn.classList.contains('hidden') && safetyCounter < 100) {
+            await loadAndDisplayHistory(false); // 加载更早的一页记录
+            targetMessage = messageContainer.querySelector(`[data-message-id="${messageIdToHighlight}"]`);
+            safetyCounter++;
+        }
+
+        // 【保持不变】现在，无论消息在哪一页，只要它存在，我们就高亮它
         if (targetMessage) {
             targetMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
             targetMessage.classList.add('message-row--highlighted');
@@ -2046,53 +2060,59 @@ ${availableStickersPrompt}
     }
 
     function toggleMessageSelection(element) {
-        const messageId = element.dataset.messageId;
-        const checkbox = element.querySelector('.select-checkbox');
-        if (!checkbox) return;
+    const messageId = element.dataset.messageId;
+    const checkbox = element.querySelector('.select-checkbox');
+    if (!checkbox) return;
 
-        if (selectedMessages.has(messageId)) {
-            selectedMessages.delete(messageId);
-            checkbox.classList.remove('checked');
-        } else {
-            selectedMessages.add(messageId);
-            checkbox.classList.add('checked');
-        }
-
-        const count = selectedMessages.size;
-        selectCount.textContent = `已选择${count}项`;
-
-        // --- 【【【核心终极修复：智能按钮状态机】】】 ---
-        const recallBtn = document.getElementById('recall-selected-button');
-        const replyBtn = document.getElementById('reply-selected-button');
-        const editBtn = document.getElementById('edit-selected-button');
-        const deleteBtn = document.getElementById('delete-selected-button');
-
-        if (count === 0) {
-            // 如果没选，所有按钮都禁用
-            [recallBtn, replyBtn, editBtn, deleteBtn].forEach(btn => btn.style.display = 'none');
-        } else if (count === 1) {
-            // 如果只选了1条
-            const firstId = selectedMessages.values().next().value;
-            const messageData = findMessageById(firstId);
-            
-            // 引用、删除 按钮总是可用
-            replyBtn.style.display = 'inline-block';
-            deleteBtn.style.display = 'inline-block';
-            
-            // 只有自己的消息才能撤回和编辑
-            if (messageData && messageData.role === 'user') {
-                recallBtn.style.display = 'inline-block';
-                editBtn.style.display = 'inline-block';
-            } else {
-                recallBtn.style.display = 'none';
-                editBtn.style.display = 'none';
-            }
-        } else {
-            // 如果选了多条，只能删除
-            deleteBtn.style.display = 'inline-block';
-            [recallBtn, replyBtn, editBtn].forEach(btn => btn.style.display = 'none');
-        }
+    if (selectedMessages.has(messageId)) {
+        selectedMessages.delete(messageId);
+        checkbox.classList.remove('checked');
+    } else {
+        selectedMessages.add(messageId);
+        checkbox.classList.add('checked');
     }
+
+    const count = selectedMessages.size;
+    selectCount.textContent = `已选择${count}项`;
+
+    const recallBtn = document.getElementById('recall-selected-button');
+    const replyBtn = document.getElementById('reply-selected-button');
+    const editBtn = document.getElementById('edit-selected-button');
+    const deleteBtn = document.getElementById('delete-selected-button');
+
+    // 统一规则：先用“王牌”把所有按钮都藏起来
+    recallBtn.classList.add('hidden');
+    replyBtn.classList.add('hidden');
+    editBtn.classList.add('hidden');
+    deleteBtn.classList.add('hidden');
+
+    // 规则1：如果只选了1条
+    if (count === 1) {
+        const firstId = selectedMessages.values().next().value;
+        const messageData = findMessageById(firstId);
+
+        if (messageData) {
+            // 任何单条消息都可以“引用”和“删除”
+            replyBtn.classList.remove('hidden');
+            deleteBtn.classList.remove('hidden');
+
+            // 只有用户和AI的消息可以“编辑”
+            if (messageData.role === 'user' || messageData.role === 'assistant') {
+                editBtn.classList.remove('hidden');
+            }
+
+            // 只有用户的消息可以“撤回”
+            if (messageData.role === 'user') {
+                recallBtn.classList.remove('hidden');
+            }
+        }
+    // 规则2：如果选了超过1条
+    } else if (count > 1) {
+        // 多选时只允许“删除”
+        deleteBtn.classList.remove('hidden');
+    }
+    // 如果一条都没选 (count === 0)，那么所有按钮就保持最开始的隐藏状态，什么也不做。
+}
     
     function editSelectedMessage() {
         if (selectedMessages.size !== 1) return;
@@ -2111,10 +2131,10 @@ ${availableStickersPrompt}
             messageData = stagedUserMessages.find(msg => msg.id === messageId);
         }
         
-        // 如果两个地方都没找到，或者找到的不是用户的消息，就放弃
-        if (!messageData || (messageData.role && messageData.role !== 'user')) {
-             exitSelectMode();
-             return;
+        // 如果没找到消息，或者消息既不是用户发的也不是AI发的，就放弃
+        if (!messageData || (messageData.role !== 'user' && messageData.role !== 'assistant')) {
+            exitSelectMode();
+            return;
         }
 
         // 找到了！现在可以正常打开编辑弹窗了
