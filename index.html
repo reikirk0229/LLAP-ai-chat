@@ -135,13 +135,15 @@
                     <button id="chat-settings-button" class="header-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button>
                 </div>
                 <div id="chat-header-select" class="chat-header-actions hidden">
+    <!-- 【【【核心修复1：把取消按钮的样式类改掉，它就不会那么大了】】】 -->
     <button id="cancel-select-button" class="header-button-text">取消</button>
     <span id="select-count"></span>
     <div class="header-action-buttons">
+        <!-- 【【【核心修复2：用SVG图标彻底替换掉汉字】】】 -->
         <!-- 撤回按钮 (图标：标准撤销) -->
-<button id="recall-selected-button" class="header-button" title="撤回">
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
-</button>
+        <button id="recall-selected-button" class="header-button" title="撤回">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
+        </button>
         <!-- 引用按钮 (图标：回复) -->
         <button id="reply-selected-button" class="header-button" title="引用">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h10a8 8 0 0 1 8 8v2M3 10l4-4M3 10l4 4"/></svg>
@@ -297,6 +299,10 @@
                         <label class="switch"><input type="checkbox" id="cs-propose-toggle"><span class="slider"></span></label>
                     </div>
                     <div class="settings-item"><span>导出/导入聊天记录</span><span class="arrow">&gt;</span></div>
+                    <div class="settings-item" id="cs-restart-context">
+                        <span>刷新AI记忆</span>
+                        <span class="arrow">&gt;</span>
+                    </div>
                 </div>
                 <div class="settings-group">
                     <div class="settings-item"><span>设置AI动态频率</span><span class="arrow">&gt;</span></div>
@@ -376,6 +382,10 @@
                     <label for="ai-editor-persona">AI的人设</label>
                     <textarea id="ai-editor-persona" rows="5"></textarea>
                 </div>
+                <div class="form-group">
+    <label for="ai-editor-public-card">公开名片 (对其他AI可见)</label>
+    <textarea id="ai-editor-public-card" rows="3" placeholder="AI的公开简介，首次对话时可自动生成..."></textarea>
+</div>
                 <div class="form-group">
                     <label for="ai-editor-chat-style">线上风格</label>
                     <textarea id="ai-editor-chat-style" rows="4" placeholder="e.g., 喜欢用短句，偶尔会发可爱的Emoji、颜文字和表情包。不爱发语音，打字很快。说话直接，不喜欢拐弯抹角。"></textarea>
@@ -695,6 +705,9 @@
             </div>
         </div>
     </div>
+    </div>
+    </div>
+
 
 
     <!-- ▼▼▼ 【【【全新：引入flatpickr日历功能】】】 ▼▼▼ -->
