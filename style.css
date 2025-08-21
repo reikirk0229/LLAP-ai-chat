@@ -2695,3 +2695,65 @@ input:checked + .slider:before {
     transform: translateY(-1px);
     box-shadow: 0 4px 15px rgba(80, 151, 205, 0.2);
 }
+/* --- 【【【全新 V2.0：内置式AI思想气泡样式】】】 --- */
+
+/* 1. 思想气泡消息行的特殊布局 */
+.thought-bubble-row {
+    justify-content: flex-start; /* 确保它出现在左边 */
+    padding-left: 60px; /* 为左边的头像留出空间 */
+    position: relative;
+    margin: 10px 0;
+}
+
+/* 2. 思想气泡本身 */
+.thought-bubble-message {
+    background: #f0f4f8; /* 一个淡淡的、特殊的背景色 */
+    color: #555;
+    padding: 12px 18px;
+    border-radius: 16px;
+    max-width: calc(100% - 80px);
+    position: relative;
+    border: 1px solid #e0e4e8;
+    font-style: italic; /* 用斜体来区分心声和对话 */
+}
+
+/* 3. 【核心修复 V3.0】用SVG绘制一个绝对平滑、漂亮的“小尾巴” */
+.thought-bubble-message::before {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: -28px;
+    width: 30px;
+    height: 30px;
+    /* 【终极修正】我们交换了两个椭圆的定义，实现了小椭圆在左下，大椭圆在右上的效果 */
+    background-image: url("data:image/svg+xml,%3Csvg width='30' height='30' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='50' cy='80' rx='18' ry='12' fill='%23f0f4f8' stroke='%23e0e4e8' stroke-width='3'/%3E%3Cellipse cx='20' cy='55' rx='12' ry='8' fill='%23f0f4f8' stroke='%23e0e4e8' stroke-width='3'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+}
+
+/* 【新增】为心声文字本身创建一个容器，让它和按钮隔开 */
+.thought-bubble-message .thought-text {
+    display: block;
+    padding-right: 25px; /* 在右边留出足够空间给关闭按钮 */
+}
+
+/* 4. 【核心修复 V3.0】思想气泡关闭按钮样式 */
+.thought-bubble-close-btn {
+    position: absolute;
+    top: 5px; /* 从顶部往下挪一点 */
+    right: 5px; /* 定位在右上角 */
+    width: 20px; /* 变小 */
+    height: 20px; /* 变小 */
+    border: none;
+    background: none;
+    font-size: 22px; /* 叉号本身可以大一点，但按钮区域小 */
+    font-weight: 300; /* 变细 */
+    line-height: 1; /* 确保叉号垂直居中 */
+    color: #ccc;
+    cursor: pointer;
+    padding: 0;
+    transition: all 0.2s ease;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
