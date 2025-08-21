@@ -2516,7 +2516,7 @@ input:checked + .slider:before {
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-xl);
     padding: 8px 18px;
-    margin: 8px 15px 10px; /* 上下边距缩小，左右边距改为15px与列表对齐 */
+    margin: 3px 18px 4px; /* 上下边距缩小，左右边距改为15px与列表对齐 */
     box-shadow: 0 4px 20px rgba(80, 151, 205, 0.15);
     transition: all 0.3s ease;
 }
