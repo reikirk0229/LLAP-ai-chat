@@ -156,6 +156,11 @@ body::before {
     justify-content: space-between;
     align-items: center;
 }
+.header-action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 5px; /* (可选) 增加按钮之间的微小间距 */
+}
 #chat-header-normal {
     justify-content: flex-start;
 }
@@ -2515,8 +2520,8 @@ input:checked + .slider:before {
     -webkit-backdrop-filter: blur(15px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-xl);
-    padding: 8px 18px;
-    margin: 1px 5px 2px; /* 上下边距缩小，左右边距改为15px与列表对齐 */
+    padding: 5px 15px;
+    margin: 1px 2px 1px; /* 上下边距缩小，左右边距改为15px与列表对齐 */
     box-shadow: 0 4px 20px rgba(80, 151, 205, 0.15);
     transition: all 0.3s ease;
 }
