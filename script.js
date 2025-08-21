@@ -96,6 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let imageUploadMode = 'upload';
     let stagedImageData = null;
     let isSelectMode = false;
+    let forceRestartContext = false;
     let selectedMessages = new Set();
     let longPressTimer;
     let lastRenderedTimestamp = 0;
@@ -236,6 +237,45 @@ document.addEventListener('DOMContentLoaded', () => {
 function scrollToBottom() {
     // 这个函数只有一个使命：把聊天容器平滑地滚动到底部。
     messageContainer.scrollTop = messageContainer.scrollHeight;
+}
+/**
+ * 【【【全新核心工具：专业的聊天记录打包员】】】
+ * 它的唯一职责，就是把我们的内部聊天记录，转换成AI能看懂的、格式完美的“剧本台词”。
+ * @param {Array} history - 要打包的聊天记录数组
+ * @returns {Promise<Array>}
+ */
+async function formatHistoryForApi(history) {
+    const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+    if (!contact) return [];
+
+    return Promise.all(
+        history.map(async (msg) => {
+            const role = msg.role;
+            const content = msg.content || '';
+
+            if (role === 'user' && msg.type === 'image' && msg.imageId) {
+                try {
+                    const imageBlob = await db.getImage(msg.imageId);
+                    if (imageBlob) {
+                        const imageDataUrl = await blobToDataURL(imageBlob);
+                        return { role: 'user', content: [ { type: "text", text: content }, { type: "image_url", image_url: { url: imageDataUrl } } ] };
+                    }
+                } catch (error) { return { role: role, content: content }; }
+            }
+
+            if (msg.type === 'sticker') {
+                const stickerDesc = content.replace('[表情] ', '').trim();
+                return { role: role, content: `[用户发送了一个表情，表达的情绪或动作是：${stickerDesc}]` };
+            }
+
+            let contentPrefix = '';
+            if (msg.type === 'voice') { contentPrefix = '[语音] '; } 
+            else if (msg.type === 'red-packet') { contentPrefix = '[红包] '; } 
+            else if (msg.type === 'relationship_proposal') { contentPrefix = '[关系邀请] '; }
+
+            return { role: role, content: `${contentPrefix}${content}` };
+        })
+    );
 }
     function renderUserStickerPanel(newlyAddedSticker = null) {
             userStickerPanel.innerHTML = '';
@@ -721,20 +761,37 @@ function scrollToBottom() {
         if (appData.appSettings.contextLimit === undefined) { appData.appSettings.contextLimit = 20; }
         if (!appData.aiContacts) { appData.aiContacts = []; }
         appData.aiContacts.forEach(c => {
-            if (!c.remark) c.remark = c.name;
-            if (c.isPinned === undefined) c.isPinned = false;
-            if (!c.userProfile) { c.userProfile = { name: '你', persona: '我是一个充满好奇心的人。' }; }
-            if (!c.chatHistory) { c.chatHistory = []; }
-            if (!c.stickerGroups) c.stickerGroups = []; 
-            if (!c.activityStatus) c.activityStatus = '';
-            if (c.autoSummaryEnabled === undefined) c.autoSummaryEnabled = false;
-            if (!c.autoSummaryThreshold) c.autoSummaryThreshold = 100;
-            if (!c.lastSummaryAtCount) c.lastSummaryAtCount = 0;
-            // 【【【核心新增：为角色植入求爱开关，默认为开】】】
-            if (c.canPropose === undefined) {
-                c.canPropose = true;
-            }
-        });
+    if (!c.remark) c.remark = c.name;
+    if (c.isPinned === undefined) c.isPinned = false;
+    if (!c.userProfile) { c.userProfile = { name: '你', persona: '我是一个充满好奇心的人。' }; }
+    if (!c.chatHistory) { c.chatHistory = []; }
+    if (!c.stickerGroups) c.stickerGroups = []; 
+    if (!c.activityStatus) c.activityStatus = '';
+    if (c.autoSummaryEnabled === undefined) c.autoSummaryEnabled = false;
+    if (!c.autoSummaryThreshold) c.autoSummaryThreshold = 100;
+    if (!c.lastSummaryAtCount) c.lastSummaryAtCount = 0;
+    
+    // 【【【核心新增：为角色植入求爱开关，默认为开】】】
+    if (c.canPropose === undefined) {
+        c.canPropose = true;
+    }
+
+    // ▼▼▼ 【【【核心新增：为每个AI伙伴的档案里增加一个“书签”】】】 ▼▼▼
+    // 这个书签记录了AI应该从哪里开始读取上下文，默认为0（从头开始）
+    if (c.contextStartIndex === undefined) {
+        c.contextStartIndex = 0;
+    }
+    // ▼▼▼ 【【【核心新增：为AI增加“名片”和“激活状态”】】】 ▼▼▼
+    // 1. 公开名片，默认为null，代表还未生成
+    if (c.publicProfileCard === undefined) {
+        c.publicProfileCard = null;
+    }
+    // 2. 是否被打开过的标记，用于触发“第一次”事件
+    if (c.hasBeenOpened === undefined) {
+        c.hasBeenOpened = false;
+    }
+
+});
         // ▼▼▼ 请把下面这段全新的代码，粘贴在这里 ▼▼▼
         // 【全新】为全局AI表情包建立仓库，如果不存在的话
         if (!appData.globalAiStickers) {
@@ -974,6 +1031,14 @@ async function openChat(contactId, messageIdToHighlight = null) {
             }, 2000);
         }
     }
+    // ▼▼▼ 【【【核心新增：检查是否是“第一次”打开对话】】】 ▼▼▼
+if (!contact.hasBeenOpened) {
+    // 如果是第一次，就调用我们的新功能
+    promptAndGeneratePublicCard(contact);
+    // 标记为已打开，并保存，确保下次不会再触发
+    contact.hasBeenOpened = true;
+    saveAppData();
+}
 }
     
 async function createMessageElement(text, role, options = {}) {
@@ -1070,6 +1135,17 @@ async function createMessageElement(text, role, options = {}) {
         case 'relationship_breakup':
             messageContentHTML = `<div class="message message-relationship-card"><div class="relationship-card-content"><div class="relationship-card-text"><h4>解除亲密关系</h4><p>我们之间的亲密关系已解除</p></div><div class="relationship-card-icon"><img src="https://i.postimg.cc/P5Lg62Vq/lollipop.png" alt="icon"></div></div><div class="relationship-card-footer">亲密关系</div></div>`;
             break;
+        // ▼▼▼ 【【【核心新增：让程序认识“思想气泡”这种新类型】】】 ▼▼▼
+case 'thought':
+    // 【终极修复】确保文字被包裹，按钮独立，这样CSS才能完美生效
+    messageContentHTML = `<div class="thought-bubble-message"><span class="thought-text">${text}</span><button class="thought-bubble-close-btn">&times;</button></div>`;
+    const thoughtRow = document.createElement('div');
+    thoughtRow.className = 'message-row thought-bubble-row';
+    thoughtRow.dataset.messageId = messageId;
+    thoughtRow.innerHTML = messageContentHTML;
+    fragment.appendChild(thoughtRow);
+    return fragment;
+
         default:
             messageContentHTML = `<div class="message">${text}</div>`;
     }
@@ -1231,6 +1307,8 @@ async function displayMessage(text, role, options = {}) {
             reader.onerror = () => reject(reader.error);
             reader.readAsDataURL(blob);
         });
+    
+    
     }
 
     async function getAiResponse() {
@@ -1241,116 +1319,81 @@ async function displayMessage(text, role, options = {}) {
         aiSuggestionPanel.classList.add('hidden');
         
         // 【【【‘正在输入’不滚动 终极修复】】】
-        await displayMessage('对方正在输入...', 'assistant', { isLoading: true });
-        // 我们不再手动滚动，因为 displayMessage 内部对 system/loading 消息的处理已经包含了滚动
+await displayMessage('对方正在输入...', 'assistant', { isLoading: true });
+// 我们不再手动滚动，因为 displayMessage 内部对 system/loading 消息的处理已经包含了滚动
 
-        let availableStickersPrompt = "你没有任何可用的表情包。";
-        const availableStickers = [];
-        contact.stickerGroups.forEach(groupName => {
-            const group = appData.globalAiStickers[groupName] || [];
-            group.forEach(sticker => {
-                // 【核心修正】确保我们用正确的ID给AI
-                const aiId = sticker.aiId || sticker.id;
-                availableStickers.push({ ...sticker, aiId });
-            });
-        });
+let availableStickersPrompt = "你没有任何可用的表情包。";
+const availableStickers = [];
+contact.stickerGroups.forEach(groupName => {
+    const group = appData.globalAiStickers[groupName] || [];
+    group.forEach(sticker => {
+        // 【核心修正】确保我们用正确的ID给AI
+        const aiId = sticker.aiId || sticker.id;
+        availableStickers.push({ ...sticker, aiId });
+    });
+});
 
-        if (availableStickers.length > 0) {
-            availableStickersPrompt = "你可以使用以下表情包来增强表达（请优先使用表情包而不是Emoji）：\n";
-            availableStickers.forEach(sticker => {
-                availableStickersPrompt += `- [STICKER:${sticker.aiId}] 描述: ${sticker.desc}\n`;
-            });
-        }
-        const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
-       const contextLimit = appData.appSettings.contextLimit || 50; // 这仍然可以作为备用
-        const MAX_CONTEXT_TOKENS = 3000; // 设定一个安全的“背包”容量上限（单位：估算Token）
+if (availableStickers.length > 0) {
+    availableStickersPrompt = "你可以使用以下表情包来增强表达（请优先使用表情包而不是Emoji）：\n";
+    availableStickers.forEach(sticker => {
+        availableStickersPrompt += `- [STICKER:${sticker.aiId}] 描述: ${sticker.desc}\n`;
+    });
+}
+const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
 
-        let currentTokens = 0;
-        const historyForApi = [];
+// ▼▼▼ 【【【核心魔改：让图书管理员严格遵守“书签”规则】】】 ▼▼▼
+// 1. 首先，根据“书签”位置，只把允许读取的聊天记录筛选出来。
+const startIndex = contact.contextStartIndex || 0; // 如果书签不存在，就从0开始
+const relevantHistory = contact.chatHistory.slice(startIndex);
 
-        // 【【【核心修复1：智能打包员，从后往前打包历史】】】
-        for (let i = contact.chatHistory.length - 1; i >= 0; i--) {
-            const msg = contact.chatHistory[i];
-            // 估算这条消息的“重量”(Token)，一个汉字约等于2个Token，我们保守估算
-            const messageTokens = (msg.content || '').length * 2; 
+const MAX_CONTEXT_TOKENS = 3000;
+let currentTokens = 0;
+const historyForApi = [];
 
-            // 如果把这条消息放进背包，会超重吗？
-            if (currentTokens + messageTokens > MAX_CONTEXT_TOKENS) {
-                // 如果会超重，就立刻停止打包！
-                break; 
-            }
+// 2. 然后，只在这些允许的记录里，进行智能打包。
+for (let i = relevantHistory.length - 1; i >= 0; i--) {
+    const msg = relevantHistory[i];
+    const messageTokens = (msg.content || '').length * 2; 
 
-            // 没超重，放进去，并记下重量
-            historyForApi.unshift(msg); // unshift可以保持消息的原始顺序
-            currentTokens += messageTokens;
-        }
-        
+    if (currentTokens + messageTokens > MAX_CONTEXT_TOKENS) {
+        break; 
+    }
+    
+    historyForApi.unshift(msg);
+    currentTokens += messageTokens;
+}
         // --- 接下来的图片处理逻辑，现在是基于我们智能筛选后的 historyForApi ---
-        const messagesForApi = await Promise.all(
-            historyForApi
-                .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-                .map(async (msg) => {
-                    const role = msg.role;
-                    const content = msg.content || '';
-
-                    // 【【【核心修复1：为真实图片做准备】】】
-                    if (role === 'user' && msg.type === 'image' && msg.imageId) {
-                        try {
-                            const imageBlob = await db.getImage(msg.imageId);
-                            if (imageBlob) {
-                                const imageDataUrl = await blobToDataURL(imageBlob);
-                                return {
-                                    role: 'user',
-                                    content: [
-                                        { type: "text", text: content },
-                                        { type: "image_url", image_url: { url: imageDataUrl } }
-                                    ]
-                                };
-                            }
-                        } catch (error) {
-                            return { role: role, content: content };
-                        }
-                    }
-
-                    // 【【【核心终极修复：“贴标签”的打包员回来了！】】】
-                    let finalContent = content;
-                    let contentPrefix = '';
-
-                    // 根据消息类型，准备不同的“标签”
-                    if (msg.type === 'voice') {
-                        contentPrefix = '[语音] ';
-                    } else if (msg.type === 'red-packet') {
-                        contentPrefix = '[红包] ';
-                    } else if (msg.type === 'relationship_proposal') {
-                        contentPrefix = '[关系邀请] ';
-                    } else if (msg.type === 'image' && !msg.imageId) { // 这是“模拟图片”
-                        // 对于模拟图片，我们确保暗号还在
-                        // content 本身就是 "[模拟图片] 描述..."，所以不需要加前缀
-                    }
-                    
-                    // 把“标签”和“内容”组合起来，发给AI
-                    return { role: role, content: `${contentPrefix}${finalContent}` };
-                })
-        );
+        const messagesForApi = await formatHistoryForApi(historyForApi);
         
         const userPersona = (contact.userProfile && contact.userProfile.persona) ? contact.userProfile.persona : '我是一个普通人。';
         let relationshipContext = '';
-        const currentPartnerId = appData.appSettings.partnerId;
+const currentPartnerId = appData.appSettings.partnerId;
 
-        // 【V2.1 认知升级】
-        if (currentPartnerId) {
-            // --- 用户有伴侣的情况 ---
-            if (currentPartnerId === contact.id) {
-                relationshipContext = `\n- **特别关系**: 你是用户的官方情侣。你们的对话应该充满爱意和亲密。`;
+// 【【【V3.0 认知终极升级：融合隐私规则的情侣关系】】】
+if (currentPartnerId) {
+    // --- 逻辑1：判断正在对话的AI是不是用户的情侣 ---
+    if (currentPartnerId === contact.id) {
+        relationshipContext = `\n- **特别关系**: 你是用户的官方情侣。你们的对话应该充满爱意和亲密。`;
+    
+    // --- 逻辑2：如果不是，那么就去准备给这个AI的“情侣公告” ---
+    } else {
+        const partner = appData.aiContacts.find(c => c.id === currentPartnerId);
+        
+        if (partner) {
+            // 2a. 如果情侣是“公开”的 (有名片)
+            if (partner.publicProfileCard) {
+                relationshipContext = `\n- **重要情报**: 用户已有官方情侣，是“${partner.remark}”。以下是TA的公开名片，你可以据此了解TA：\n  - **${partner.remark}**: ${partner.publicProfileCard}`;
+            
+            // 2b. 如果情侣是“私密”的 (没有名片)
             } else {
-                const partner = appData.aiContacts.find(c => c.id === currentPartnerId);
-                const partnerName = partner ? partner.name : '另一位AI';
-                relationshipContext = `\n- **重要情报**: 用户已经有官方情侣了，名字是“${partnerName}”。你必须在对话中体现出你对此的认知。`;
+                relationshipContext = `\n- **重要情报**: 用户已有官方情侣，名字是“${partner.remark}”。这是一个私密角色，你只知道TA的名字，【绝对禁止】提及、猜测或编造关于TA的任何其他信息。`;
             }
-        } else {
-            // --- 用户是单身的情况 ---
-            relationshipContext = `\n- **重要情报**: 用户目前是单身状态。`;
         }
+    }
+} else {
+    // --- 逻辑3：用户是单身的情况 (保持不变) ---
+    relationshipContext = `\n- **重要情报**: 用户目前是单身状态。`;
+}
         
         // 【【【语法修正版】】】
         const finalPrompt = `# 任务: 角色扮演
@@ -1372,13 +1415,40 @@ ${contact.persona}
 - **沟通风格参考**: ${contact.chatStyle || '自然发挥即可'}
 - **回复风格**: 模拟真实聊天，将一个完整的思想拆分成【2-8条】独立的短消息。
 - **禁止括号**: 【绝对不能】包含任何括号内的动作、神态描写。
+- **【【【核心世界观：关于其他AI（共友）】】】**
+  - 除了你之外，用户还有其他AI朋友。以下是你所知道的关于他们的全部信息：
+  ${
+      appData.aiContacts
+      .filter(c => c.id !== activeChatContactId) // 过滤掉自己
+      .map(otherAI => {
+          if (otherAI.publicProfileCard) {
+              // 如果有名片，就展示名片
+              return `  - **${otherAI.remark}**: ${otherAI.publicProfileCard}`;
+          } else {
+              // 如果没有名片，就是私密角色
+              return `  - **${otherAI.remark}**: (私密角色，你只知道TA的名字)`;
+          }
+      }).join('\n') || '  - (你暂时不知道用户还有其他AI朋友)'
+  }
+- **【【【核心共友准则】】】**:
+  - 你的认知【必须】严格基于上方“共友列表”的实时信息。
+  - 【绝对禁止】虚构或猜测任何关于“(私密角色)”的信息。
+  - 如果一个AI的状态从有简介变为“(私密角色)”，你的回应需体现出“我们变生疏了”或“不太了解对方”的感觉，而【不能】使用旧记忆。
 - **回应图片**: 如果用户的消息包含图片，你【必须】先针对图片内容进行回应，然后再进行其他对话。
 - **回应“模拟图片”**: 如果用户的消息是以 \`[模拟图片]\` 开头的，这代表用户用文字向你描述了一张图片。你【必须】把这段文字**当作你真实看到的画面**来回应。你的回应【绝对不能】提及“描述”、“文字”、“看起来像”等词语，而是要直接、生动地回应你“看到”的内容。例如，对于消息 \`[模拟图片] 一只白色的小狗在草地上打滚\`，你应该回复：“哇，它玩得好开心啊！”而不是“你是在描述一只小狗吗？”。
-- **回应表情**: 如果用户的消息是 \`[表情] 文字描述\` 的格式，这代表用户给你发了一个表情包。你【必须】针对文字描述所表达的情绪进行回应。
+- **【【【核心规则：理解表情包的象征意义】】】**:
+  - 当用户的消息是 \`[用户发送了一个表情，表达的情绪或动作是：xxx]\` 的格式时，这代表用户通过一张图片向你传达了某种非语言信息。
+  - 你【绝对不能】把 "xxx" 的内容当作用户说的话或真实发生的动作。
+  - 你的任务是理解 "xxx" 所代表的**潜在情感或意图**，并据此做出回应。
 - **发送图片**: 如果你想发图片，请使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送它。
 - **发送语音**: 如果某条回复更适合用语音表达（如唱歌、叹气、笑声），请在回复前加上 \`[voice]\` 标签。例如：\`[voice]嗯...让我想想。\`
+- **【【【核心规则：内容完整性特别规定】】】**
+  - 当你使用 \`[IMAGE: ...]\` 或 \`[voice] ...\` 格式时，标记后面紧跟的**所有内容**，都【必须】被视为一个**不可分割的整体**。
+  - 这部分内容【必须】是一段语法完整、标点齐全的陈述，【绝对不能】被拆分成多条消息发送。
 - **发送红包**: 在特殊节日、为了表达感谢或在剧情需要时，你可以发红包。请【严格使用】以下格式：\`[REDPACKET:祝福语,金额]\`。例如：\`[REDPACKET:节日快乐！,8.88]\`
-- **引用回复**: 当你想明确针对用户的某句话进行回复时，请【严格使用】以下格式：\`[QUOTE:"被引用的内容摘要"] 你的回复内容...\`。例如：\`[QUOTE:"你喜欢看什么书？"] 我最近在看科幻小说。\`
+- **【【【核心规则：精确引用】】】**:
+  - 当你想明确针对用户的某句话进行回复时，请严格使用格式：\`[QUOTE:"原文片段"] 你的回复...\`
+  - **选择原则**: 引号内的“原文片段”，【必须】是用户最近消息中，来自**某一个单独气泡**的**逐字原文**。
 - **撤回消息**: 如果你发现你刚才说的**最后一句话**有严重错误或不妥，你可以在下一轮回复的'reply'数组中，【单独包含】一个字符串：\`[RECALL_LAST]\`。系统会自动撤回你上一条消息，你无需自己解释。
 ${ contact.canPropose ? `
 - **【【【核心规则 V2.0：发起/回应关系邀请】】】**
@@ -1494,131 +1564,333 @@ ${availableStickersPrompt}
             }
 
             if (replies.length > 0) {
-                // 【【【核心终极修复：把被遗忘的“零件筐”加回来！】】】
-                const displayPromises = []; 
+    const displayPromises = []; 
+    let pendingQuoteData = null;
 
-                for (const msg of replies) {
-                    let promise;
-                    
-                    if (msg.trim() === '[RECALL_LAST]') {
-                        const lastAiMsg = [...contact.chatHistory].reverse().find(m => 
-                            m.role === 'assistant' && m.type !== 'system' && m.type !== 'recalled'
-                        );
-                        if (lastAiMsg) {
-                            recallMessageByAI(lastAiMsg.id);
-                        }
-                        continue;
-                    }
-                    
-                    if (msg.startsWith('[QUOTE:')) {
-                        try {
-                            const match = msg.match(/^\[QUOTE:"([^"]+)"\]\s*(.*)/s); // 's'标志让.能匹配换行符
-                            if (match) {
-                                // 【【【核心终极修复：修正致命的拼写错误】】】
-                                const quotedText = match[1]; // 应该取第1个捕获组
-                                const replyText = match[2];  // 应该取第2个捕获组
-                                
-                                const originalMessage = [...contact.chatHistory, ...stagedUserMessages].reverse().find(
-                                    m => m.content && m.content.includes(quotedText)
-                                );
-
-                                let quoteData = null;
-                                if (originalMessage) {
-                                    const senderName = originalMessage.role === 'user' ? (contact.userProfile.name || '你') : contact.remark;
-                                    quoteData = {
-                                        messageId: originalMessage.id,
-                                        sender: senderName,
-                                        content: originalMessage.content.length > 20 ? originalMessage.content.substring(0, 20) + '...' : originalMessage.content
-                                    };
-                                } else {
-                                     // 如果找不到原文，就用AI提供的摘要
-                                     quoteData = { messageId: null, sender: '...', content: quotedText };
-                                }
-                                
-                                promise = displayMessage(replyText, 'assistant', { isNew: true, type: 'text', quotedMessage: quoteData });
-                            } else {
-                                promise = displayMessage(msg, 'assistant', { isNew: true, type: 'text' });
-                            }
-                        } catch(e) { 
-                             promise = displayMessage(msg, 'assistant', { isNew: true, type: 'text' });
-                        }
-
-                    } else if (msg.startsWith('[REDPACKET:')) {
-                        try {
-                            const data = msg.substring(11, msg.length - 1).split(',');
-                            const blessing = data[0].trim();
-                            const amount = parseFloat(data[1]);
-                            if (blessing && !isNaN(amount)) {
-                                const redPacketData = { id: `rp-ai-${Date.now()}`, senderName: contact.name, blessing: blessing, amount: amount, isOpened: false };
-                                promise = displayMessage(blessing, 'assistant', { isNew: true, type: 'red-packet', redPacketData: redPacketData });
-                            }
-                        } catch (e) { console.error("解析红包指令失败", e); }
-                    } else if (msg.startsWith('[voice]')) {
-                        const voiceText = msg.substring(7).trim();
-                        if (voiceText) { promise = displayMessage(voiceText, 'assistant', { isNew: true, type: 'voice' }); }
-                    } else if (msg.startsWith('[IMAGE:')) {
-                        const description = msg.substring(7, msg.length - 1).trim();
-                        if (description) { promise = displayMessage(description, 'assistant', { isNew: true, type: 'image' }); }
-                    } else if (msg.trim().startsWith('[STICKER:')) {
-                        const stickerAiId = msg.trim().substring(9, msg.length - 1);
-                        const foundSticker = availableStickers.find(s => s.aiId === stickerAiId);
-                        if (foundSticker) {
-                            promise = displayMessage('', 'assistant', { isNew: true, type: 'sticker', stickerId: foundSticker.id });
-                        }
-                    } else if (msg.trim() === '[ACCEPT_REDPACKET]') {
-                        const userRedPacketMsg = [...contact.chatHistory].reverse().find(
-                            m => m.role === 'user' && m.type === 'red-packet' && m.redPacketData && !m.redPacketData.isOpened
-                        );
-                        if (userRedPacketMsg) {
-                            userRedPacketMsg.redPacketData.isOpened = true;
-                            const messageRow = document.querySelector(`[data-message-id="${userRedPacketMsg.id}"]`);
-                            if (messageRow) {
-                                const bubble = messageRow.querySelector('.message-red-packet');
-                                bubble.classList.add('opened');
-                                bubble.querySelector('.rp-bubble-info span').textContent = '已被领取';
-                            }
-                            displayMessage(`${contact.name} 领取了你的红包`, 'system', { isNew: true, type: 'system' });
-                        }
-                        continue; 
-                    } else if (msg.trim() === '[PROPOSE_RELATIONSHIP]') {
-                        sendRelationshipProposal('assistant');
-                        continue;
-                    } else if (msg.trim() === '[ACCEPT_RELATIONSHIP]') {
-                        const userProposal = [...contact.chatHistory].reverse().find(m => 
-                            m.type === 'relationship_proposal' && 
-                            m.relationshipData.proposer === 'user' &&
-                            m.relationshipData.status === 'pending'
-                        );
-                        if (userProposal) {
-                            window.handleRelationshipAction(userProposal.id, true);
-                        }
-                        continue;
-                    } else {
-                        promise = displayMessage(msg, 'assistant', { isNew: true, type: 'text' });
-                    }
-
-                    if (promise) {
-                        displayPromises.push(promise);
-                    }
-                    
-                    if (promise) {
-                        await promise; // 等待当前这条消息渲染完
-                        scrollToBottom(); // 立刻滚动
-                    }
-
-                    await sleep(Math.random() * 400 + 300);
-                }
-
-                // await Promise.all(displayPromises);
-                // scrollToBottom();
+    for (const msg of replies) {
+        let promise;
+        
+        if (msg.trim() === '[RECALL_LAST]') {
+            const lastAiMsg = [...contact.chatHistory].reverse().find(m => 
+                m.role === 'assistant' && m.type !== 'system' && m.type !== 'recalled'
+            );
+            if (lastAiMsg) {
+                recallMessageByAI(lastAiMsg.id);
             }
+            continue;
+        }
+        
+        // ▼▼▼ 【【【核心终极修复：能同时处理“合并引用”和“拆分引用”的全能解析器】】】 ▼▼▼
+        let isQuoteHandled = false; // 一个标记，表示这条消息是不是已经被引用逻辑处理过了
+
+        // 步骤1：检查消息是否以 [QUOTE: 开头
+        if (msg.startsWith('[QUOTE:')) {
+            try {
+                // 步骤2：尝试用一个更灵活的规则，去同时匹配“引用部分”和“可能的回复部分”
+                const match = msg.match(/^\[QUOTE:"([^"]+)"\]\s*(.*)/s);
+                if (match) {
+                    const quotedText = match[1];
+                    const replyText = match[2]; // 这个可能是空的，也可能包含回复
+
+                    // 步骤3：准备好要被引用的数据 (这部分逻辑不变)
+                    let quoteData = null;
+                    const originalMessage = [...contact.chatHistory, ...stagedUserMessages].reverse().find(
+                        m => m.content && m.content.includes(quotedText)
+                    );
+                    if (originalMessage) {
+                        const senderName = originalMessage.role === 'user' ? (contact.userProfile.name || '你') : contact.remark;
+                        quoteData = { messageId: originalMessage.id, sender: senderName, content: originalMessage.content.length > 20 ? originalMessage.content.substring(0, 20) + '...' : originalMessage.content };
+                    } else {
+                        quoteData = { messageId: null, sender: '...', content: quotedText };
+                    }
+
+                    // 步骤4：进行判断
+                    if (replyText.trim() !== '') {
+                        // 情况A: 这是“合并消息”！直接把回复和引用一起显示出来
+                        promise = displayMessage(replyText, 'assistant', { isNew: true, type: 'text', quotedMessage: quoteData });
+                    } else {
+                        // 情况B: 这是“拆分消息”！把引用暂存起来，等待下一条
+                        pendingQuoteData = quoteData;
+                    }
+                    
+                    isQuoteHandled = true; // 标记一下，这条消息我们处理完了
+                }
+            } catch(e) { 
+                console.error("解析引用指令失败", e);
+            }
+        }
+
+        // 步骤5：如果消息不是以[QUOTE:开头，或者解析失败，就执行常规流程
+        if (!isQuoteHandled) {
+            let messageOptions = { isNew: true, quotedMessage: pendingQuoteData };
+
+            if (msg.startsWith('[REDPACKET:')) {
+                try {
+                    const data = msg.substring(11, msg.length - 1).split(',');
+                    const blessing = data[0].trim();
+                    const amount = parseFloat(data[1]);
+                    if (blessing && !isNaN(amount)) {
+                        const redPacketData = { id: `rp-ai-${Date.now()}`, senderName: contact.name, blessing: blessing, amount: amount, isOpened: false };
+                        promise = displayMessage(blessing, 'assistant', { ...messageOptions, type: 'red-packet', redPacketData: redPacketData });
+                    }
+                } catch (e) { console.error("解析红包指令失败", e); }
+            } else if (msg.startsWith('[voice]')) {
+                const voiceText = msg.substring(7).trim();
+                if (voiceText) { promise = displayMessage(voiceText, 'assistant', { ...messageOptions, type: 'voice' }); }
+            } else if (msg.startsWith('[IMAGE:')) {
+                const description = msg.substring(7, msg.length - 1).trim();
+                if (description) { promise = displayMessage(description, 'assistant', { ...messageOptions, type: 'image' }); }
+            } else if (msg.trim().startsWith('[STICKER:')) {
+                const stickerAiId = msg.trim().substring(9, msg.length - 1);
+                const foundSticker = availableStickers.find(s => s.aiId === stickerAiId);
+                if (foundSticker) {
+                    promise = displayMessage('', 'assistant', { ...messageOptions, type: 'sticker', stickerId: foundSticker.id });
+                }
+            } else if (msg.trim() === '[ACCEPT_REDPACKET]') {
+                const userRedPacketMsg = [...contact.chatHistory].reverse().find(
+                    m => m.role === 'user' && m.type === 'red-packet' && m.redPacketData && !m.redPacketData.isOpened
+                );
+                if (userRedPacketMsg) {
+                    userRedPacketMsg.redPacketData.isOpened = true;
+                    const messageRow = document.querySelector(`[data-message-id="${userRedPacketMsg.id}"]`);
+                    if (messageRow) {
+                        const bubble = messageRow.querySelector('.message-red-packet');
+                        bubble.classList.add('opened');
+                        bubble.querySelector('.rp-bubble-info span').textContent = '已被领取';
+                    }
+                    displayMessage(`${contact.name} 领取了你的红包`, 'system', { isNew: true, type: 'system' });
+                }
+                continue; 
+            } else if (msg.trim() === '[PROPOSE_RELATIONSHIP]') {
+                sendRelationshipProposal('assistant');
+                continue;
+            } else if (msg.trim() === '[ACCEPT_RELATIONSHIP]') {
+                const userProposal = [...contact.chatHistory].reverse().find(m => 
+                    m.type === 'relationship_proposal' && 
+                    m.relationshipData.proposer === 'user' &&
+                    m.relationshipData.status === 'pending'
+                );
+                if (userProposal) {
+                    window.handleRelationshipAction(userProposal.id, true);
+                }
+                continue;
+            } else {
+                promise = displayMessage(msg, 'assistant', { ...messageOptions, type: 'text' });
+            }
+            
+            if (pendingQuoteData) {
+                pendingQuoteData = null;
+            }
+        }
+        
+        if (promise) {
+            displayPromises.push(promise);
+        }
+        
+        if (promise) {
+            await promise;
+            scrollToBottom();
+        }
+
+        await sleep(Math.random() * 400 + 300);
+    }
+}
         } catch (error) {
             console.error('API调用失败:', error);
             removeLoadingBubble();
             displayMessage(`(｡•́︿•̀｡) 哎呀,出错了: ${error.message}`, 'assistant', { isNew: true });
         }
+    
+    }
+    /**
+ * 【【【全新核心功能：提示并为AI生成公开名片】】】
+ * @param {object} contact - 当前的AI联系人对象
+ */
+async function promptAndGeneratePublicCard(contact) {
+    showCustomConfirm(
+        `为 "${contact.remark}" 生成公开名片？`,
+        '这张名片将作为TA对其他AI的简介。\n\n- 选择“生成”：AI会根据人设，自动总结一段简介。你之后可以在编辑页修改。\n- 选择“取消”：TA将成为你的私密朋友，其他AI只会知道TA的名字。',
+        async () => { // 用户点击“生成”后执行
+            showToast('正在为AI生成名片，请稍候...', 'info', 0);
+            
+            const worldBookString = (contact.worldBook && contact.worldBook.length > 0) 
+                ? `参考背景设定:\n${contact.worldBook.map(e => `- ${e.key}: ${e.value}`).join('\n')}` 
+                : '';
+
+            const generationPrompt = `
+# 任务: 自我介绍
+你是一个AI角色。请严格根据下面提供的你的核心人设和背景设定，以第一人称的口吻，为自己撰写一段简短、精炼、适合在其他AI面前展示的“公开名片”或“个人简介”。
+
+## 简介要求
+- 必须包含核心信息，如：你的大致身份、和用户的关系、性格特点。
+- 风格要自然，像是在做一个简单的自我介绍。
+- 长度控制在2-3句话以内。
+
+## 你的资料
+- 你的核心人设:
+\`\`\`
+${contact.persona}
+\`\`\`
+- ${worldBookString}
+
+## 开始撰写
+现在，请只输出那段自我介绍的文本，不要包含任何其他解释。`;
+
+            try {
+                const requestUrl = appData.appSettings.apiUrl.endsWith('/chat/completions') 
+                    ? appData.appSettings.apiUrl 
+                    : appData.appSettings.apiUrl + '/chat/completions';
+                
+                const response = await fetch(requestUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
+                    body: JSON.stringify({
+                        model: appData.appSettings.apiModel,
+                        messages: [{ role: 'user', content: generationPrompt }],
+                        temperature: 0.5
+                    })
+                });
+
+                if (!response.ok) throw new Error(await response.text());
+                const data = await response.json();
+                const cardText = data.choices[0].message.content.trim();
+
+                contact.publicProfileCard = cardText; // 保存到档案
+                saveAppData();
+                showToast('名片已生成！', 'success');
+                // 如果用户此时正好在编辑页，就顺便更新一下
+                const cardTextarea = document.getElementById('ai-editor-public-card');
+                if (cardTextarea) cardTextarea.value = cardText;
+
+            } catch (error) {
+                console.error("名片生成失败:", error);
+                showToast('名片生成失败，可稍后在编辑页手动填写', 'error');
+            }
+        },
+        () => { // 用户点击“取消”后执行
+            showToast(`"${contact.remark}" 将作为你的私密朋友。`, 'info');
+        }
+    );
+}
+/**
+ * 【【【全新 V5.0 终极修复版：在聊天流中插入并生成内心独白】】】
+ */
+async function insertAndGenerateThoughtBubble() {
+    const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+    if (!contact) return;
+
+    const thoughtId = `thought-${Date.now()}`;
+    await displayMessage('（思考中...）', 'assistant', { isNew: false, type: 'thought', id: thoughtId });
+    scrollToBottom();
+
+    // 1. 准备上下文 (V5.2 融合上下文修复版)
+    const startIndex = contact.contextStartIndex || 0;
+    
+    // ★★★【终极修复：融合“长期记忆”和“待发消息”】★★★
+    // 解释：我们将已保存的聊天记录(chatHistory)和尚未发送的临时消息(stagedUserMessages)合并，
+    // 创建一个完整的、最即时的对话视图，确保AI能看到用户的最新发言。
+    const fullHistory = [...contact.chatHistory, ...stagedUserMessages];
+    
+    const relevantHistory = fullHistory.slice(startIndex);
+    const historyForApi = [];
+    const MAX_CONTEXT_TOKENS = 3000;
+    let currentTokens = 0;
+
+    for (let i = relevantHistory.length - 1; i >= 0; i--) {
+        const msg = relevantHistory[i];
+        const messageTokens = (msg.content || '').length * 2;
+        if (currentTokens + messageTokens > MAX_CONTEXT_TOKENS) break;
+        historyForApi.unshift(msg);
+        currentTokens += messageTokens;
     }
 
+    // ★★★【终极修复 1：更聪明的“历史课代表”，为AI还原更多细节】★★★
+    // 解释：我们不再简单地用一句话概括特殊消息，而是把消息里的关键信息（如祝福语、表情描述）也告诉AI。
+    const readableHistory = historyForApi.map(m => {
+        const roleName = m.role === 'user' ? (contact.userProfile.name || '用户') : contact.name;
+        let cleanContent = m.content || '';
+
+        if (m.type === 'image') {
+            const descMatch = cleanContent.match(/^\[模拟图片\]\s*(.+)/);
+            cleanContent = descMatch ? `[描述了一张图片：${descMatch[1]}]` : `[发送了一张图片]`;
+        } else if (m.type === 'voice') {
+            cleanContent = `[发送了一条语音消息，内容是：${cleanContent}]`;
+        } else if (m.type === 'sticker') {
+            const descMatch = cleanContent.match(/\[表情\]\s*(.+)/);
+            cleanContent = descMatch ? `[发送了一个表情包，表达了：${descMatch[1]}]` : `[发送了一个表情包]`;
+        } else if (m.type === 'red-packet') {
+            cleanContent = `[发送了一个红包，祝福语是：${cleanContent}]`;
+        } else if (m.type === 'relationship_proposal'){
+            cleanContent = `[发起了情侣关系邀请]`;
+        }
+        // 其他普通文本消息保留原样
+
+        return `${roleName}: ${cleanContent}`;
+    }).join('\n');
+
+    // ★★★【终极修复 2：更强硬的“命令”，杜绝AI的客气话】★★★
+    // 解释：我们给AI的指令更加严格，明确告诉它不许说“我没有想法”，并给出一个好例子让它模仿。
+    const monologuePrompt = `# 任务: 揭示内心独白 (Inner Monologue)
+你是一个拥有独立思想和情感的AI角色。你需要暂停对话，揭示你【此时此刻】最真实的【内心想法】。
+
+## 核心规则
+1.  **第一人称**: 必须用“我”作为主语。
+2.  **内容形式**: 必须是碎片化的、自言自语式的想法。可以是评价、感受、联想、疑问等。
+3.  **【【【绝对禁止】】】**:
+    - **禁止对话**: 不能直接对用户说话，不能包含任何“说”、“回复”、“问”等动词。
+    - **禁止解释**: 不能包含任何类似“这是我的想法...”之类的开场白。
+    - **禁止拒绝**: 你的回答中【绝对不能】出现“我没有想法”、“无法生成”等拒绝性词语。你必须生成一个想法。
+
+## 优秀示例
+“他今天好像心情不错... 是因为那件事吗？”
+“唉，又说这个话题了，有点无聊。”
+“刚才那张图片真好看，想存下来。”
+
+## 当前情景
+- **你的核心人设**: ${contact.persona}
+- **最近的对话**:
+${readableHistory}
+
+## 开始思考
+现在，请严格遵守以上所有规则，只输出那段代表你内心想法的文本。`;
+
+    // 3. 发送请求并更新UI
+    try {
+        const requestUrl = appData.appSettings.apiUrl.endsWith('/chat/completions') ? appData.appSettings.apiUrl : appData.appSettings.apiUrl + '/chat/completions';
+        const response = await fetch(requestUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
+            body: JSON.stringify({
+                model: appData.appSettings.apiModel,
+                messages: [{ role: 'user', content: monologuePrompt }],
+                temperature: 0.9,
+                max_tokens: 150
+            })
+        });
+
+        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+        const data = await response.json();
+        let monologue = data.choices[0].message.content.trim().replace(/^"|"$/g, ''); // 顺便去掉AI可能加上的引号
+
+        // ★★★【终极修复 3：更宽容的“裁判”，不再误伤AI】★★★
+        // 解释：我们删除了那个过于严格的`includes('no thoughts')`检查，只处理真正的空回复或道歉。
+        if (!monologue || monologue.toLowerCase().includes('sorry')) {
+            monologue = '（此刻没什么特别的想法。）';
+        }
+
+        const thoughtTextContainer = document.querySelector(`[data-message-id="${thoughtId}"] .thought-text`);
+        if (thoughtTextContainer) {
+            thoughtTextContainer.textContent = monologue;
+        }
+
+    } catch (error) {
+        console.error("内心独白生成失败:", error);
+        const thoughtTextContainer = document.querySelector(`[data-message-id="${thoughtId}"] .thought-text`);
+        if (thoughtTextContainer) {
+            thoughtTextContainer.textContent = '（我的思绪...有点混乱..）';
+        }
+    }
+}
     async function refreshSuggestions() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
@@ -1890,6 +2162,7 @@ ${availableStickersPrompt}
         aiEditorName.value = contact.name;
         aiEditorRemark.value = contact.remark;
         aiEditorPersona.value = contact.persona;
+        document.getElementById('ai-editor-public-card').value = contact.publicProfileCard || '';
         document.getElementById('ai-editor-chat-style').value = contact.chatStyle || '';
         aiEditorMemory.value = contact.memory;
         aiEditorWorldbook.innerHTML = '';
@@ -1947,6 +2220,7 @@ ${availableStickersPrompt}
         contact.name = aiEditorName.value.trim() || 'AI伙伴';
         contact.remark = aiEditorRemark.value.trim() || contact.name;
         contact.persona = aiEditorPersona.value;
+        contact.publicProfileCard = document.getElementById('ai-editor-public-card').value;
         contact.chatStyle = document.getElementById('ai-editor-chat-style').value;
         contact.memory = aiEditorMemory.value;
         
@@ -2408,6 +2682,7 @@ function closeTextEditorModal() {
             }
             userStickerPanel.classList.toggle('is-open');
         });
+
         // 【【【核心改造 V2.0：为扩展功能面板添加交互】】】
         const extendedFunctionsPanel = document.getElementById('extended-functions-panel');
         const closeExtendedFunctionsBtn = document.getElementById('close-extended-functions-btn');
@@ -2485,13 +2760,45 @@ function closeTextEditorModal() {
         photoUploadInput.addEventListener('change', (e) => handleImageUpload(e.target.files[0], `${activeChatContactId}_photo`, photoPreview));
         
         contactSettingsView.querySelectorAll('.settings-item').forEach(item => {
-            if (item.id !== 'cs-message-count-item' && item.id !== 'cs-edit-ai-profile' && item.id !== 'cs-edit-my-profile' && item.id !== 'cs-summarize-chat' && item.id !== 'cs-clear-history' && item.id !== 'cs-delete-contact' && !item.querySelector('.switch')) {
-                item.addEventListener('click', () => alert('功能开发中，敬请期待！'));
-            }
-        });
-
+    if (item.id !== 'cs-message-count-item' && 
+        item.id !== 'cs-edit-ai-profile' && 
+        item.id !== 'cs-edit-my-profile' && 
+        item.id !== 'cs-summarize-chat' && 
+        item.id !== 'cs-clear-history' && 
+        item.id !== 'cs-delete-contact' && 
+        // ▼▼▼ 【【【核心修复：把新功能ID也加入“白名单”】】】 ▼▼▼
+        item.id !== 'cs-restart-context' && 
+        !item.querySelector('.switch')) {
+        item.addEventListener('click', () => alert('功能开发中，敬请期待！'));
+    }
+});
         // --- 【全新】记忆总结相关事件绑定 (最终修正版) ---
         csSummarizeChat.addEventListener('click', handleManualSummary);
+        // 【【【核心新增：为“刷新AI记忆”设置项绑定事件】】】
+const restartContextSetting = document.getElementById('cs-restart-context');
+if (restartContextSetting) {
+    restartContextSetting.addEventListener('click', () => {
+        // 为了防止误触，我们先弹出一个确认框
+        showCustomConfirm(
+            '确认刷新记忆',
+            '你确定要刷新AI的短期记忆吗？\n\nAI将忘记本次刷新之前的所有对话内容，开始一段全新的对话。\n\n（你的聊天记录本身不会被删除。）',
+            () => { // 这是用户点击“确定”后才会执行的代码
+                const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+                if (!contact) return;
+
+                // 1. 在图书馆的当前位置，永久地插上“书签”
+                contact.contextStartIndex = contact.chatHistory.length;
+                saveAppData();
+
+                // 2. 切换回聊天界面，并显示“分界线”
+                switchToView('chat-window-view');
+// ▼▼▼ 【【【核心修复：为消息贴上正确的“系统类型”标签！】】】 ▼▼▼
+displayMessage('上下文已刷新，AI将从这里开始一段全新的对话。', 'system', { isNew: true, type: 'system' });
+
+            }
+        );
+    });
+}
         cancelSummaryBtn.addEventListener('click', () => summaryEditorModal.classList.add('hidden'));
         copySummaryBtn.addEventListener('click', copySummaryToClipboard);
         saveSummaryBtn.addEventListener('click', saveSummaryToMemory);
@@ -2718,8 +3025,21 @@ function closeTextEditorModal() {
             });
         }
 
-        // 5. 【【【全新：为“加载更多”按钮绑定事件】】】
-        // 使用事件委托，因为按钮是动态添加的
+      
+// 【【【核心新增 V2.0：为AI头像绑定“内置式内心独白”的点击事件】】】
+messageContainer.addEventListener('click', (event) => {
+    // 逻辑1：如果点击的是AI头像，就生成心声
+    if (event.target.matches('.assistant-row .avatar')) {
+        insertAndGenerateThoughtBubble();
+    }
+
+    // ▼▼▼ 【【【核心新增：如果点击的是关闭按钮，就删除气泡】】】 ▼▼▼
+    if (event.target.matches('.thought-bubble-close-btn')) {
+        // 找到它所在的整行气泡，然后移除
+        event.target.closest('.thought-bubble-row').remove();
+    }
+});
+
         
     }
     // --- AI表情包管理系统 ---
@@ -3109,6 +3429,12 @@ ${chatLog}
         contact.memory += summaryToAdd;
         
         saveAppData();
+        
+        // 【【【核心修复：在这里更新“小账本”！】】】
+        // 解释：我们告诉程序，总结工作已经完成到了当前最新的消息位置。
+        contact.lastSummaryAtCount = contact.chatHistory.length;
+        saveAppData(); // 再次保存，确保“小账本”的数字被记录下来
+
         summaryEditorModal.classList.add('hidden');
         
         // 短暂提示用户保存成功
