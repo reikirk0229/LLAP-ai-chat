@@ -30,7 +30,7 @@
     --glass-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
     
     /* -- 渐变变量 -- */
-    --gradient-primary: linear-gradient(135deg, #5097CD 0%, #3B83A2 100%);
+    --gradient-primary: linear-gradient(135deg, #5097CD 0%, #3b69a2 100%);
     --gradient-secondary: linear-gradient(135deg, #CCE4F4 0%, #EFF7FB 100%);
     
     /* -- 圆角变量 -- */
