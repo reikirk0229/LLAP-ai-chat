@@ -12,7 +12,7 @@
     --glass-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
     
     /* 渐变变量 */
-    --gradient-primary: linear-gradient(135deg, #5097CD 0%, #3B83A2 100%);
+    --gradient-primary: linear-gradient(135deg, #5097CD 0%, #3b69a2 100%);
     --gradient-secondary: linear-gradient(135deg, #CCE4F4 0%, #EFF7FB 100%);
     
     /* 圆角变量 */
@@ -54,7 +54,7 @@ body::before {
 
 /* 修复header - 使用蓝色渐变 */
 .header {
-    background: linear-gradient(135deg, #5097CD 0%, #3B83A2 100%) !important;
+    background: linear-gradient(135deg, #5097CD 0%, #3b69a2 100%) !important;
     backdrop-filter: blur(20px) !important;
     -webkit-backdrop-filter: blur(20px) !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
@@ -70,7 +70,7 @@ body::before {
 
 /* 修复main-header样式 - 同样使用蓝色渐变 */
 .main-header {
-    background: linear-gradient(135deg, #5097CD 0%, #3B83A2 100%) !important;
+    background: linear-gradient(135deg, #5097CD 0%, #3b69a2 100%) !important;
     backdrop-filter: blur(20px) !important;
     -webkit-backdrop-filter: blur(20px) !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
@@ -142,7 +142,7 @@ body::before {
 
 /* 修复消息气泡 - 用户消息使用深蓝色 */
 .user-row .message {
-    background: linear-gradient(135deg, #5097CD 0%, #3B83A2 100%) !important;
+    background: linear-gradient(135deg, #5097CD 0%, #3b69a2 100%) !important;
     color: white !important;
     box-shadow: 0 4px 15px rgba(80, 151, 205, 0.3) !important;
 }
@@ -251,7 +251,7 @@ body::before {
 }
 
 #apply-filters-btn {
-    background: linear-gradient(135deg, #5097CD 0%, #3B83A2 100%) !important;
+    background: linear-gradient(135deg, #5097CD 0%, #3b69a2 100%) !important;
     color: white !important;
     border-color: #5097CD !important;
     box-shadow: 0 2px 8px rgba(80, 151, 205, 0.3) !important;
@@ -494,7 +494,7 @@ body::before {
 /* 确定按钮 */
 .modal-button.primary,
 .modal-footer button:last-child {
-    background: linear-gradient(135deg, #5097CD 0%, #3B83A2 100%) !important;
+    background: linear-gradient(135deg, #5097CD 0%, #3b69a2 100%) !important;
     color: white !important;
     box-shadow: 0 4px 12px rgba(80, 151, 205, 0.3) !important;
 }
