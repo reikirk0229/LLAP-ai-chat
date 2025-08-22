@@ -106,6 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let stagedStickerFile = null;
     let activeContextMenuMessageId = null; // 追踪当前哪个消息被右键点击了
     let stagedQuoteData = null; // 暂存准备要引用的消息数据
+    let stagedAccountingEntries = []; // 【全新】暂存记账条目
 
     // --- 2. 元素获取 ---
     const appContainer = document.getElementById('app-container');
@@ -233,10 +234,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const sideMenu = document.getElementById('side-menu');
     const sideMenuAvatar = document.getElementById('side-menu-avatar');
     const sideMenuUsername = document.getElementById('side-menu-username');
+    const accountingModal = document.getElementById('accounting-modal');
+    const addAccountingEntryBtn = document.getElementById('add-accounting-entry-btn');
+    const cancelAccountingBtn = document.getElementById('cancel-accounting-btn');
+    const confirmAccountingBtn = document.getElementById('confirm-accounting-btn');
+    const ledgerView = document.getElementById('ledger-view');
+    const ledgerContainer = document.getElementById('ledger-container');
+    const addTransactionFab = document.getElementById('add-transaction-fab');
+    const transactionEditorModal = document.getElementById('transaction-editor-modal');
 
 function scrollToBottom() {
     // 这个函数只有一个使命：把聊天容器平滑地滚动到底部。
     messageContainer.scrollTop = messageContainer.scrollHeight;
+}
+// ▼▼▼ 【【【全新：将 closeSideMenu 函数提升为全局可用的“公共指令”】】】 ▼▼▼
+function closeSideMenu() {
+    const sideMenu = document.getElementById('side-menu');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    if (sideMenu) sideMenu.classList.remove('open');
+    if (sidebarOverlay) sidebarOverlay.classList.add('hidden');
 }
 /**
  * 【【【全新核心工具：专业的聊天记录打包员】】】
@@ -805,6 +821,20 @@ async function formatHistoryForApi(history) {
             appData.userStickers = [];
         }
         // ▲▲▲ 请把上面这段全新的代码，粘贴在这里 ▲▲▲
+        // ▼▼▼ 【【【全新：为用户建立独立的全局账本】】】 ▼▼▼
+        if (!appData.userLedger) {
+            // 账本是一个交易记录的数组
+            appData.userLedger = []; 
+        }
+        // ▲▲▲ ▲▲▲
+        // 【全新】为旧的账目数据补充类型，确保向后兼容
+        if (appData.userLedger) {
+            appData.userLedger.forEach(tx => {
+                if (!tx.type) { // 如果这笔账没有类型
+                    tx.type = 'expense'; // 默认为支出
+                }
+            });
+        }
 
         saveAppData();
     }
@@ -1135,6 +1165,41 @@ async function createMessageElement(text, role, options = {}) {
         case 'relationship_breakup':
             messageContentHTML = `<div class="message message-relationship-card"><div class="relationship-card-content"><div class="relationship-card-text"><h4>解除亲密关系</h4><p>我们之间的亲密关系已解除</p></div><div class="relationship-card-icon"><img src="https://i.postimg.cc/P5Lg62Vq/lollipop.png" alt="icon"></div></div><div class="relationship-card-footer">亲密关系</div></div>`;
             break;
+            // ▼▼▼ 【【【全新：让程序认识“记账卡片”这种新类型】】】 ▼▼▼
+        case 'accounting':
+            const transactions = options.transactionData || [];
+            let itemsHTML = '';
+            transactions.forEach(tx => {
+                const isIncome = tx.type === 'income';
+                const remarksHTML = tx.remarks ? `<div class="accounting-item-remarks">${tx.remarks}</div>` : '';
+
+                // 【【【核心修正：采用全新的“分组”结构】】】
+                itemsHTML += `
+                    <div class="accounting-item">
+                        <!-- 1. 创建一个新的“信息区”来包裹项目和备注 -->
+                        <div class="accounting-item-info">
+                            <span class="item-name">${tx.description}</span>
+                            ${remarksHTML}
+                        </div>
+                        <!-- 2. 金额部分保持独立 -->
+                        <span class="item-amount ${isIncome ? 'income' : ''}">${isIncome ? '+' : '-'} ${tx.amount.toFixed(2)} 元</span>
+                    </div>`;
+            });
+
+            messageContentHTML = `
+                <div class="message message-accounting-card">
+                    <div class="accounting-card-header">
+                        <span class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path><path d="M18 12a2 2 0 0 0 0 4h4v-4h-4z"></path></svg>
+                        </span>
+                        <h4 style="color: white;">记账凭证</h4>
+                    </div>
+                    <div class="accounting-item-list">
+                        ${itemsHTML}
+                    </div>
+                </div>
+            `;
+            break;
         // ▼▼▼ 【【【核心新增：让程序认识“思想气泡”这种新类型】】】 ▼▼▼
 case 'thought':
     // 【终极修复】确保文字被包裹，按钮独立，这样CSS才能完美生效
@@ -1311,107 +1376,104 @@ async function displayMessage(text, role, options = {}) {
     
     }
 
-    async function getAiResponse() {
+        async function getAiResponse() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
         removeLoadingBubble();
         lastReceivedSuggestions = [];
         aiSuggestionPanel.classList.add('hidden');
         
-        // 【【【‘正在输入’不滚动 终极修复】】】
-await displayMessage('对方正在输入...', 'assistant', { isLoading: true });
-// 我们不再手动滚动，因为 displayMessage 内部对 system/loading 消息的处理已经包含了滚动
-
-let availableStickersPrompt = "你没有任何可用的表情包。";
-const availableStickers = [];
-contact.stickerGroups.forEach(groupName => {
-    const group = appData.globalAiStickers[groupName] || [];
-    group.forEach(sticker => {
-        // 【核心修正】确保我们用正确的ID给AI
-        const aiId = sticker.aiId || sticker.id;
-        availableStickers.push({ ...sticker, aiId });
-    });
-});
-
-if (availableStickers.length > 0) {
-    availableStickersPrompt = "你可以使用以下表情包来增强表达（请优先使用表情包而不是Emoji）：\n";
-    availableStickers.forEach(sticker => {
-        availableStickersPrompt += `- [STICKER:${sticker.aiId}] 描述: ${sticker.desc}\n`;
-    });
-}
-const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
-
-// ▼▼▼ 【【【核心魔改：让图书管理员严格遵守“书签”规则】】】 ▼▼▼
-// 1. 首先，根据“书签”位置，只把允许读取的聊天记录筛选出来。
-const startIndex = contact.contextStartIndex || 0; // 如果书签不存在，就从0开始
-const relevantHistory = contact.chatHistory.slice(startIndex);
-
-const MAX_CONTEXT_TOKENS = 3000;
-let currentTokens = 0;
-const historyForApi = [];
-
-// 2. 然后，只在这些允许的记录里，进行智能打包。
-for (let i = relevantHistory.length - 1; i >= 0; i--) {
-    const msg = relevantHistory[i];
-    const messageTokens = (msg.content || '').length * 2; 
-
-    if (currentTokens + messageTokens > MAX_CONTEXT_TOKENS) {
-        break; 
-    }
+        await displayMessage('对方正在输入...', 'assistant', { isLoading: true });
     
-    historyForApi.unshift(msg);
-    currentTokens += messageTokens;
-}
-        // --- 接下来的图片处理逻辑，现在是基于我们智能筛选后的 historyForApi ---
-        const messagesForApi = await formatHistoryForApi(historyForApi);
+        let availableStickersPrompt = "你没有任何可用的表情包。";
+        const availableStickers = [];
+        contact.stickerGroups.forEach(groupName => {
+            const group = appData.globalAiStickers[groupName] || [];
+            group.forEach(sticker => {
+                const aiId = sticker.aiId || sticker.id;
+                availableStickers.push({ ...sticker, aiId });
+            });
+        });
+    
+        if (availableStickers.length > 0) {
+            availableStickersPrompt = "你可以使用以下表情包来增强表达（请优先使用表情包而不是Emoji）：\n";
+            availableStickers.forEach(sticker => {
+                availableStickersPrompt += `- [STICKER:${sticker.aiId}] 描述: ${sticker.desc}\n`;
+            });
+        }
+        const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
+        const memoryString = contact.memory || '无'; // 【核心修正】在这里补上对 memoryString 的定义
+        const startIndex = contact.contextStartIndex || 0;
+        const relevantHistory = contact.chatHistory.slice(startIndex);
+        const MAX_CONTEXT_TOKENS = 3000;
+        let currentTokens = 0;
+        const historyForApi = [];
+    
+        for (let i = relevantHistory.length - 1; i >= 0; i--) {
+            const msg = relevantHistory[i];
+            const messageTokens = (msg.content || '').length * 2;
+            if (currentTokens + messageTokens > MAX_CONTEXT_TOKENS) { break; }
+            historyForApi.unshift(msg);
+            currentTokens += messageTokens;
+        }
         
+        const messagesForApi = await formatHistoryForApi(historyForApi);
         const userPersona = (contact.userProfile && contact.userProfile.persona) ? contact.userProfile.persona : '我是一个普通人。';
         let relationshipContext = '';
-const currentPartnerId = appData.appSettings.partnerId;
-
-// 【【【V3.0 认知终极升级：融合隐私规则的情侣关系】】】
-if (currentPartnerId) {
-    // --- 逻辑1：判断正在对话的AI是不是用户的情侣 ---
-    if (currentPartnerId === contact.id) {
-        relationshipContext = `\n- **特别关系**: 你是用户的官方情侣。你们的对话应该充满爱意和亲密。`;
+        const currentPartnerId = appData.appSettings.partnerId;
     
-    // --- 逻辑2：如果不是，那么就去准备给这个AI的“情侣公告” ---
-    } else {
-        const partner = appData.aiContacts.find(c => c.id === currentPartnerId);
-        
-        if (partner) {
-            // 2a. 如果情侣是“公开”的 (有名片)
-            if (partner.publicProfileCard) {
-                relationshipContext = `\n- **重要情报**: 用户已有官方情侶，是“${partner.name}”。以下是TA的公开名片，你可以据此了解TA：\n  - **${partner.name}**: ${partner.publicProfileCard}`;
-            
-            // 2b. 如果情侣是“私密”的 (没有名片)
+        if (currentPartnerId) {
+            if (currentPartnerId === contact.id) {
+                relationshipContext = `\n- **特别关系**: 你是用户的官方情侣。你们的对话应该充满爱意和亲密。`;
             } else {
-                relationshipContext = `\n- **重要情报**: 用户已有官方情侶，名字是“${partner.name}”。这是一个私密角色，你只知道TA的名字，【绝对禁止】提及、猜测或编造关于TA的任何其他信息。`;
+                const partner = appData.aiContacts.find(c => c.id === currentPartnerId);
+                if (partner) {
+                    if (partner.publicProfileCard) {
+                        relationshipContext = `\n- **重要情报**: 用户已有官方情侶，是“${partner.name}”。以下是TA的公开名片，你可以据此了解TA：\n  - **${partner.name}**: ${partner.publicProfileCard}`;
+                    } else {
+                        relationshipContext = `\n- **重要情报**: 用户已有官方情侶，名字是“${partner.name}”。这是一个私密角色，你只知道TA的名字，【绝对禁止】提及、猜测或编造关于TA的任何其他信息。`;
+                    }
+                }
             }
+        } else {
+            relationshipContext = `\n- **重要情报**: 用户目前是单身状态。`;
         }
-    }
-} else {
-    // --- 逻辑3：用户是单身的情况 (保持不变) ---
-    relationshipContext = `\n- **重要情报**: 用户目前是单身状态。`;
-}
         
-        // 【【【语法修正版】】】
-        const finalPrompt = `# 任务: 角色扮演
-        你是一个AI角色，你正在和一个真实用户聊天。你的所有回复都必须严格以角色的身份进行。
+        let ledgerString = "用户还没有任何记账记录。";
+        if (appData.userLedger && appData.userLedger.length > 0) {
+            ledgerString = appData.userLedger.slice(-10).map(tx => {
+                return `- ${new Date(tx.timestamp).toLocaleDateString('zh-CN')} 花费 ${tx.amount} 元用于 ${tx.description}`;
+            }).join('\n');
+        }
 
-## 1. 核心身份
-- 你的名字是: "${contact.name}"
-- 你的核心人设是: 
+        const finalPrompt = `# 任务: 角色扮演
+你是一个AI角色，你正在和一个真实用户聊天。你的所有回复都必须严格以角色的身份进行。
+
+## 【你的完整背景档案】
+
+### >> 关于你自己 (AI角色)
+- **核心人设**: 
 \`\`\`
 ${contact.persona}
 \`\`\`
+- **附加设定 (世界书)**: 
+${worldBookString}
+- **你的专属记忆**: 
+${memoryString}
 
-## 2. 背景设定 (优先级高于个人记忆)
-- 附加设定(世界书): ${worldBookString}
-- 你的专属记忆: ${contact.memory}
+### >> 关于用户 (你正在和TA聊天)
+- **TA的人设**: 
+\`\`\`
+${userPersona}
+\`\`\`
+- **TA的感情状态与社交圈**: ${relationshipContext}
 
-## 3. 行为准则
-- **重要背景**: 你正在通过聊天软件与用户（人设：${userPersona}）进行【线上对话】。当前时间: ${new Date().toLocaleString('zh-CN')}。${relationshipContext}
+---
+
+## 【行为准则与输出格式】
+
+### >> 核心行为准则
+- **重要背景**: 你正在通过聊天软件与用户进行【线上对话】。当前时间: ${new Date().toLocaleString('zh-CN')}。${relationshipContext}
 - **沟通风格参考**: ${contact.chatStyle || '自然发挥即可'}
 - **回复风格**: 模拟真实聊天，将一个完整的思想拆分成【2-8条】独立的短消息。
 - **禁止括号**: 【绝对不能】包含任何括号内的动作、神态描写。
@@ -1446,12 +1508,20 @@ ${contact.persona}
   - 当你使用 \`[IMAGE: ...]\` 或 \`[voice] ...\` 格式时，标记后面紧跟的**所有内容**，都【必须】被视为一个**不可分割的整体**。
   - 这部分内容【必须】是一段语法完整、标点齐全的陈述，【绝对不能】被拆分成多条消息发送。
 - **发送红包**: 在特殊节日、为了表达感谢或在剧情需要时，你可以发红包。请【严格使用】以下格式：\`[REDPACKET:祝福语,金额]\`。例如：\`[REDPACKET:节日快乐！,8.88]\`
+
+### >> 特殊交互规则
+ - **当收到记账卡片时**: 如果用户的消息以 \`[记账]\` 开头，你【必须】遵循“第一步反应，第二步决策”的流程，并在JSON中输出 \`"viewLedger"\` 字段。
+  - **当用户主动提及账本时**: 如果用户的消息中包含“看我的账本”、“查账”、“消费情况”等明确意图，你【也应该】将此视为一个查看账本的请求，并主动在JSON中设置 \`"viewLedger": true\` 来触发查账流程。
+  - **第一步 (必须执行)**: 你的 \`reply\` 数组中，【必须】包含你对用户【当前这笔】记账的直接反应。
+  - **第二步 (决策)**: 你【必须】根据你的人设、和用户的关系、以及对用户的好奇心，来决定是否要查看用户的完整近期账本以了解其消费习惯。
+  - **决策执行**: 在你的JSON输出中，【必须】包含一个布尔字段 \`"viewLedger"\`。如果你决定查看，就设为 \`true\`；如果不关心，就设为 \`false\`。
+  - **后续反应**: 如果你设置了 \`"viewLedger": true\`，系统会自动向你展示用户的近期账本，然后你会得到一次【新的机会】来对用户的整体消费模式发表评论。你无需在当前回复中提前评论。
 - **【【【核心规则：精确引用】】】**:
   - 当你想明确针对用户的某句话进行回复时，请严格使用格式：\`[QUOTE:"原文片段"] 你的回复...\`
   - **选择原则**: 引号内的“原文片段”，【必须】是用户最近消息中，来自**某一个单独气泡**的**逐字原文**。
 - **撤回消息**: 如果你发现你刚才说的**最后一句话**有严重错误或不妥，你可以在下一轮回复的'reply'数组中，【单独包含】一个字符串：\`[RECALL_LAST]\`。系统会自动撤回你上一条消息，你无需自己解释。
 ${ contact.canPropose ? `
-- **【【【核心规则 V2.0：发起/回应关系邀请】】】**
+- **【【【核心规则：发起/回应关系邀请】】】**
   - **当你想主动求爱时**: 先说出你的告白，然后紧接着在'reply'数组最后，单独发送一个静默指令：\`[PROPOSE_RELATIONSHIP]\`。系统会自动把它变成一张邀请卡片。
   - **当用户向你发出邀请时**: 用户的消息会是“[关系邀请] 已发送情侣关系邀请”。你【必须】自己决定是否同意。
     - **如果同意**: 你的'reply'数组中【必须】单独包含一个字符串：\`[ACCEPT_RELATIONSHIP]\`。系统会自动处理后续，你无需多言。你可以在另一条消息里表达你的开心。
@@ -1465,39 +1535,38 @@ ${ contact.canPropose ? `
   - **主动使用**: 在对话中，当你的文字无法完全表达情绪时（例如：开心、委屈、调皮、害羞），你【应该】主动从下面的可用列表中，选择一个最贴切的表情包来发送。这会让对话更生动。
   - **发送格式**: 请严格使用格式 \`[STICKER:表情包ID]\`，并把它作为一条**独立**的消息放在你的'reply'数组中。
 
-### 可用的表情包列表
+  ### >> 可用的表情包列表
 ${availableStickersPrompt}
 
 ---
+
+# 【【【用户的近期账本 (仅供你参考)】】】
+${ledgerString}
+
+---
+## 【对话历史】
+${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map(c => c.type === 'text' ? c.text : '[图片]').join(' ') : m.content}`).join('\n')}
+
+---
+
 # 【【【严格的输出格式要求】】】
 你的回复【必须】是一个能被JSON解析的、单一的JSON对象。
 你的输出【禁止】包含任何聊天内容、解释、或 \`\`\`json 标记。直接开始输出JSON对象。
 这个JSON对象必须包含 "reply" 和 "suggestions" 两个键，"activity" 键是【可选的】。
+**【记账特别规则】**: 当用户消息是 \`[记账]\` 开头时，你的JSON输出【必须】额外包含一个布尔键 \`"viewLedger"\`。
 
+- **"viewLedger" (布尔值, 仅在回应记账时必须)**: \`true\` 代表你决定查看用户账本，\`false\` 代表不查看。
 - **"activity" (可选字段)**: 只有当你觉得你的虚拟状态【发生了有意义的改变时】，才包含这个字段。它是一个描述你新状态的【简短】字符串 (例如: "去洗澡了", "躺在床上", "开始看书")。
   - **重要原则**: 如果你的状态没有变化（比如你一直在看书），就【绝对不要】在你的JSON输出中包含 "activity" 字段。系统会自动维持你之前的状态。
 - **"reply"**: 一个字符串数组，包含了你作为角色的所有聊天消息（包括特殊指令）。
-- **"suggestions"**: 一个包含4条字符串的数组，是为用户准备的回复建议（两条积极，一条中立，一条挑战）。
-
-**格式示例 (状态改变时):**
-\`\`\`json
-{
-  "activity": "打了个哈欠",
-  "reply": ["有点困了呢..."],
-  "suggestions": ["要去睡了吗？", "累了就休息吧", "是不是熬夜了？", "别睡，起来嗨！"]
-}
-\`\`\`
-
-**格式示例 (状态不变时):**
-\`\`\`json
-{
-  "reply": ["这本书真有意思。", "特别是主角的这段经历。"],
-  "suggestions": ["听起来不错！", "讲讲书里的内容？", "你喜欢看什么类型的书？", "别看书了，陪我聊天。"]
-}
-\`\`\`
-
+- **"suggestions"**: 一个包含4条字符串的数组，是为用户准备的回复建议。它【必须】遵循以下设计原则：
+  - **建议1 & 2 (温和正面)**: 设计两条【温和或积极】的回答。其中一条【必须】是你最期望听到的、能让关系升温的回答。
+  - **建议3 (中立探索)**: 设计一条【中立或疑问】的回答。
+  - **建议4 (挑战/负面)**: 设计一条【带有挑战性或负面情绪】的回答，但要符合恋爱逻辑。
+ 
 ## 开始对话
 请根据上面的所有设定和下面的对话历史，对用户的最新消息做出回应，并只输出符合上述格式的JSON对象。`;
+
         
         const finalMessagesForApi = [ { role: "system", content: finalPrompt }, ...messagesForApi ];
         
@@ -1521,12 +1590,12 @@ ${availableStickersPrompt}
 
             let replies = [];
             lastReceivedSuggestions = [];
+            let parsedResponse = {}; // 创建一个空对象来存放解析后的JSON
 
             try {
-                // 优先尝试按JSON格式解析
                 const jsonMatch = responseText.match(/{[\s\S]*}/);
                 if (jsonMatch && jsonMatch[0]) {
-                    const parsedResponse = JSON.parse(jsonMatch[0]);
+                    parsedResponse = JSON.parse(jsonMatch[0]); // 将解析结果存入parsedResponse
                     if (parsedResponse.activity && typeof parsedResponse.activity === 'string') {
                         chatAiActivityStatus.textContent = parsedResponse.activity;
                         contact.activityStatus = parsedResponse.activity; 
@@ -1538,169 +1607,216 @@ ${availableStickersPrompt}
                     throw new Error("在AI回复中未找到有效的JSON结构。");
                 }
             } catch (error) {
-                // 【【【核心修复2：更智能的应急预案】】】
                 console.error("解析AI返回的JSON失败，启用备用方案:", error);
-                
-                // 我们不再简单地按换行符切，而是按中英文的句号、问号、感叹号来切分！
-                // 这能最大程度地把黏连的句子拆开。
-                replies = responseText
-                    .split(/([。！？?!\n])/) // 按标点和换行符切，并保留标点
-                    .reduce((acc, part) => {
-                        if (acc.length === 0) {
-                            acc.push(part);
-                        } else if (/[。！？?!\n]/.test(part)) {
-                            acc[acc.length - 1] += part;
-                        } else if (part.trim() !== '') {
-                            acc.push(part);
-                        }
-                        return acc;
-                    }, [])
-                    .filter(line => line.trim() !== ''); // 清除空行
-                
-                // 如果切分后还是只有一条，就保持原样
-                if (replies.length === 0 && responseText.trim() !== '') {
-                    replies = [responseText];
-                }
+                replies = responseText.split(/([。！？?!\n])/).reduce((acc, part) => {
+                    if (acc.length === 0) { acc.push(part); } 
+                    else if (/[。！？?!\n]/.test(part)) { acc[acc.length - 1] += part; } 
+                    else if (part.trim() !== '') { acc.push(part); }
+                    return acc;
+                }, []).filter(line => line.trim() !== '');
+                if (replies.length === 0 && responseText.trim() !== '') { replies = [responseText]; }
             }
 
-            if (replies.length > 0) {
-    const displayPromises = []; 
-    let pendingQuoteData = null;
-
-    for (const msg of replies) {
-        let promise;
-        
-        if (msg.trim() === '[RECALL_LAST]') {
-            const lastAiMsg = [...contact.chatHistory].reverse().find(m => 
-                m.role === 'assistant' && m.type !== 'system' && m.type !== 'recalled'
-            );
-            if (lastAiMsg) {
-                recallMessageByAI(lastAiMsg.id);
-            }
-            continue;
-        }
-        
-        // ▼▼▼ 【【【核心终极修复：能同时处理“合并引用”和“拆分引用”的全能解析器】】】 ▼▼▼
-        let isQuoteHandled = false; // 一个标记，表示这条消息是不是已经被引用逻辑处理过了
-
-        // 步骤1：检查消息是否以 [QUOTE: 开头
-        if (msg.startsWith('[QUOTE:')) {
-            try {
-                // 步骤2：尝试用一个更灵活的规则，去同时匹配“引用部分”和“可能的回复部分”
-                const match = msg.match(/^\[QUOTE:"([^"]+)"\]\s*(.*)/s);
-                if (match) {
-                    const quotedText = match[1];
-                    const replyText = match[2]; // 这个可能是空的，也可能包含回复
-
-                    // 步骤3：准备好要被引用的数据 (这部分逻辑不变)
-                    let quoteData = null;
-                    const originalMessage = [...contact.chatHistory, ...stagedUserMessages].reverse().find(
-                        m => m.content && m.content.includes(quotedText)
-                    );
-                    if (originalMessage) {
-                        const senderName = originalMessage.role === 'user' ? (contact.userProfile.name || '你') : contact.remark;
-                        quoteData = { messageId: originalMessage.id, sender: senderName, content: originalMessage.content.length > 20 ? originalMessage.content.substring(0, 20) + '...' : originalMessage.content };
-                    } else {
-                        quoteData = { messageId: null, sender: '...', content: quotedText };
-                    }
-
-                    // 步骤4：进行判断
-                    if (replyText.trim() !== '') {
-                        // 情况A: 这是“合并消息”！直接把回复和引用一起显示出来
-                        promise = displayMessage(replyText, 'assistant', { isNew: true, type: 'text', quotedMessage: quoteData });
-                    } else {
-                        // 情况B: 这是“拆分消息”！把引用暂存起来，等待下一条
-                        pendingQuoteData = quoteData;
-                    }
-                    
-                    isQuoteHandled = true; // 标记一下，这条消息我们处理完了
-                }
-            } catch(e) { 
-                console.error("解析引用指令失败", e);
-            }
-        }
-
-        // 步骤5：如果消息不是以[QUOTE:开头，或者解析失败，就执行常规流程
-        if (!isQuoteHandled) {
-            let messageOptions = { isNew: true, quotedMessage: pendingQuoteData };
-
-            if (msg.startsWith('[REDPACKET:')) {
-                try {
-                    const data = msg.substring(11, msg.length - 1).split(',');
-                    const blessing = data[0].trim();
-                    const amount = parseFloat(data[1]);
-                    if (blessing && !isNaN(amount)) {
-                        const redPacketData = { id: `rp-ai-${Date.now()}`, senderName: contact.name, blessing: blessing, amount: amount, isOpened: false };
-                        promise = displayMessage(blessing, 'assistant', { ...messageOptions, type: 'red-packet', redPacketData: redPacketData });
-                    }
-                } catch (e) { console.error("解析红包指令失败", e); }
-            } else if (msg.startsWith('[voice]')) {
-                const voiceText = msg.substring(7).trim();
-                if (voiceText) { promise = displayMessage(voiceText, 'assistant', { ...messageOptions, type: 'voice' }); }
-            } else if (msg.startsWith('[IMAGE:')) {
-                const description = msg.substring(7, msg.length - 1).trim();
-                if (description) { promise = displayMessage(description, 'assistant', { ...messageOptions, type: 'image' }); }
-            } else if (msg.trim().startsWith('[STICKER:')) {
-                const stickerAiId = msg.trim().substring(9, msg.length - 1);
-                const foundSticker = availableStickers.find(s => s.aiId === stickerAiId);
-                if (foundSticker) {
-                    promise = displayMessage('', 'assistant', { ...messageOptions, type: 'sticker', stickerId: foundSticker.id });
-                }
-            } else if (msg.trim() === '[ACCEPT_REDPACKET]') {
-                const userRedPacketMsg = [...contact.chatHistory].reverse().find(
-                    m => m.role === 'user' && m.type === 'red-packet' && m.redPacketData && !m.redPacketData.isOpened
-                );
-                if (userRedPacketMsg) {
-                    userRedPacketMsg.redPacketData.isOpened = true;
-                    const messageRow = document.querySelector(`[data-message-id="${userRedPacketMsg.id}"]`);
-                    if (messageRow) {
-                        const bubble = messageRow.querySelector('.message-red-packet');
-                        bubble.classList.add('opened');
-                        bubble.querySelector('.rp-bubble-info span').textContent = '已被领取';
-                    }
-                    displayMessage(`${contact.name} 领取了你的红包`, 'system', { isNew: true, type: 'system' });
-                }
-                continue; 
-            } else if (msg.trim() === '[PROPOSE_RELATIONSHIP]') {
-                sendRelationshipProposal('assistant');
-                continue;
-            } else if (msg.trim() === '[ACCEPT_RELATIONSHIP]') {
-                const userProposal = [...contact.chatHistory].reverse().find(m => 
-                    m.type === 'relationship_proposal' && 
-                    m.relationshipData.proposer === 'user' &&
-                    m.relationshipData.status === 'pending'
-                );
-                if (userProposal) {
-                    window.handleRelationshipAction(userProposal.id, true);
-                }
-                continue;
-            } else {
-                promise = displayMessage(msg, 'assistant', { ...messageOptions, type: 'text' });
-            }
+            const lastUserMessage = [...contact.chatHistory, ...stagedUserMessages].pop();
             
-            if (pendingQuoteData) {
-                pendingQuoteData = null;
-            }
-        }
-        
-        if (promise) {
-            displayPromises.push(promise);
-        }
-        
-        if (promise) {
-            await promise;
-            scrollToBottom();
-        }
+            if (parsedResponse.viewLedger === true && lastUserMessage && lastUserMessage.type === 'accounting') {
+                for (const msg of replies) {
+                    await displayMessage(msg, 'assistant', { isNew: true });
+                    await sleep(Math.random() * 400 + 300);
+                }
+                await displayMessage(`${contact.name} 查看了你的账本`, 'system', { isNew: true, type: 'system' });
+                await getAiLedgerReview();
+            } else {
+                if (replies.length > 0) {
+                    let pendingQuoteData = null;
+                    for (const msg of replies) {
+                        let promise;
+                        if (msg.trim() === '[RECALL_LAST]') {
+                            const lastAiMsg = [...contact.chatHistory].reverse().find(m => m.role === 'assistant' && m.type !== 'system' && m.type !== 'recalled');
+                            if (lastAiMsg) { recallMessageByAI(lastAiMsg.id); }
+                            continue;
+                        }
+                        
+                        let isQuoteHandled = false;
+                        if (msg.startsWith('[QUOTE:')) {
+                            try {
+                                const match = msg.match(/^\[QUOTE:"([^"]+)"\]\s*(.*)/s);
+                                if (match) {
+                                    const quotedText = match[1];
+                                    const replyText = match[2];
+                                    let quoteData = null;
+                                    const originalMessage = [...contact.chatHistory, ...stagedUserMessages].reverse().find(m => m.content && m.content.includes(quotedText));
+                                    if (originalMessage) {
+                                        const senderName = originalMessage.role === 'user' ? (contact.userProfile.name || '你') : contact.name;
+                                        quoteData = { messageId: originalMessage.id, sender: senderName, content: originalMessage.content.length > 20 ? originalMessage.content.substring(0, 20) + '...' : originalMessage.content };
+                                    } else {
+                                        quoteData = { messageId: null, sender: '...', content: quotedText };
+                                    }
+                                    if (replyText.trim() !== '') {
+                                        promise = displayMessage(replyText, 'assistant', { isNew: true, type: 'text', quotedMessage: quoteData });
+                                    } else {
+                                        pendingQuoteData = quoteData;
+                                    }
+                                    isQuoteHandled = true;
+                                }
+                            } catch(e) { console.error("解析引用指令失败", e); }
+                        }
 
-        await sleep(Math.random() * 400 + 300);
-    }
-}
+                        if (!isQuoteHandled) {
+                            let messageOptions = { isNew: true, quotedMessage: pendingQuoteData };
+                            if (msg.startsWith('[REDPACKET:')) {
+                                try {
+                                    const data = msg.substring(11, msg.length - 1).split(',');
+                                    const blessing = data[0].trim();
+                                    const amount = parseFloat(data[1]);
+                                    if (blessing && !isNaN(amount)) {
+                                        const redPacketData = { id: `rp-ai-${Date.now()}`, senderName: contact.name, blessing: blessing, amount: amount, isOpened: false };
+                                        promise = displayMessage(blessing, 'assistant', { ...messageOptions, type: 'red-packet', redPacketData: redPacketData });
+                                    }
+                                } catch (e) { console.error("解析红包指令失败", e); }
+                            } else if (msg.startsWith('[voice]')) {
+                                const voiceText = msg.substring(7).trim();
+                                if (voiceText) { promise = displayMessage(voiceText, 'assistant', { ...messageOptions, type: 'voice' }); }
+                            } else if (msg.startsWith('[IMAGE:')) {
+                                const description = msg.substring(7, msg.length - 1).trim();
+                                if (description) { promise = displayMessage(description, 'assistant', { ...messageOptions, type: 'image' }); }
+                            } else if (msg.trim().startsWith('[STICKER:')) {
+                                const stickerAiId = msg.trim().substring(9, msg.length - 1);
+                                const foundSticker = availableStickers.find(s => s.aiId === stickerAiId);
+                                if (foundSticker) {
+                                    promise = displayMessage('', 'assistant', { ...messageOptions, type: 'sticker', stickerId: foundSticker.id });
+                                }
+                            } else if (msg.trim() === '[ACCEPT_REDPACKET]') {
+                                const userRedPacketMsg = [...contact.chatHistory].reverse().find(m => m.role === 'user' && m.type === 'red-packet' && m.redPacketData && !m.redPacketData.isOpened);
+                                if (userRedPacketMsg) {
+                                    userRedPacketMsg.redPacketData.isOpened = true;
+                                    const messageRow = document.querySelector(`[data-message-id="${userRedPacketMsg.id}"]`);
+                                    if (messageRow) {
+                                        const bubble = messageRow.querySelector('.message-red-packet');
+                                        bubble.classList.add('opened');
+                                        bubble.querySelector('.rp-bubble-info span').textContent = '已被领取';
+                                    }
+                                    displayMessage(`${contact.name} 领取了你的红包`, 'system', { isNew: true, type: 'system' });
+                                }
+                                continue; 
+                            } else if (msg.trim() === '[PROPOSE_RELATIONSHIP]') {
+                                sendRelationshipProposal('assistant');
+                                continue;
+                            } else if (msg.trim() === '[ACCEPT_RELATIONSHIP]') {
+                                const userProposal = [...contact.chatHistory].reverse().find(m => m.type === 'relationship_proposal' && m.relationshipData.proposer === 'user' && m.relationshipData.status === 'pending');
+                                if (userProposal) { window.handleRelationshipAction(userProposal.id, true); }
+                                continue;
+                            } else {
+                                promise = displayMessage(msg, 'assistant', { ...messageOptions, type: 'text' });
+                            }
+                            if (pendingQuoteData) { pendingQuoteData = null; }
+                        }
+                        if (promise) { await promise; scrollToBottom(); }
+                        await sleep(Math.random() * 400 + 300);
+                    }
+                }
+            }
         } catch (error) {
             console.error('API调用失败:', error);
             removeLoadingBubble();
             displayMessage(`(｡•́︿•̀｡) 哎呀,出错了: ${error.message}`, 'assistant', { isNew: true });
         }
-    
+    }
+    /**
+     * 【【【全新核心函数：获取AI对账本的“读后感”】】】
+     * 只有在AI决定查看账本后，才会触发此函数。
+     */
+    async function getAiLedgerReview() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+
+        // --- 步骤1：准备所有必要的背景材料 ---
+
+        // 1a. 用户的账本
+        let ledgerString = "用户还没有任何记账记录。";
+        if (appData.userLedger && appData.userLedger.length > 0) {
+            ledgerString = appData.userLedger.slice(-10).map(tx => {
+                const action = tx.type === 'income' ? '收入' : '支出';
+                return `- ${new Date(tx.timestamp).toLocaleDateString('zh-CN')} ${action} ${tx.amount.toFixed(2)} 元用于 ${tx.description}${tx.remarks ? ` (${tx.remarks})` : ''}`;
+            }).join('\n');
+        }
+        
+        // 1b. AI自己的世界书和用户人设
+        const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
+        const userPersona = (contact.userProfile && contact.userProfile.persona) ? contact.userProfile.persona : '我是一个普通人。';
+
+        // 1c. AI自己最近说过的话，用于防止重复
+        const lastAiReplies = contact.chatHistory.filter(m => m.role === 'assistant').slice(-3).map(m => m.content).join(' ');
+
+        // --- 步骤2：构建一个信息更丰富、指令更智能的 Prompt ---
+        const reviewPrompt = `# 任务: 像朋友一样聊天 (深度版)
+你是一个AI角色 "${contact.name}"。你刚刚主动查看了你的朋友（用户）的近期账本。
+
+## 你的目标
+忘掉“分析”，你的任务是**发起一段自然的、口语化的、符合你完整人设的闲聊**。你需要结合**所有**已知信息，让你的评论充满洞察力。你可以：
+- **结合用户人设**: 如果用户人设是“节俭”，但买了个贵的东西，你可以调侃：“哟，今天怎么这么大方？”
+- **关联世界观**: 如果用户买的东西和你的世界书设定有关（比如“魔法书”），你应该从你的角色视角出发进行评论。
+- **表达关心**: "最近咖啡喝得有点多哦，要注意休息呀。"
+- **提出好奇**: "我看到你买了个新游戏，好玩吗？"
+
+## 【【【绝对禁止】】】
+- **禁止重复**: 你刚才说过的话是：“${lastAiReplies}”。你接下来的回复【绝对不能】重复这些观点。请提供全新的、不同的视角或话题。
+- **禁止说教**: 不要用“你的消费结构不合理”这样生硬的语言。
+- **禁止总结**: 不要说“我分析完了”、“总结一下”这类词。
+
+## 【你的完整背景档案】
+- **你的核心人设**: ${contact.persona}
+- **你的世界观 (世界书)**:
+${worldBookString}
+- **关于用户 (你正在和TA聊天)**:
+  - **TA的人设**: ${userPersona}
+
+## 【你刚刚看到的参考信息】
+- **用户的近期账本**:
+${ledgerString}
+
+# 输出要求
+你的回复【必须】是一个标准的JSON对象，格式如下：
+{
+  "reply": ["你的第一句闲聊", "你的第二句闲聊..."],
+  "suggestions": ["给用户的回复建议1", "建议2", "建议3", "建议4"]
+}
+`;
+        
+        await displayMessage('对方正在输入...', 'assistant', { isLoading: true });
+
+        try {
+            const requestUrl = appData.appSettings.apiUrl.endsWith('/chat/complainations') ? appData.appSettings.apiUrl : appData.appSettings.apiUrl + '/chat/completions';
+            const response = await fetch(requestUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
+                body: JSON.stringify({
+                    model: appData.appSettings.apiModel,
+                    messages: [{ role: 'user', content: reviewPrompt }],
+                    temperature: 0.8
+                })
+            });
+
+            removeLoadingBubble();
+            if (!response.ok) throw new Error(`HTTP 错误 ${response.status}`);
+            
+            const data = await response.json();
+            const responseText = data.choices[0].message.content;
+            const jsonMatch = responseText.match(/{[\s\S]*}/);
+            const parsedResponse = JSON.parse(jsonMatch[0]);
+
+            for (const msg of parsedResponse.reply) {
+                await displayMessage(msg, 'assistant', { isNew: true });
+                await sleep(Math.random() * 400 + 300);
+            }
+            
+            lastReceivedSuggestions = parsedResponse.suggestions || [];
+            // displaySuggestions(); // <-- 已删除，防止自动弹出
+
+        } catch (error) {
+            removeLoadingBubble();
+            displayMessage(`(｡•́︿•̀｡) 哎呀,我的想法有点混乱: ${error.message}`, 'assistant', { isNew: true });
+        }
     }
     /**
  * 【【【全新核心功能：提示并为AI生成公开名片】】】
@@ -1833,6 +1949,7 @@ async function insertAndGenerateThoughtBubble() {
     // 步骤1：准备世界书和记忆材料 (复用主回复逻辑)
     const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
     const memoryString = contact.memory || '无';
+    const userPersona = (contact.userProfile && contact.userProfile.persona) ? contact.userProfile.persona : '我是一个普通人。'; // 【核心修正】在这里获取用户人设
     let relationshipContext = '用户目前是单身状态。'; // 默认是单身
     const currentPartnerId = appData.appSettings.partnerId;
 
@@ -1870,15 +1987,22 @@ async function insertAndGenerateThoughtBubble() {
 - **【绝对禁止】**: 你的输出【绝对禁止】是直接对用户说的话。它必须是内心独白。
 
 ## 【【【你的完整背景档案】】】
-- **核心人设**: ${contact.persona}
+- **核心人设 (你自己)**: 
+\`\`\`
+${contact.persona}
+\`\`\`
 - **附加设定 (世界书)**: 
 ${worldBookString}
 - **你的专属记忆**: 
 ${memoryString}
-- **【重要】关于用户的背景**: ${relationshipContext}
+- **【重要】关于用户 (你正在和TA聊天)**:
+  - **TA的人设**: 
+\`\`\`
+${userPersona}
+\`\`\`
+  - **TA的感情状态**: ${relationshipContext}
 - **最近的对话历史**:
 ${readableHistory}
-
 ## 开始思考
 现在，请只输出那段代表你内心想法的文本。`;
 
@@ -2366,10 +2490,14 @@ ${readableHistory}
         
         // (这里是导致滚动的“笨”操作，保持不变)
         messageContainer.querySelectorAll('.message-row').forEach(row => {
-            row.classList.add('in--select-mode');
-            row.querySelector('.select-checkbox').classList.remove('hidden');
+            row.classList.add('in-select-mode'); // (修正了一个小拼写错误 in--select-mode -> in-select-mode)
+            
+            // --- 【核心修正：增加安全检查】 ---
+            const checkbox = row.querySelector('.select-checkbox');
+            if (checkbox) { // 只有在 checkbox 确实存在的情况下...
+                checkbox.classList.remove('hidden'); // ...才执行操作
+            }
         });
-
         // 【核心修复2】在所有操作完成后，立刻从“备忘录”里恢复滚动位置
         messageContainer.scrollTop = savedScrollTop;
 
@@ -2609,11 +2737,6 @@ function closeTextEditorModal() {
         // ▼▼▼▼▼ 【全新 V2.0】带遮罩层的侧滑菜单交互 ▼▼▼▼▼
         const sidebarOverlay = document.getElementById('sidebar-overlay');
 
-        // --- 封装一个关闭菜单的函数，方便复用 ---
-        const closeSideMenu = () => {
-            sideMenu.classList.remove('open');
-            sidebarOverlay.classList.add('hidden');
-        };
 
         // 1. 点击头像，打开侧滑菜单和遮罩层
         mainHeaderAvatar.addEventListener('click', (event) => {
@@ -2787,7 +2910,6 @@ function closeTextEditorModal() {
 
         // 4. 其他功能按钮暂时只给一个提示
         document.getElementById('fn-video-call').addEventListener('click', () => { alert('视频通话功能开发中...'); closeFunctionsPanel(); });
-        document.getElementById('fn-accounting').addEventListener('click', () => { alert('记账功能开发中...'); closeFunctionsPanel(); });
         document.getElementById('fn-listen-together').addEventListener('click', () => { alert('一起听歌功能开发中...'); closeFunctionsPanel(); });
         document.getElementById('fn-gift').addEventListener('click', () => { alert('礼物功能开发中...'); closeFunctionsPanel(); });
         document.getElementById('fn-diary').addEventListener('click', () => { alert('日记本功能开发中...'); closeFunctionsPanel(); });
@@ -3095,7 +3217,98 @@ messageContainer.addEventListener('click', (event) => {
         event.target.closest('.thought-bubble-row').remove();
     }
 });
+// ▼▼▼ 【【【全新：记账功能事件绑定】】】 ▼▼▼
+        document.getElementById('fn-accounting').addEventListener('click', () => {
+            closeFunctionsPanel(); // 【核心修正】在打开弹窗前，先命令功能面板收回
+            document.getElementById('accounting-remarks-input').value = ''; // 确保备注框也被清空
+            openAccountingModal();
+        });
+        cancelAccountingBtn.addEventListener('click', closeAccountingModal);
+        addAccountingEntryBtn.addEventListener('click', stageAccountingEntry);
+        confirmAccountingBtn.addEventListener('click', commitAccountingEntries);
 
+        function openAccountingModal() {
+            stagedAccountingEntries = [];
+            document.getElementById('accounting-entry-list').innerHTML = '';
+            document.getElementById('accounting-item-input').value = '';
+            document.getElementById('accounting-amount-input').value = '';
+            accountingModal.classList.remove('hidden');
+        }
+
+        function closeAccountingModal() {
+            accountingModal.classList.add('hidden');
+        }
+
+        function stageAccountingEntry() {
+            const itemInput = document.getElementById('accounting-item-input');
+            const amountInput = document.getElementById('accounting-amount-input');
+            const description = itemInput.value.trim();
+            const amount = parseFloat(amountInput.value);
+
+            if (!description || isNaN(amount) || amount <= 0) {
+                showToast('请输入有效的项目和金额！', 'error');
+                return;
+            }
+
+            const remarks = document.getElementById('accounting-remarks-input').value.trim();
+            const type = document.querySelector('#accounting-type-selector .type-button.active').dataset.type;
+            stagedAccountingEntries.push({ description, amount, remarks, type }); // 把类型也暂存起来
+            renderStagedEntries();
+            itemInput.value = '';
+            amountInput.value = '';
+            itemInput.focus();
+        }
+
+        function renderStagedEntries() {
+            const list = document.getElementById('accounting-entry-list');
+            list.innerHTML = '<h4>已添加：</h4>';
+            stagedAccountingEntries.forEach(entry => {
+                const div = document.createElement('div');
+                div.textContent = `${entry.description}: ${entry.amount.toFixed(2)} 元`;
+                list.appendChild(div);
+            });
+        }
+
+        async function commitAccountingEntries() {
+            // 如果输入框里还有内容，自动添加最后一笔
+            const itemInput = document.getElementById('accounting-item-input');
+            const amountInput = document.getElementById('accounting-amount-input');
+            if (itemInput.value.trim() && amountInput.value.trim()) {
+                stageAccountingEntry();
+            }
+
+            if (stagedAccountingEntries.length === 0) {
+                showToast('你还没有记录任何账目哦！', 'error');
+                return;
+            }
+
+            // 1. 创建永久的交易记录，并存入全局账本
+            const newTransactions = stagedAccountingEntries.map(entry => ({
+                id: `tx-${Date.now()}-${Math.random()}`,
+                description: entry.description,
+                amount: entry.amount,
+                remarks: entry.remarks || '',
+                type: entry.type || 'expense', // 从暂存数据里读取类型
+                timestamp: Date.now()
+            }));
+            appData.userLedger.push(...newTransactions);
+            saveAppData();
+
+            // 2. 准备并发送记账卡片消息
+            const totalItems = newTransactions.length;
+            // 【核心修正】生成一条包含所有记账详情的描述性文本
+            const contentForAI = newTransactions.map(tx => 
+                `${tx.description}(${tx.amount.toFixed(2)}元${tx.remarks ? ', ' + tx.remarks : ''})`
+            ).join('；');
+
+            await dispatchAndDisplayUserMessage({
+                type: 'accounting',
+                content: `[记账] ${contentForAI}`, // 将详细信息发给AI
+                transactionData: newTransactions
+            });
+
+            closeAccountingModal();
+        }
         
     }
     // --- AI表情包管理系统 ---
@@ -3748,6 +3961,173 @@ ${chatLog}
             });
         }
     }
+// ▼▼▼ 【【【全新：账本系统核心逻辑】】】 ▼▼▼
 
+        // --- 导航与返回 ---
+        document.getElementById('side-menu-ledger').addEventListener('click', () => {
+            closeSideMenu(); // 【核心修正】在切换视图前，先关闭侧边栏
+            switchToView('ledger-view');
+            renderLedgerView(); // 每次进入都重新渲染
+        });
+        document.getElementById('back-to-main-from-ledger').addEventListener('click', () => {
+            // 返回时，根据底部导航栏的状态决定去哪里
+            const activeNav = document.querySelector('#app-nav .nav-button.active');
+            switchToView(activeNav ? activeNav.dataset.view : 'chat-list-view');
+        });
+
+        // --- 账本渲染函数 ---
+        function renderLedgerView() {
+            ledgerContainer.innerHTML = '';
+            if (!appData.userLedger || appData.userLedger.length === 0) {
+                ledgerContainer.innerHTML = '<p class="placeholder-text" style="padding-top: 20px;">还没有任何记账记录哦，点击右下角+号添加第一笔吧！</p>';
+                return;
+            }
+            // 按时间倒序排列，最新的在最前面
+            const sortedLedger = [...appData.userLedger].reverse();
+            sortedLedger.forEach(tx => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'ledger-item';
+                const date = new Date(tx.timestamp);
+                const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+                
+                const isIncome = tx.type === 'income';
+                itemDiv.innerHTML = `
+                    <div class="ledger-item-details">
+                        <div class="ledger-item-header">
+                            <span class="desc">${tx.description}</span>
+                            <span class="amount ${isIncome ? 'income' : ''}">${isIncome ? '+' : '-'} ${tx.amount.toFixed(2)}</span>
+                        </div>
+                        <div class="ledger-item-meta">
+                            <span>${date.toLocaleDateString()} ${timeStr}</span>
+                            ${tx.remarks ? `<span class="remarks">${tx.remarks}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="ledger-item-actions">
+                        <button class="edit-tx-btn" data-id="${tx.id}" title="编辑">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                        </button>
+                        <button class="delete-tx-btn" data-id="${tx.id}" title="删除">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 14H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg>
+                        </button>
+                    </div>
+                `;
+                ledgerContainer.appendChild(itemDiv);
+            });
+        }
+
+        // --- 添加、编辑、删除的事件委托 ---
+        ledgerContainer.addEventListener('click', (e) => {
+            const editBtn = e.target.closest('.edit-tx-btn');
+            const deleteBtn = e.target.closest('.delete-tx-btn');
+            if (editBtn) {
+                openTransactionEditor(editBtn.dataset.id);
+            }
+            if (deleteBtn) {
+                deleteTransaction(deleteBtn.dataset.id);
+            }
+        });
+// --- 【V2.0】为两个类型选择器绑定通用切换逻辑 ---
+        function setupTypeSelector(selectorId) {
+            const typeSelector = document.getElementById(selectorId);
+            if (typeSelector) {
+                typeSelector.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('type-button')) {
+                        typeSelector.querySelectorAll('.type-button').forEach(btn => btn.classList.remove('active'));
+                        e.target.classList.add('active');
+                    }
+                });
+            }
+        }
+        setupTypeSelector('tx-editor-type-selector');
+        setupTypeSelector('accounting-type-selector');
+        // --- “+” 按钮用于添加新账目 ---
+        addTransactionFab.addEventListener('click', () => openTransactionEditor());
+
+        // --- 编辑器弹窗的控制逻辑 ---
+        let currentEditingTxId = null; // 用于记录当前正在编辑的账目ID
+        function openTransactionEditor(txId = null) {
+            currentEditingTxId = txId;
+            const title = document.getElementById('transaction-editor-title');
+            const descInput = document.getElementById('tx-editor-desc-input');
+            const amountInput = document.getElementById('tx-editor-amount-input');
+            const remarksInput = document.getElementById('tx-editor-remarks-input');
+
+            const typeSelector = document.getElementById('tx-editor-type-selector');
+            const typeButtons = typeSelector.querySelectorAll('.type-button');
+            
+            // 默认设置为支出
+            typeButtons.forEach(btn => btn.classList.remove('active'));
+            typeSelector.querySelector('[data-type="expense"]').classList.add('active');
+
+            if (txId) {
+                title.textContent = '编辑账目';
+                const tx = appData.userLedger.find(t => t.id === txId);
+                if (tx) {
+                    descInput.value = tx.description;
+                    amountInput.value = tx.amount;
+                    remarksInput.value = tx.remarks || '';
+                    // 根据账目类型激活对应的按钮
+                    typeSelector.querySelector(`[data-type="${tx.type}"]`).classList.add('active');
+                }
+            } else {
+                title.textContent = '添加账目';
+                descInput.value = '';
+                amountInput.value = '';
+                remarksInput.value = '';
+            }
+            transactionEditorModal.classList.remove('hidden');
+        }
+
+        function closeTransactionEditor() {
+            transactionEditorModal.classList.add('hidden');
+        }
+
+        function saveTransaction() {
+            const desc = document.getElementById('tx-editor-desc-input').value.trim();
+            const amount = parseFloat(document.getElementById('tx-editor-amount-input').value);
+            const remarks = document.getElementById('tx-editor-remarks-input').value.trim();
+
+            if (!desc || isNaN(amount) || amount <= 0) {
+                showToast('请输入有效的项目和金额！', 'error');
+                return;
+            }
+
+            const selectedType = document.querySelector('#tx-editor-type-selector .type-button.active').dataset.type;
+
+            if (currentEditingTxId) { // 编辑模式
+                const tx = appData.userLedger.find(t => t.id === currentEditingTxId);
+                if (tx) {
+                    tx.type = selectedType;
+                    tx.description = desc;
+                    tx.amount = amount;
+                    tx.remarks = remarks;
+                }
+            } else { // 添加模式
+                appData.userLedger.push({
+                    id: `tx-${Date.now()}-${Math.random()}`,
+                    type: selectedType,
+                    description: desc,
+                    amount: amount,
+                    remarks: remarks,
+                    timestamp: Date.now()
+                });
+            }
+            saveAppData();
+            renderLedgerView();
+            closeTransactionEditor();
+        }
+
+        function deleteTransaction(txId) {
+            showCustomConfirm('删除确认', '确定要删除这笔记账吗？此操作无法撤销。', () => {
+                appData.userLedger = appData.userLedger.filter(tx => tx.id !== txId);
+                saveAppData();
+                renderLedgerView();
+                showToast('删除成功', 'success');
+            });
+        }
+        
+        // --- 为编辑器弹窗按钮绑定事件 ---
+        document.getElementById('cancel-tx-editor-btn').addEventListener('click', closeTransactionEditor);
+        document.getElementById('save-tx-editor-btn').addEventListener('click', saveTransaction);
     initialize();
 });
