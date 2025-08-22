@@ -1382,11 +1382,11 @@ if (currentPartnerId) {
         if (partner) {
             // 2a. 如果情侣是“公开”的 (有名片)
             if (partner.publicProfileCard) {
-                relationshipContext = `\n- **重要情报**: 用户已有官方情侣，是“${partner.remark}”。以下是TA的公开名片，你可以据此了解TA：\n  - **${partner.remark}**: ${partner.publicProfileCard}`;
+                relationshipContext = `\n- **重要情报**: 用户已有官方情侶，是“${partner.name}”。以下是TA的公开名片，你可以据此了解TA：\n  - **${partner.name}**: ${partner.publicProfileCard}`;
             
             // 2b. 如果情侣是“私密”的 (没有名片)
             } else {
-                relationshipContext = `\n- **重要情报**: 用户已有官方情侣，名字是“${partner.remark}”。这是一个私密角色，你只知道TA的名字，【绝对禁止】提及、猜测或编造关于TA的任何其他信息。`;
+                relationshipContext = `\n- **重要情报**: 用户已有官方情侶，名字是“${partner.name}”。这是一个私密角色，你只知道TA的名字，【绝对禁止】提及、猜测或编造关于TA的任何其他信息。`;
             }
         }
     }
@@ -1840,16 +1840,16 @@ async function insertAndGenerateThoughtBubble() {
         if (currentPartnerId === contact.id) {
             // 情况A: AI在思考时发现，自己就是用户的情侣
             relationshipContext = `你是用户的官方情侣。`;
-        } else {
-            // 情况B: AI发现用户有别的伴侣
+         } else {
+            // 情况B: AI发现用户有别的伴侶
             const partner = appData.aiContacts.find(c => c.id === currentPartnerId);
             if (partner) {
                 if (partner.publicProfileCard) {
                     // B1: 伴侣有公开名片
-                    relationshipContext = `用户已有官方情侣“${partner.remark}”，这是TA的名片：${partner.publicProfileCard}`;
+                    relationshipContext = `用户已有官方情侶“${partner.name}”，这是TA的名片：${partner.publicProfileCard}`;
                 } else {
                     // B2: 伴侣是私密角色
-                    relationshipContext = `用户已有官方情侣“${partner.remark}”（这是一个私密角色，你只知道名字）。`;
+                    relationshipContext = `用户已有官方情侶“${partner.name}”（这是一个私密角色，你只知道名字）。`;
                 }
             }
         }
