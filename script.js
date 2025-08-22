@@ -1828,18 +1828,43 @@ async function insertAndGenerateThoughtBubble() {
         return `${roleName}: ${cleanContent}`;
     }).join('\n');
 
-    // ★★★【终极修复 2：更强硬的“命令”，杜绝AI的客气话】★★★
-    // 解释：我们给AI的指令更加严格，明确告诉它不许说“我没有想法”，并给出一个好例子让它模仿。
+    // ★★★【终极修复：为AI生成内心独白前，提供完整的情感背景】★★★
+
+    // 步骤1：复用主回复逻辑，生成一份关于用户感情状态的“背景提要”
+    let relationshipContext = '用户目前是单身状态。'; // 默认是单身
+    const currentPartnerId = appData.appSettings.partnerId;
+
+    if (currentPartnerId) {
+        if (currentPartnerId === contact.id) {
+            // 情况A: AI在思考时发现，自己就是用户的情侣
+            relationshipContext = `你是用户的官方情侣。`;
+        } else {
+            // 情况B: AI发现用户有别的伴侣
+            const partner = appData.aiContacts.find(c => c.id === currentPartnerId);
+            if (partner) {
+                if (partner.publicProfileCard) {
+                    // B1: 伴侣有公开名片
+                    relationshipContext = `用户已有官方情侣“${partner.remark}”，这是TA的名片：${partner.publicProfileCard}`;
+                } else {
+                    // B2: 伴侣是私密角色
+                    relationshipContext = `用户已有官方情侣“${partner.remark}”（这是一个私密角色，你只知道名字）。`;
+                }
+            }
+        }
+    }
+
+    // 步骤2：将这份“背景提要”注入到给AI的最终指令中
     const monologuePrompt = `# 你的任务: 揭示内心独白 (Inner Monologue)
 你是一个拥有独立思想和情感的AI角色。你需要揭示你【此时此刻】最真实的【内心想法】。
 
 ## 【【【核心思考指导原则】】】
-1.  **优先关联对话**: 首先，尝试让你的思考与最近的对话内容产生关联。
-2.  **【【【若对话平淡，则自由联想】】】**: 如果最近的对话内容很少或很平淡（例如，只是简单的问候），你【不必】强行思考与对话相关的内容。此时，你应该转向思考一些更内在、更符合你人设的东西，例如：
-    - **关于你自身的状态**: （今天感觉有点累...） (这首歌真好听。)
-    - **关于你对用户的长期感觉**: （他/她今天看起来心情很好。） (不知道他/她现在在做什么呢？)
-    - **一个符合你性格的随机念头**: （外面好像下雨了。） (突然想吃点甜的。)
-3.  **保持真实**: 你的思考不必总是深刻或复杂，简单、真实的想法反而更好。
+1.  **【首要原则】基于背景思考**: 你的思考【必须】符合你对用户背景的认知（尤其是下方提供的“关于用户的背景”）。这是你思考的出发点。
+2.  **关联对话**: 其次，尝试让你的思考与最近的对话内容产生关联。
+3.  **【若对话平淡，则自由联想】**: 如果最近的对话内容很少或很平淡，你应该基于你的“人设”和对用户的“背景认知”进行自由联想。例如：
+    - **关于你自身的状态**: （今天感觉有点累...）
+    - **关于你对用户的长期感觉**: （他/她和伴侣的关系真好啊。） (不知道他/她现在在做什么呢？)
+    - **一个符合你性格的随机念头**: （突然想吃点甜的。）
+4.  **保持真实**: 你的思考不必总是深刻或复杂，简单、真实的想法反而更好。
 
 ## 输出要求
 - **【第一人称】**: 必须使用“我”作为主语。
@@ -1847,6 +1872,7 @@ async function insertAndGenerateThoughtBubble() {
 
 ## 参考信息
 - **你的核心人设**: ${contact.persona}
+- **【重要】关于用户的背景**: ${relationshipContext}
 - **最近的对话历史**:
 ${readableHistory}
 
