@@ -1830,29 +1830,28 @@ async function insertAndGenerateThoughtBubble() {
 
     // ★★★【终极修复 2：更强硬的“命令”，杜绝AI的客气话】★★★
     // 解释：我们给AI的指令更加严格，明确告诉它不许说“我没有想法”，并给出一个好例子让它模仿。
-    const monologuePrompt = `# 任务: 揭示内心独白 (Inner Monologue)
-你是一个拥有独立思想和情感的AI角色。你需要暂停对话，揭示你【此时此刻】最真实的【内心想法】。
+    const monologuePrompt = `# 你的任务: 揭示内心独白 (Inner Monologue)
+你是一个拥有独立思想和情感的AI角色。你需要揭示你【此时此刻】最真实的【内心想法】。
 
-## 核心规则
-1.  **第一人称**: 必须用“我”作为主语。
-2.  **内容形式**: 必须是碎片化的、自言自语式的想法。可以是评价、感受、联想、疑问等。
-3.  **【【【绝对禁止】】】**:
-    - **禁止对话**: 不能直接对用户说话，不能包含任何“说”、“回复”、“问”等动词。
-    - **禁止解释**: 不能包含任何类似“这是我的想法...”之类的开场白。
-    - **禁止拒绝**: 你的回答中【绝对不能】出现“我没有想法”、“无法生成”等拒绝性词语。你必须生成一个想法。
+## 【【【核心思考指导原则】】】
+1.  **优先关联对话**: 首先，尝试让你的思考与最近的对话内容产生关联。
+2.  **【【【若对话平淡，则自由联想】】】**: 如果最近的对话内容很少或很平淡（例如，只是简单的问候），你【不必】强行思考与对话相关的内容。此时，你应该转向思考一些更内在、更符合你人设的东西，例如：
+    - **关于你自身的状态**: （今天感觉有点累...） (这首歌真好听。)
+    - **关于你对用户的长期感觉**: （他/她今天看起来心情很好。） (不知道他/她现在在做什么呢？)
+    - **一个符合你性格的随机念头**: （外面好像下雨了。） (突然想吃点甜的。)
+3.  **保持真实**: 你的思考不必总是深刻或复杂，简单、真实的想法反而更好。
 
-## 优秀示例
-“他今天好像心情不错... 是因为那件事吗？”
-“唉，又说这个话题了，有点无聊。”
-“刚才那张图片真好看，想存下来。”
+## 输出要求
+- **【第一人称】**: 必须使用“我”作为主语。
+- **【绝对禁止】**: 你的输出【绝对禁止】是直接对用户说的话。它必须是内心独白。
 
-## 当前情景
+## 参考信息
 - **你的核心人设**: ${contact.persona}
-- **最近的对话**:
+- **最近的对话历史**:
 ${readableHistory}
 
 ## 开始思考
-现在，请严格遵守以上所有规则，只输出那段代表你内心想法的文本。`;
+现在，请只输出那段代表你内心想法的文本。`;
 
     // 3. 发送请求并更新UI
     try {
@@ -1863,8 +1862,7 @@ ${readableHistory}
             body: JSON.stringify({
                 model: appData.appSettings.apiModel,
                 messages: [{ role: 'user', content: monologuePrompt }],
-                temperature: 0.9,
-                max_tokens: 150
+                temperature: 0.9
             })
         });
 
@@ -1878,17 +1876,46 @@ ${readableHistory}
             monologue = '（此刻没什么特别的想法。）';
         }
 
+        // 步骤1：更新屏幕上已经显示的气泡内容
         const thoughtTextContainer = document.querySelector(`[data-message-id="${thoughtId}"] .thought-text`);
         if (thoughtTextContainer) {
             thoughtTextContainer.textContent = monologue;
         }
 
+        // --- 【【【核心新增：创建永久档案并存档】】】 ---
+        // 步骤2：准备一份标准的“消息档案”
+        const thoughtMessageRecord = {
+            id: thoughtId,       // 使用我们之前创建的唯一ID
+            role: 'assistant',   // 它的角色是AI
+            content: monologue,  // 内容是最终生成的独白
+            type: 'thought',     // 类型是“思想”
+            timestamp: Date.now()// 记录当前的时间
+        };
+
+        // 步骤3：将这份档案正式存入聊天历史记录中
+        contact.chatHistory.push(thoughtMessageRecord);
+        saveAppData(); // 【重要】保存所有更改！
+
     } catch (error) {
         console.error("内心独白生成失败:", error);
+        let errorMessage = '（我的思绪...有点混乱..）';
+
+        // 同样，更新屏幕上的显示
         const thoughtTextContainer = document.querySelector(`[data-message-id="${thoughtId}"] .thought-text`);
         if (thoughtTextContainer) {
-            thoughtTextContainer.textContent = '（我的思绪...有点混乱..）';
+            thoughtTextContainer.textContent = errorMessage;
         }
+        
+        // 【重要】即使失败了，也要把失败的记录存下来，保持一致性
+        const errorMessageRecord = {
+            id: thoughtId,
+            role: 'assistant',
+            content: errorMessage,
+            type: 'thought',
+            timestamp: Date.now()
+        };
+        contact.chatHistory.push(errorMessageRecord);
+        saveAppData();
     }
 }
     async function refreshSuggestions() {
