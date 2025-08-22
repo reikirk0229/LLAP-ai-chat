@@ -2709,15 +2709,25 @@ input:checked + .slider:before {
 .thought-bubble-message {
     background: #f0f4f8; /* 一个淡淡的、特殊的背景色 */
     color: #555;
-    padding: 12px 18px;
-    border-radius: 16px;
-    max-width: calc(100% - 80px);
+    /* --- 控制大小 --- */
+    /* 上下15px, 左右22px的内边距，让气泡更“胖”一点 */
+    padding: 15px 22px; 
+    /* --- 控制最大宽度 --- */
+    /* 允许气泡占据更大的宽度 */
+    max-width: calc(100% - 60px); 
+
+    /* --- 控制形状 (圆角) --- */
+    /* 值越大，角越圆。可以试试 8px (更方正) 或 24px (更圆润) */
+    border-radius: 24px; 
+    
+    /* --- 控制字体大小 --- */
+    font-size: 14px; /* 可以改成 13px (更小) 或 16px (更大) */
+
     position: relative;
     border: 1px solid #e0e4e8;
     font-style: italic; /* 用斜体来区分心声和对话 */
 }
 
-/* 3. 【核心修复 V3.0】用SVG绘制一个绝对平滑、漂亮的“小尾巴” */
 .thought-bubble-message::before {
     content: '';
     position: absolute;
@@ -2725,35 +2735,54 @@ input:checked + .slider:before {
     left: -28px;
     width: 30px;
     height: 30px;
-    /* 【终极修正】我们交换了两个椭圆的定义，实现了小椭圆在左下，大椭圆在右上的效果 */
-    background-image: url("data:image/svg+xml,%3Csvg width='30' height='30' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='50' cy='80' rx='18' ry='12' fill='%23f0f4f8' stroke='%23e0e4e8' stroke-width='3'/%3E%3Cellipse cx='20' cy='55' rx='12' ry='8' fill='%23f0f4f8' stroke='%23e0e4e8' stroke-width='3'/%3E%3C/svg%3E");
+    /* 
+       ↓ ↓ ↓ 在这里修改椭圆的参数！↓ ↓ ↓ 
+       第一个 <ellipse> 是【大】椭圆 (更靠右下)
+       第二个 <ellipse> 是【小】椭圆 (更靠左上)
+    */
+            background-image: url("data:image/svg+xml,%3Csvg width='30' height='30' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='60' cy='50' rx='25' ry='18' fill='%23f0f4f8' stroke='%23e0e4e8' stroke-width='3'/%3E%3Cellipse cx='18' cy='80' rx='18' ry='13' fill='%23f0f4f8' stroke='%23e0e4e8' stroke-width='3'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
 }
-
-/* 【新增】为心声文字本身创建一个容器，让它和按钮隔开 */
+/* 1. 让心声文字自然铺满整个气泡 */
 .thought-bubble-message .thought-text {
     display: block;
-    padding-right: 25px; /* 在右边留出足够空间给关闭按钮 */
+    /* 【核心修正】移除这堵“无形的墙”，让文字自由流动！ */
+    /* padding-right: 25px; */ /* <-- 我们把这行删掉或注释掉 */
 }
 
-/* 4. 【核心修复 V3.0】思想气泡关闭按钮样式 */
+/* 2. 思想气泡关闭按钮“瘦身美颜”计划 (终极对齐版) */
 .thought-bubble-close-btn {
     position: absolute;
-    top: 5px; /* 从顶部往下挪一点 */
-    right: 5px; /* 定位在右上角 */
-    width: 20px; /* 变小 */
-    height: 20px; /* 变小 */
+    top: 5px;
+    right: 5px;
+    width: 18px;
+    height: 18px;
+    background: rgba(0,0,0,0.1);
     border: none;
-    background: none;
-    font-size: 22px; /* 叉号本身可以大一点，但按钮区域小 */
-    font-weight: 300; /* 变细 */
-    line-height: 1; /* 确保叉号垂直居中 */
-    color: #ccc;
-    cursor: pointer;
-    padding: 0;
-    transition: all 0.2s ease;
     border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    color: #aeaeae;
+    font-size: 14px;
+    font-weight: normal;
+
+    /* --- 【核心修正：使用 Flexbox 实现完美居中】 --- */
+    display: flex;             /* 1. 启用 Flexbox 布局 */
+    justify-content: center;   /* 2. 水平居中 */
+    align-items: center;       /* 3. 垂直居中 */
+    /* 我们不再需要 line-height 和 text-align 了 */
+
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease-in-out;
 }
+
+/* 3. 悬停时按钮浮现 (保持不变) */
+.thought-bubble-row:hover .thought-bubble-close-btn {
+    opacity: 1;
+}
+
+/* 4. (可选) 悬停在按钮本身上时，让它更明显一点 */
+.thought-bubble-close-btn:hover {
+    background: rgba(0,0,0,0.3);
+    color: white; /* 悬停时叉号变白，更清晰 */
+}
+
