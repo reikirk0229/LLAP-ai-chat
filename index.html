@@ -38,9 +38,9 @@
                 <span class="menu-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path><path d="M18 12a2 2 0 0 0 0 4h4v-4h-4z"></path></svg></span>
                 <span>钱包</span>
             </div>
-            <div class="side-menu-item" id="side-menu-accounting">
+            <div class="side-menu-item" id="side-menu-ledger">
                 <span class="menu-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>
-                <span>记账</span>
+                <span>账本</span>
             </div>
             <div class="side-menu-item" id="side-menu-favorites">
                 <span class="menu-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></span>
@@ -415,6 +415,17 @@
             <div id="sticker-manager-container"></div>
             <button id="add-sticker-group-btn" class="fab">+</button>
         </div>
+        <!-- ▼▼▼ 【【【全新：账本视图】】】 ▼▼▼ -->
+        <div id="ledger-view" class="view hidden">
+            <div class="header">
+                <button id="back-to-main-from-ledger" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+                <span>我的账本</span>
+            </div>
+            <div id="ledger-container" class="contact-settings-container">
+                <!-- 账目列表将由JS动态生成在这里 -->
+            </div>
+            <button id="add-transaction-fab" class="fab">+</button>
+        </div>
 
         </div> <!-- ▲▲▲ #app-container 到此彻底结束 ▲▲▲ -->
 
@@ -702,6 +713,70 @@
             <div class="modal-footer-split">
                 <button id="cancel-text-edit-btn" class="modal-button secondary">取消</button>
                 <button id="save-text-edit-btn" class="modal-button primary">保存</button>
+            </div>
+        </div>
+    </div>
+    <!-- ▼▼▼ 【【【全新：账目编辑器弹窗 (用于添加和编辑)】】】 ▼▼▼ -->
+    <div id="transaction-editor-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="transaction-editor-title">添加账目</h3>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>类型</label>
+                    <div id="tx-editor-type-selector" class="type-selector">
+                        <button class="type-button active" data-type="expense">支出</button>
+                        <button class="type-button" data-type="income">收入</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="tx-editor-desc-input">项目</label>
+                    <input type="text" id="tx-editor-desc-input" placeholder="例如：奶茶 或 工资">
+                </div>
+                <div class="form-group">
+                    <label for="tx-editor-amount-input">金额 (元)</label>
+                    <input type="number" id="tx-editor-amount-input" placeholder="例如：15">
+                </div>
+                <div class="form-group">
+                    <label for="tx-editor-remarks-input">备注 (选填)</label>
+                    <textarea id="tx-editor-remarks-input" rows="3" placeholder="例如：给同事带的"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer-split">
+                <button id="cancel-tx-editor-btn" class="modal-button secondary">取消</button>
+                <button id="save-tx-editor-btn" class="modal-button primary">保存</button>
+            </div>
+        </div>
+    </div>
+    <!-- ▼▼▼ 【【【全新：记账弹窗】】】 ▼▼▼ -->
+    <div id="accounting-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>快速记账</h3>
+            </div>
+            <div class="modal-body">
+                <!-- 这里将显示已添加的条目 -->
+                <div id="accounting-entry-list" style="margin-bottom: 15px;"></div>
+                
+                <!-- 这是输入新条目的区域 -->
+                <div class="form-group" style="display: flex; flex-direction: column; gap: 10px;">
+                    <!-- ▼▼▼ 【核心新增】在这里也加入类型选择器 ▼▼▼ -->
+                    <div id="accounting-type-selector" class="type-selector">
+                        <button class="type-button active" data-type="expense">支出</button>
+                        <button class="type-button" data-type="income">收入</button>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="accounting-item-input" placeholder="买了什么？(如: 奶茶)" style="flex: 3;">
+                        <input type="number" id="accounting-amount-input" placeholder="多少钱？" style="flex: 2;">
+                    </div>
+                    <input type="text" id="accounting-remarks-input" placeholder="备注 (选填，如: 少糖去冰)">
+                </div>
+                <button id="add-accounting-entry-btn" style="width:100%; padding:10px; margin-top:10px; background:none; border: 1px dashed #ccc; cursor:pointer;">+ 添加另一笔</button>
+            </div>
+            <div class="modal-footer-split">
+                <button id="cancel-accounting-btn" class="modal-button secondary">取消</button>
+                <button id="confirm-accounting-btn" class="modal-button primary">完成记账</button>
             </div>
         </div>
     </div>
