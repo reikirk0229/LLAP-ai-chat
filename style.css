@@ -3149,3 +3149,22 @@ input:checked + .slider:before {
     border-radius: var(--radius-sm);
     font-family: inherit; /* 继承字体，看起来更统一 */
 }
+/* --- 【【【终极修复：为超长弹窗添加滚动能力】】】 --- */
+
+/* 步骤1: 改造弹窗的主体结构，让它成为一个能感知高度的“智能容器” */
+.modal-content {
+    display: flex; /* 启用Flex布局，这是实现内容滚动的关键 */
+    flex-direction: column; /* 让内部元素垂直排列 */
+    max-height: 85vh; /* 设置一个“天花板”，弹窗最大高度为屏幕高度的85% */
+}
+
+/* 步骤2: 告诉“身体”部分（内容区），你是可以伸缩和滚动的 */
+.modal-body {
+    flex-grow: 1; /* 允许它占据头部和尾部之外的所有可用空间 */
+    overflow-y: auto; /* 【核心】如果内容超出你拥有的空间，就显示垂直滚动条！ */
+}
+
+/* 步骤3: 确保“头部”和“尾部”高度固定，不被挤压 */
+.modal-header, .modal-footer-split {
+    flex-shrink: 0; /* 禁止它们收缩 */
+}
