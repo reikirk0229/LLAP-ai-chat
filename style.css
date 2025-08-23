@@ -3141,3 +3141,11 @@ input:checked + .slider:before {
     cursor: pointer;
     border-radius: var(--radius-sm);
 }
+/* 【全新】智能粘贴区域样式 */
+.smart-paste-area textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: var(--radius-sm);
+    font-family: inherit; /* 继承字体，看起来更统一 */
+}
