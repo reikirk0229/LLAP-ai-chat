@@ -4309,7 +4309,70 @@ ${chatLog}
         renderStickerManager();
         switchToView('ai-sticker-manager-view');
     });
+// ▼▼▼ 【【【终极修复 PART 1：“AI表情包管理页”的总电闸】】】 ▼▼▼
+        document.getElementById('sticker-manager-container').addEventListener('click', (e) => {
+            const target = e.target;
+            const group = target.dataset.group;
 
+            if (target.classList.contains('sticker-add-placeholder')) {
+                openStickerUploadModal(); 
+            }
+            else if (target.classList.contains('sticker-delete-btn')) {
+                const stickerId = target.dataset.id;
+                showCustomConfirm('删除确认', `确定要从 [${group}] 中删除这个表情包吗？`, () => {
+                    db.deleteImage(stickerId); 
+                    appData.globalAiStickers[group] = appData.globalAiStickers[group].filter(s => s.id !== stickerId);
+                    saveAppData();
+                    renderStickerManager();
+                });
+            }
+            else if (target.classList.contains('rename-group-btn')) {
+                showCustomPrompt('重命名分组', `请输入 [${group}] 的新名称：`, group, (newName) => {
+                    if (newName && newName.trim() && newName.trim() !== group) {
+                        if (appData.globalAiStickers[newName.trim()]) {
+                            showToast("该分组名已存在！", 'error'); return;
+                        }
+                        appData.globalAiStickers[newName.trim()] = appData.globalAiStickers[group];
+                        delete appData.globalAiStickers[group];
+                        appData.aiContacts.forEach(contact => {
+                            const index = contact.stickerGroups.indexOf(group);
+                            if (index > -1) contact.stickerGroups[index] = newName.trim();
+                        });
+                        saveAppData();
+                        renderStickerManager();
+                    }
+                });
+            }
+            else if (target.classList.contains('delete-group-btn')) {
+                showCustomConfirm('【警告】删除分组', `确定要删除 [${group}] 整个分组吗？\n此操作不可撤销！`, () => {
+                    const stickersToDelete = appData.globalAiStickers[group] || [];
+                    stickersToDelete.forEach(sticker => db.deleteImage(sticker.id));
+                    delete appData.globalAiStickers[group];
+                    appData.aiContacts.forEach(contact => {
+                        contact.stickerGroups = contact.stickerGroups.filter(g => g !== group);
+                    });
+                    saveAppData();
+                    renderStickerManager();
+                });
+            }
+        });
+
+        // ▼▼▼ 【【【终极修复 PART 2：“新建分组”的“+”号按钮电线】】】 ▼▼▼
+        document.getElementById('add-sticker-group-btn').addEventListener('click', () => {
+            showCustomPrompt('新建分组', '请输入新的表情包分组名:', '', (groupName) => {
+                if (groupName && groupName.trim()) {
+                    const trimmedName = groupName.trim();
+                    if (!appData.globalAiStickers[trimmedName]) {
+                        appData.globalAiStickers[trimmedName] = [];
+                        saveAppData();
+                        renderStickerManager();
+                        showToast(`分组 [${trimmedName}] 创建成功！`, 'success');
+                    } else {
+                        showToast('该分组名已存在！', 'error');
+                    }
+                }
+            });
+        });
     // 从用户表情包设置页返回
      document.getElementById('back-to-settings-from-sticker-manager-btn').addEventListener('click', () => switchToView('settings-view'));
 
@@ -4373,6 +4436,23 @@ ${chatLog}
                 });
             }
         });
+        // ▼▼▼ 【【【终极修复：为“新建分组”的“+”号按钮接上电线】】】 ▼▼▼
+        document.getElementById('add-sticker-group-btn').addEventListener('click', () => {
+            showCustomPrompt('新建分组', '请输入新的表情包分组名:', '', (groupName) => {
+                if (groupName && groupName.trim()) {
+                    const trimmedName = groupName.trim();
+                    if (!appData.globalAiStickers[trimmedName]) {
+                        appData.globalAiStickers[trimmedName] = [];
+                        saveAppData();
+                        renderStickerManager(); // 刷新界面，显示出新的空分组
+                        showToast(`分组 [${trimmedName}] 创建成功！`, 'success');
+                    } else {
+                        showToast('该分组名已存在！', 'error');
+                    }
+                }
+            });
+        });
+        // ▲▲▲ 【【【修复植入完毕】】】 ▲▲▲
         const selectedGroups = [];
         const checkboxes = document.querySelectorAll('#user-sticker-groups-container input[type="checkbox"]:checked');
         checkboxes.forEach(checkbox => {
