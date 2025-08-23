@@ -3396,10 +3396,24 @@ messageContainer.addEventListener('click', (event) => {
         insertAndGenerateThoughtBubble();
     }
 
-    // ▼▼▼ 【【【核心新增：如果点击的是关闭按钮，就删除气泡】】】 ▼▼▼
+    // ▼▼▼ 【【【终极修复：数据与UI同步删除内心独白】】】 ▼▼▼
     if (event.target.matches('.thought-bubble-close-btn')) {
-        // 找到它所在的整行气泡，然后移除
-        event.target.closest('.thought-bubble-row').remove();
+        const row = event.target.closest('.thought-bubble-row');
+        if (!row) return;
+
+        const messageId = row.dataset.messageId;
+        if (!messageId) return;
+
+        // 步骤1：通知“档案管理员”销毁记录
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (contact) {
+            // 使用filter方法，创建一个不包含那条独白的新数组
+            contact.chatHistory = contact.chatHistory.filter(msg => msg.id !== messageId);
+            saveAppData(); // 【至关重要】保存档案的修改！
+        }
+
+        // 步骤2：命令“装修工”砸掉墙上的气泡
+        row.remove();
     }
 });
 // ▼▼▼ 【【【全新：记账功能事件绑定】】】 ▼▼▼
@@ -3635,17 +3649,43 @@ messageContainer.addEventListener('click', (event) => {
         });
 
         // 4. 动态添加URL输入对 (图3核心)
-        const createUrlPair = () => {
+        const createUrlPair = (desc = '', url = '') => {
             const pairDiv = document.createElement('div');
             pairDiv.className = 'url-input-pair';
             pairDiv.innerHTML = `
-                <input type="text" class="url-desc-input" placeholder="表情描述">
-                <input type="text" class="url-link-input" placeholder="图片URL链接">
+                <input type="text" class="url-desc-input" placeholder="表情描述" value="${desc}">
+                <input type="text" class="url-link-input" placeholder="图片URL链接" value="${url}">
                 <button class="remove-url-pair-btn">&times;</button>
             `;
             urlPairsContainer.appendChild(pairDiv);
         };
         addUrlPairBtn.addEventListener('click', createUrlPair);
+        // ▼▼▼ 【【【全新：“智能粘贴”按钮的大脑】】】 ▼▼▼
+        document.getElementById('parse-paste-btn').addEventListener('click', () => {
+            const pasteTextarea = document.getElementById('smart-paste-textarea');
+            const text = pasteTextarea.value.trim();
+            if (!text) return;
+
+            const lines = text.split('\n').filter(line => line.trim() !== ''); // 切分成行，并移除空行
+
+            if (lines.length % 2 !== 0) {
+                showToast('粘贴的内容行数必须是偶数！(描述-链接成对出现)', 'error');
+                return;
+            }
+
+            // 在填充前，先清空现有的所有输入对
+            urlPairsContainer.innerHTML = ''; 
+
+            for (let i = 0; i < lines.length; i += 2) {
+                const desc = lines[i];
+                const url = lines[i + 1];
+                createUrlPair(desc, url); // 调用我们升级后的函数，直接创建并填充
+            }
+
+            pasteTextarea.value = ''; // 清空粘贴板
+            showToast('解析填充成功！', 'success');
+        });
+        // ▲▲▲ 【【【大脑植入完毕】】】 ▲▲▲
         // 默认先创建一个
         createUrlPair(); 
 
@@ -4375,7 +4415,8 @@ ${chatLog}
         });
     // 从用户表情包设置页返回
      document.getElementById('back-to-settings-from-sticker-manager-btn').addEventListener('click', () => switchToView('settings-view'));
-
+// ▼▼▼ 【【【终极修复：为“我的表情包”页面的返回键接上电线】】】 ▼▼▼
+    document.getElementById('back-to-settings-from-user-sticker-btn').addEventListener('click', () => switchToView('settings-view'));
     // 保存用户表情包设置
     document.getElementById('save-user-sticker-settings-button').addEventListener('click', () => {
         // 【【【核心抢救：为AI表情包仓库管理页面“接通电源”】】】
