@@ -293,44 +293,82 @@ async function formatHistoryForApi(history) {
         })
     );
 }
-    function renderUserStickerPanel(newlyAddedSticker = null) {
-            userStickerPanel.innerHTML = '';
-            const addBtn = document.createElement('div');
-            addBtn.className = 'sticker-item sticker-add-btn';
-            addBtn.textContent = '+';
-            addBtn.title = '添加新表情';
-            addBtn.onclick = () => { openStickerUploadModal('user'); };
-            userStickerPanel.appendChild(addBtn);
+    function renderUserStickerPanel() {
+        userStickerPanel.innerHTML = ''; // 清空面板
 
-            appData.userStickers.forEach(sticker => {
-                const stickerItem = document.createElement('div');
-                stickerItem.className = 'sticker-manager-item'; 
-                stickerItem.innerHTML = `
-                    <img data-sticker-id="${sticker.id}" src="" alt="${sticker.desc}">
-                    <button class="sticker-delete-btn" data-id="${sticker.id}">&times;</button>
-                `;
-                
-                const imgElement = stickerItem.querySelector('img');
+        const subscribedGroups = appData.globalUserProfile.selectedStickerGroups || [];
 
-                if (newlyAddedSticker && sticker.id === newlyAddedSticker.id) {
-                    imgElement.src = URL.createObjectURL(newlyAddedSticker.blob);
-                } else {
-                    db.getImage(sticker.id).then(blob => {
-                        if (blob) {
-                            imgElement.src = URL.createObjectURL(blob);
-                        }
-                    }).catch(error => {
-                         console.error(`加载旧表情失败 (ID: ${sticker.id}):`, error);
-                    });
-                }
-
-                const imgContainer = stickerItem.querySelector('img');
-                if(imgContainer) {
-                    imgContainer.onclick = () => sendStickerMessage(sticker);
-                }
-                userStickerPanel.appendChild(stickerItem);
-            });
+        if (subscribedGroups.length === 0) {
+            userStickerPanel.innerHTML = '<p class="placeholder-text" style="padding: 20px;">你还没有选择任何表情包分组，请到 设置 -> 我的表情包 中选择。</p>';
+            return;
         }
+
+        // 创建标签页容器和内容容器
+        const tabsContainer = document.createElement('div');
+        tabsContainer.className = 'sticker-panel-tabs';
+        const contentContainer = document.createElement('div');
+        contentContainer.className = 'sticker-panel-content';
+
+        userStickerPanel.appendChild(tabsContainer);
+        userStickerPanel.appendChild(contentContainer);
+
+        // 遍历用户订阅的每个分组，创建对应的标签页和内容区
+        subscribedGroups.forEach((groupName, index) => {
+            const groupStickers = appData.globalAiStickers[groupName] || [];
+
+            // 1. 创建标签按钮
+            const tabButton = document.createElement('button');
+            tabButton.className = 'sticker-tab-btn';
+            tabButton.textContent = groupName;
+            tabButton.dataset.targetTab = `tab-content-${index}`;
+            tabsContainer.appendChild(tabButton);
+
+            // 2. 创建标签对应的内容面板
+            const tabContent = document.createElement('div');
+            tabContent.className = 'sticker-grid sticker-tab-content';
+            tabContent.id = `tab-content-${index}`;
+            contentContainer.appendChild(tabContent);
+
+            // 3. 填充表情包到内容面板
+            groupStickers.forEach(sticker => {
+                const stickerItem = document.createElement('div');
+                stickerItem.className = 'sticker-item'; // 使用更通用的样式
+                const img = document.createElement('img');
+                img.alt = sticker.desc;
+                img.title = sticker.desc;
+                stickerItem.appendChild(img);
+                
+                // 异步从数据库加载图片
+                db.getImage(sticker.id).then(blob => {
+                    if (blob) img.src = URL.createObjectURL(blob);
+                });
+                
+                // 点击表情包直接发送
+                stickerItem.onclick = () => sendStickerMessage(sticker);
+                
+                tabContent.appendChild(stickerItem);
+            });
+
+            // 默认激活第一个标签页
+            if (index === 0) {
+                tabButton.classList.add('active');
+                tabContent.classList.add('active');
+            }
+        });
+
+        // 为标签页按钮添加点击切换逻辑
+        tabsContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('sticker-tab-btn')) {
+                // 移除所有按钮和内容的激活状态
+                tabsContainer.querySelectorAll('.sticker-tab-btn').forEach(btn => btn.classList.remove('active'));
+                contentContainer.querySelectorAll('.sticker-tab-content').forEach(content => content.classList.remove('active'));
+
+                // 激活被点击的按钮和其对应的内容
+                e.target.classList.add('active');
+                document.getElementById(e.target.dataset.targetTab).classList.add('active');
+            }
+        });
+    }
         async function sendStickerMessage(sticker) {
     userStickerPanel.classList.remove('is-open');
     await dispatchAndDisplayUserMessage({ content: `[表情] ${sticker.desc}`, type: 'sticker', stickerId: sticker.id });
@@ -814,13 +852,13 @@ async function formatHistoryForApi(history) {
             // 数据结构为：{ "分组名": [ {id, url, desc}, ... ], ... }
             appData.globalAiStickers = {};
         }
-        // ▼▼▼ 请把下面这段全新的代码，粘贴在这里 ▼▼▼
-        // 【全新】为用户建立独立的表情包仓库
-        if (!appData.userStickers) {
-            // 用户的表情包结构可以更简单，直接是一个表情包数组
-            appData.userStickers = [];
+        // ▼▼▼ 【【【核心改造：为用户建立“表情包订阅列表”】】】 ▼▼▼
+        // 我们不再使用独立的userStickers，而是让用户订阅全局的分组
+        if (!appData.globalUserProfile.selectedStickerGroups) {
+            // 这个数组将只存储用户选择使用的分组的【名字】
+            appData.globalUserProfile.selectedStickerGroups = [];
         }
-        // ▲▲▲ 请把上面这段全新的代码，粘贴在这里 ▲▲▲
+        // ▲▲▲ ▲▲▲
         // ▼▼▼ 【【【全新：为用户建立独立的全局账本】】】 ▼▼▼
         if (!appData.userLedger) {
             // 账本是一个交易记录的数组
@@ -860,17 +898,23 @@ async function formatHistoryForApi(history) {
     }
     
     function switchToView(viewId) {
+        // ▼▼▼ 【【【终极修复：在这里添加“场景切换”时的状态检查】】】 ▼▼▼
+        const currentView = document.querySelector('.view:not(.hidden)');
+        if (currentView && currentView.id === 'chat-window-view' && viewId !== 'chat-window-view') {
+            // 如果我们【正要离开】聊天窗口，就命令“管家”清空记忆！
+            resetChatState();
+        }
+        // ▲▲▲ 【【【修复植入完毕】】】 ▲▲▲
+
         views.forEach(view => view.classList.add('hidden'));
         document.getElementById(viewId).classList.remove('hidden');
         
-        // 【【【终极修复 V2.0：导航栏现在只在聊天列表页显示】】】
         if (viewId === 'chat-list-view') {
-            appNav.classList.remove('hidden'); // 如果是聊天列表页，就显示导航栏
+            appNav.classList.remove('hidden');
         } else {
-            appNav.classList.add('hidden'); // 否则，在所有其他页面都隐藏导航栏
+            appNav.classList.add('hidden');
         }
 
-        // 确保底部按钮始终处于激活状态
         navButtons.forEach(button => {
             button.classList.toggle('active', button.dataset.view === viewId);
         });
@@ -1007,18 +1051,24 @@ async function formatHistoryForApi(history) {
     }
 }
 
+function resetChatState() {
+        exitSelectMode(); // 退出多选模式 (会清空selectedMessages)
+        cancelQuoteReply(); // 取消可能存在的引用状态
+        lastReceivedSuggestions = [];
+        stagedUserMessages = [];
+        lastRenderedTimestamp = 0; // 重置时间戳，确保下一条消息能正确显示时间
+        currentMessagesOffset = 0; // 重置历史记录的加载偏移量
+        
+        // 确保所有面板都回到初始隐藏状态
+        if(aiSuggestionPanel) aiSuggestionPanel.classList.add('hidden');
+        if(userStickerPanel) userStickerPanel.classList.remove('is-open');
+    }
+
 async function openChat(contactId, messageIdToHighlight = null) {
     const numericContactId = Number(contactId);
     activeChatContactId = numericContactId;
 
-    currentMessagesOffset = 0; 
-    
-    exitSelectMode();
-    lastReceivedSuggestions = [];
-    stagedUserMessages = [];
-    lastRenderedTimestamp = 0;
-    aiSuggestionPanel.classList.add('hidden');
-    userStickerPanel.classList.remove('is-open');
+    resetChatState(); // 【重要】现在，我们只调用“大师”来完成所有重置工作
 
     const contact = appData.aiContacts.find(c => c.id === numericContactId);
     if (!contact) return;
@@ -2249,29 +2299,44 @@ ${readableHistory}
      * 【全新】打开表情包上传弹窗
      * @param {string} context - 要将表情包添加到的分组名
      */
-    function openStickerUploadModal(context) {
+    function openStickerUploadModal() {
         const modal = document.getElementById('sticker-upload-modal');
-        const title = document.getElementById('sticker-upload-title');
-        const preview = document.getElementById('sticker-upload-preview');
-        const urlInput = document.getElementById('sticker-upload-url-input');
-        const descInput = document.getElementById('sticker-upload-desc-input');
-        const fileInput = document.getElementById('sticker-upload-file-input');
-
-        if (context === 'user') {
-            title.textContent = `添加我的表情包`;
-        } else {
-            title.textContent = `为 [${context}] 添加表情包`;
+        const groupSelect = document.getElementById('sticker-upload-group-select');
+        
+        // 1. 动态填充分组选择下拉框 (这个逻辑不变，很好)
+        groupSelect.innerHTML = '';
+        const allGroupNames = Object.keys(appData.globalAiStickers);
+        if (allGroupNames.length === 0) {
+            showCustomAlert('提示', '请先创建一个表情包分组后再上传。');
+            return;
         }
+        allGroupNames.forEach(groupName => {
+            const option = document.createElement('option');
+            option.value = groupName;
+            option.textContent = groupName;
+            groupSelect.appendChild(option);
+        });
 
-        preview.src = '';
-        urlInput.value = '';
-        descInput.value = '';
-        fileInput.value = null; 
+        // 2. 【全新】重置两个面板到初始状态
+        document.getElementById('local-preview-grid').innerHTML = '';
+        const urlContainer = document.getElementById('url-input-pairs-container');
+        urlContainer.innerHTML = '';
+        // 为URL面板重新创建一个默认的输入对
+        const initialPair = document.createElement('div');
+        initialPair.className = 'url-input-pair';
+        initialPair.innerHTML = `
+            <input type="text" class="url-desc-input" placeholder="表情描述">
+            <input type="text" class="url-link-input" placeholder="图片URL链接">
+            <button class="remove-url-pair-btn">&times;</button>
+        `;
+        urlContainer.appendChild(initialPair);
+        
+        // 3. 【全新】确保默认显示的是“本地上传”标签页
+        document.getElementById('tab-btn-local').click();
 
-        modal.dataset.currentContext = context; // 【关键修改】将上下文暂存到弹窗上
+        // 4. 显示弹窗
         modal.classList.remove('hidden');
     }
-
     /**
      * 【全新】关闭表情包上传弹窗
      */
@@ -2679,6 +2744,35 @@ ${readableHistory}
         confirmCallback = null;
         cancelCallback = null;
     }
+    // ▼▼▼ 【【【全新植入：为“带输入框的弹窗”编写操作指令】】】 ▼▼▼
+    let promptCallback = null;
+
+    function showCustomPrompt(title, text, defaultValue, onConfirm) {
+        document.getElementById('custom-prompt-title').textContent = title;
+        document.getElementById('custom-prompt-text').textContent = text;
+        const input = document.getElementById('custom-prompt-input');
+        input.value = defaultValue;
+        promptCallback = onConfirm;
+        document.getElementById('custom-prompt-modal').classList.remove('hidden');
+        input.focus();
+        input.select();
+    }
+
+    function closeCustomPrompt() {
+        document.getElementById('custom-prompt-modal').classList.add('hidden');
+        promptCallback = null;
+    }
+
+    // 为新弹窗的按钮绑定事件
+    document.getElementById('custom-prompt-cancel-btn').addEventListener('click', closeCustomPrompt);
+    document.getElementById('custom-prompt-ok-btn').addEventListener('click', () => {
+        if (promptCallback) {
+            const inputValue = document.getElementById('custom-prompt-input').value;
+            promptCallback(inputValue);
+        }
+        closeCustomPrompt();
+    });
+    // ▲▲▲ 【【【指令植入完毕】】】 ▲▲▲
 
     function showCustomAlert(title, text) {
         customAlertTitle.textContent = title;
@@ -3117,6 +3211,58 @@ displayMessage('上下文已刷新，AI将从这里开始一段全新的对话�
                 }
             }
         });
+
+        // ▼▼▼ 【【【终极修复：在此处植入缺失的事件监听器】】】 ▼▼▼
+
+        // 神经1：为“AI表情包管理”页面的总容器接上“电闸”，修复所有内部按钮失灵的bug
+        document.getElementById('sticker-manager-container').addEventListener('click', (e) => {
+            const target = e.target;
+            const group = target.dataset.group;
+
+            if (target.classList.contains('sticker-add-placeholder')) {
+                openStickerUploadModal();
+            } else if (target.classList.contains('sticker-delete-btn')) {
+                const stickerId = target.dataset.id;
+                showCustomConfirm('删除确认', `确定要从 [${group}] 中删除这个表情包吗？`, () => {
+                    db.deleteImage(stickerId);
+                    appData.globalAiStickers[group] = appData.globalAiStickers[group].filter(s => s.id !== stickerId);
+                    saveAppData();
+                    renderStickerManager();
+                });
+            } else if (target.classList.contains('rename-group-btn')) {
+                showCustomPrompt('重命名分组', `请输入 [${group}] 的新名称：`, group, (newName) => {
+                    if (newName && newName.trim() && newName.trim() !== group) {
+                        if (appData.globalAiStickers[newName.trim()]) {
+                            showToast("该分组名已存在！", 'error'); return;
+                        }
+                        appData.globalAiStickers[newName.trim()] = appData.globalAiStickers[group];
+                        delete appData.globalAiStickers[group];
+                        appData.aiContacts.forEach(contact => {
+                            const index = contact.stickerGroups.indexOf(group);
+                            if (index > -1) contact.stickerGroups[index] = newName.trim();
+                        });
+                        saveAppData();
+                        renderStickerManager();
+                    }
+                });
+            } else if (target.classList.contains('delete-group-btn')) {
+                showCustomConfirm('【警告】删除分组', `确定要删除 [${group}] 整个分组吗？\n此操作不可撤销！`, () => {
+                    const stickersToDelete = appData.globalAiStickers[group] || [];
+                    stickersToDelete.forEach(sticker => db.deleteImage(sticker.id));
+                    delete appData.globalAiStickers[group];
+                    appData.aiContacts.forEach(contact => {
+                        contact.stickerGroups = contact.stickerGroups.filter(g => g !== group);
+                    });
+                    saveAppData();
+                    renderStickerManager();
+                });
+            }
+        });
+
+        // 神经2：为上传弹窗的“取消”按钮接上“电线”，修复取消键失灵的bug
+        document.getElementById('cancel-sticker-upload-btn').addEventListener('click', closeStickerUploadModal);
+        
+        // ▲▲▲ 【【【修复植入结束】】】 ▲▲▲
             // 【【【全新：为文本编辑弹窗按钮绑定事件】】】
     cancelTextEditBtn.addEventListener('click', closeTextEditorModal);
     saveTextEditBtn.addEventListener('click', () => {
@@ -3350,185 +3496,163 @@ messageContainer.addEventListener('click', (event) => {
         }
         
     }
-    // --- AI表情包管理系统 ---
-        const stickerManagerView = document.getElementById('ai-sticker-manager-view');
-        const stickerUploadModal = document.getElementById('sticker-upload-modal');
-        const addStickerGroupBtn = document.getElementById('add-sticker-group-btn');
+    
 
-        // 在主设置页，添加一个入口
-        const settingsForm = document.getElementById('settings-form');
-        const stickerManagerEntry = document.createElement('div');
-        stickerManagerEntry.className = 'settings-group';
-        stickerManagerEntry.innerHTML = '<div class="settings-item"><span>AI表情包管理</span><span class="arrow">&gt;</span></div>';
-        settingsForm.insertBefore(stickerManagerEntry, settingsForm.querySelector('hr'));
-        
-        stickerManagerEntry.addEventListener('click', () => {
-            renderStickerManager();
-            switchToView('ai-sticker-manager-view');
-        });
+     
 
-        // 从表情包管理页返回设置页
-        document.getElementById('back-to-settings-from-sticker-btn').addEventListener('click', () => switchToView('settings-view'));
+        // 【【【V3.0 终极版：确认上传按钮的全新大脑】】】
+        document.getElementById('confirm-sticker-upload-btn').addEventListener('click', async (event) => {
+            const confirmBtn = event.currentTarget;
+            const groupName = document.getElementById('sticker-upload-group-select').value;
+            if (!groupName) {
+                showToast('请先创建并选择一个表情包分组！', 'error');
+                return;
+            }
 
-        // 点击“+”创建新分组
-        addStickerGroupBtn.addEventListener('click', () => {
-            const groupName = prompt("请输入新的表情包分组名：");
-            if (groupName && groupName.trim()) {
-                if (appData.globalAiStickers[groupName.trim()]) {
-                    alert("该分组名已存在！");
+            const uploadTasks = [];
+            const activeTab = document.querySelector('.tab-button.active').dataset.tab;
+
+            // --- 大脑决策中枢：判断当前是哪个上传模式 ---
+
+            // 模式一：处理本地上传 (图2)
+            if (activeTab === 'local') {
+                const previewItems = document.querySelectorAll('#local-preview-grid .preview-item');
+                if (previewItems.length === 0) {
+                    showToast('请先选择要上传的图片！', 'error');
                     return;
                 }
-                appData.globalAiStickers[groupName.trim()] = [];
-                saveAppData();
-                renderStickerManager();
-            }
-        });
-
-        // 使用事件委托处理所有对分组和表情包的操作
-        document.getElementById('sticker-manager-container').addEventListener('click', (e) => {
-            const target = e.target;
-            const group = target.dataset.group;
-
-            // 添加表情包
-            if (target.classList.contains('sticker-add-placeholder')) {
-                openStickerUploadModal(group);
-            }
-            // 删除表情包
-            if (target.classList.contains('sticker-delete-btn')) {
-                const stickerId = target.dataset.id;
-                if (confirm(`确定要从 [${group}] 中删除这个表情包吗？`)) {
-                    // 【核心新增】从大仓库删除图片文件
-                    db.deleteImage(stickerId); 
-                    // 从小口袋删除记录
-                    appData.globalAiStickers[group] = appData.globalAiStickers[group].filter(s => s.id !== stickerId);
-                    saveAppData();
-                    renderStickerManager();
-                }
-            }
-            // 重命名分组
-            if (target.classList.contains('rename-group-btn')) {
-                const newName = prompt(`请输入 [${group}] 的新名称：`, group);
-                if (newName && newName.trim() && newName.trim() !== group) {
-                    if (appData.globalAiStickers[newName.trim()]) {
-                        alert("该分组名已存在！"); return;
+                for (const item of previewItems) {
+                    const desc = item.querySelector('.desc-input').value.trim();
+                    if (!desc) {
+                        showToast('所有图片都必须填写描述！', 'error');
+                        return; // 中断上传
                     }
-                    // 数据迁移
-                    appData.globalAiStickers[newName.trim()] = appData.globalAiStickers[group];
-                    delete appData.globalAiStickers[group];
-                    // 更新所有引用了旧分组名的角色
-                    appData.aiContacts.forEach(contact => {
-                        const index = contact.stickerGroups.indexOf(group);
-                        if (index > -1) {
-                            contact.stickerGroups[index] = newName.trim();
-                        }
-                    });
-                    saveAppData();
-                    renderStickerManager();
+                    // 从我们之前暂存的文件对象中获取数据
+                    const file = item.fileObject; 
+                    uploadTasks.push({ source: file, desc: desc, isUrl: false });
+                }
+            } 
+            // 模式二：处理URL上传 (图3)
+            else if (activeTab === 'url') {
+                const urlPairs = document.querySelectorAll('#url-input-pairs-container .url-input-pair');
+                if (urlPairs.length === 0) {
+                    showToast('请至少添加一组URL和描述！', 'error');
+                    return;
+                }
+                for (const pair of urlPairs) {
+                    const desc = pair.querySelector('.url-desc-input').value.trim();
+                    const url = pair.querySelector('.url-link-input').value.trim();
+                    if (!desc || !url) {
+                        showToast('所有URL和描述都不能为空！', 'error');
+                        return; // 中断上传
+                    }
+                    uploadTasks.push({ source: url, desc: desc, isUrl: true });
                 }
             }
-            // 删除分组
-            if (target.classList.contains('delete-group-btn')) {
-                if (confirm(`【警告】确定要删除 [${group}] 整个分组吗？\n此操作不可撤销，且所有使用此分组的AI将无法再使用这些表情包！`)) {
-                    delete appData.globalAiStickers[group];
-                     // 移除所有角色对该分组的引用
-                    appData.aiContacts.forEach(contact => {
-                        contact.stickerGroups = contact.stickerGroups.filter(g => g !== group);
-                    });
-                    saveAppData();
-                    renderStickerManager();
+
+            // --- 流水线处理器 (这段代码和以前完全一样，完美复用！) ---
+            confirmBtn.disabled = true;
+            let successCount = 0;
+            let failureCount = 0;
+            for (let i = 0; i < uploadTasks.length; i++) {
+                const task = uploadTasks[i];
+                confirmBtn.textContent = `上传中 (${i + 1}/${uploadTasks.length})...`;
+                try {
+                    let imageBlob = task.isUrl ? await imgSrcToBlob(task.source) : task.source;
+                    const stickerId = `sticker-${Date.now()}-${Math.random()}`;
+                    await db.saveImage(stickerId, imageBlob);
+                    const newSticker = { id: stickerId, desc: task.desc, aiId: `${groupName}_${Date.now()}`};
+                    appData.globalAiStickers[groupName].push(newSticker);
+                    successCount++;
+                } catch (error) {
+                    console.error(`上传失败: ${task.source}`, error);
+                    failureCount++;
                 }
             }
+
+            // --- 最终报告 (也和以前一样) ---
+            saveAppData();
+            renderStickerManager();
+            closeStickerUploadModal();
+            let resultMessage = `上传完成！成功 ${successCount} 个`;
+            if (failureCount > 0) resultMessage += `，失败 ${failureCount} 个。`;
+            showToast(resultMessage, failureCount > 0 ? 'warning' : 'success');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = '开始上传';
+        });
+        // 【【【V3.0 终极版：全新上传弹窗的交互逻辑】】】
+        const tabBtnLocal = document.getElementById('tab-btn-local');
+        const tabBtnUrl = document.getElementById('tab-btn-url');
+        const panelLocal = document.getElementById('panel-local');
+        const panelUrl = document.getElementById('panel-url');
+        const localFileInput = document.getElementById('sticker-upload-file-input');
+        const localPreviewGrid = document.getElementById('local-preview-grid');
+        const urlPairsContainer = document.getElementById('url-input-pairs-container');
+        const addUrlPairBtn = document.getElementById('add-url-pair-btn');
+
+        // 1. 标签页切换逻辑
+        tabBtnLocal.addEventListener('click', () => {
+            tabBtnLocal.classList.add('active');
+            tabBtnUrl.classList.remove('active');
+            panelLocal.classList.add('active');
+            panelUrl.classList.remove('active');
+        });
+        tabBtnUrl.addEventListener('click', () => {
+            tabBtnUrl.classList.add('active');
+            tabBtnLocal.classList.remove('active');
+            panelUrl.classList.add('active');
+            panelLocal.classList.remove('active');
         });
 
-        // --- 表情包上传弹窗逻辑 ---
-        const stickerPreview = document.getElementById('sticker-upload-preview');
-        const stickerUrlInput = document.getElementById('sticker-upload-url-input');
-        const stickerFileInput = document.getElementById('sticker-upload-file-input');
-
-        // URL输入时更新预览
-        stickerUrlInput.addEventListener('input', () => {
-            stickerPreview.src = stickerUrlInput.value;
-        });
-
-        // 本地文件选择时更新预览
-        stickerFileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                stagedStickerFile = file; // 【核心修改1】直接暂存文件本身
+        // 2. 本地文件选择后的预览生成逻辑 (图2核心)
+        localFileInput.addEventListener('change', (event) => {
+            const files = event.target.files;
+            for (const file of files) {
                 const reader = new FileReader();
-                reader.onload = (event) => {
-                    stickerPreview.src = event.target.result;
-                    // 【核心修改2】URL输入框可以保持为空，我们不再依赖它
-                    stickerUrlInput.value = ''; 
+                reader.onload = (e) => {
+                    const previewItem = document.createElement('div');
+                    previewItem.className = 'preview-item';
+                    previewItem.innerHTML = `
+                        <img src="${e.target.result}" alt="preview">
+                        <input type="text" class="desc-input" placeholder="表情描述...">
+                        <button class="remove-preview-btn">&times;</button>
+                    `;
+                    // 【关键】把文件对象本身暂存到DOM元素上，方便后续上传
+                    previewItem.fileObject = file; 
+                    localPreviewGrid.appendChild(previewItem);
                 };
                 reader.readAsDataURL(file);
             }
+            // 清空文件选择，以便可以重复选择相同文件
+            localFileInput.value = null;
         });
 
-        // 取消上传
-        document.getElementById('cancel-sticker-upload-btn').addEventListener('click', closeStickerUploadModal);
-
-        // 确认上传
-        document.getElementById('confirm-sticker-upload-btn').addEventListener('click', async (event) => {
-            const confirmBtn = event.currentTarget; 
-            const context = stickerUploadModal.dataset.currentContext;
-            const desc = document.getElementById('sticker-upload-desc-input').value.trim();
-
-            // 为了健壮性，我们不再依赖预览图的src
-            const stagedFile = stagedStickerFile; 
-            const urlValue = document.getElementById('sticker-upload-url-input').value.trim();
-
-            if (!stagedFile && !urlValue || !desc) {
-                alert("请确保已上传图片或填写URL，并填写表情描述！");
-                return;
+        // 3. 动态删除本地预览项
+        localPreviewGrid.addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-preview-btn')) {
+                e.target.parentElement.remove();
             }
-            
-            try {
-                confirmBtn.disabled = true;
-                confirmBtn.textContent = '上传中...';
+        });
 
-                let imageBlob;
-                if (stagedFile) {
-                    imageBlob = stagedFile;
-                } else if (urlValue) {
-                    imageBlob = await imgSrcToBlob(urlValue);
-                } else {
-                    throw new Error("没有找到有效的图片源。");
-                }
+        // 4. 动态添加URL输入对 (图3核心)
+        const createUrlPair = () => {
+            const pairDiv = document.createElement('div');
+            pairDiv.className = 'url-input-pair';
+            pairDiv.innerHTML = `
+                <input type="text" class="url-desc-input" placeholder="表情描述">
+                <input type="text" class="url-link-input" placeholder="图片URL链接">
+                <button class="remove-url-pair-btn">&times;</button>
+            `;
+            urlPairsContainer.appendChild(pairDiv);
+        };
+        addUrlPairBtn.addEventListener('click', createUrlPair);
+        // 默认先创建一个
+        createUrlPair(); 
 
-                const stickerId = `sticker-${Date.now()}-${Math.random()}`;
-                await db.saveImage(stickerId, imageBlob);
-
-                const newSticker = {
-                    id: stickerId,
-                    desc: desc
-                };
-                
-                if (context === 'user') {
-                    appData.userStickers.push(newSticker);
-                } else {
-                    newSticker.aiId = `${context}_${Date.now()}`;
-                    appData.globalAiStickers[context].push(newSticker);
-                }
-
-                stagedStickerFile = null;
-                saveAppData();
-
-                if (context === 'user') {
-                    // 这次，这个命令一定能找到上面那个正确的“说明书”
-                    renderUserStickerPanel({ id: newSticker.id, blob: imageBlob });
-                } else {
-                    renderStickerManager();
-                }
-                
-                closeStickerUploadModal();
-
-            } catch (error) {
-                console.error("表情包保存失败:", error);
-                // 暂时不显示弹窗，让控制台的错误更清晰
-            } finally {
-                confirmBtn.disabled = false;
-                confirmBtn.textContent = '保存';
+        // 5. 动态删除URL输入对
+        urlPairsContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-url-pair-btn')) {
+                e.target.parentElement.remove();
             }
         });
 
@@ -4168,5 +4292,122 @@ ${chatLog}
         // --- 为编辑器弹窗按钮绑定事件 ---
         document.getElementById('cancel-tx-editor-btn').addEventListener('click', closeTransactionEditor);
         document.getElementById('save-tx-editor-btn').addEventListener('click', saveTransaction);
+
+        // --- 【全新】用户表情包设置逻辑 ---
+    const manageMyStickersEntry = document.getElementById('manage-my-stickers-entry');
+    const manageAiStickersEntry = document.getElementById('manage-ai-stickers-entry');
+    const userStickerSettingsView = document.getElementById('user-sticker-settings-view');
+
+    // 入口1：管理我的表情包
+    manageMyStickersEntry.addEventListener('click', () => {
+        renderUserStickerSettings();
+        switchToView('user-sticker-settings-view');
+    });
+
+    // 入口2：管理AI表情包仓库 (旧功能的新入口)
+    manageAiStickersEntry.addEventListener('click', () => {
+        renderStickerManager();
+        switchToView('ai-sticker-manager-view');
+    });
+
+    // 从用户表情包设置页返回
+     document.getElementById('back-to-settings-from-sticker-manager-btn').addEventListener('click', () => switchToView('settings-view'));
+
+    // 保存用户表情包设置
+    document.getElementById('save-user-sticker-settings-button').addEventListener('click', () => {
+        // 【【【核心抢救：为AI表情包仓库管理页面“接通电源”】】】
+        // 我们使用事件委托，只在父容器上监听一次点击，就能管理所有内部按钮
+        document.getElementById('sticker-manager-container').addEventListener('click', (e) => {
+            const target = e.target;
+            const group = target.dataset.group;
+
+            // 1. 点击“+”号添加表情包
+            if (target.classList.contains('sticker-add-placeholder')) {
+                // 【重要修正】调用我们新的、不需要参数的上传函数
+                openStickerUploadModal(); 
+            }
+            // 2. 点击“×”号删除单个表情包
+            else if (target.classList.contains('sticker-delete-btn')) {
+                const stickerId = target.dataset.id;
+                showCustomConfirm('删除确认', `确定要从 [${group}] 中删除这个表情包吗？`, () => {
+                    db.deleteImage(stickerId); 
+                    appData.globalAiStickers[group] = appData.globalAiStickers[group].filter(s => s.id !== stickerId);
+                    saveAppData();
+                    renderStickerManager();
+                });
+            }
+            // 3. 点击“重命名”按钮
+            else if (target.classList.contains('rename-group-btn')) {
+                showCustomPrompt('重命名分组', `请输入 [${group}] 的新名称：`, group, (newName) => {
+                    if (newName && newName.trim() && newName.trim() !== group) {
+                        if (appData.globalAiStickers[newName.trim()]) {
+                            showToast("该分组名已存在！", 'error'); return;
+                        }
+                        // 数据迁移
+                        appData.globalAiStickers[newName.trim()] = appData.globalAiStickers[group];
+                        delete appData.globalAiStickers[group];
+                        // 更新所有引用了旧分组名的角色
+                        appData.aiContacts.forEach(contact => {
+                            const index = contact.stickerGroups.indexOf(group);
+                            if (index > -1) contact.stickerGroups[index] = newName.trim();
+                        });
+                        saveAppData();
+                        renderStickerManager();
+                    }
+                });
+            }
+            // 4. 点击“删除分组”按钮
+            else if (target.classList.contains('delete-group-btn')) {
+                showCustomConfirm('【警告】删除分组', `确定要删除 [${group}] 整个分组吗？\n此操作不可撤销！`, () => {
+                    // 【安全保障】在删除前，先把分组内的所有图片文件也从数据库里删除
+                    const stickersToDelete = appData.globalAiStickers[group] || [];
+                    stickersToDelete.forEach(sticker => db.deleteImage(sticker.id));
+
+                    delete appData.globalAiStickers[group];
+                    // 移除所有角色对该分组的引用
+                    appData.aiContacts.forEach(contact => {
+                        contact.stickerGroups = contact.stickerGroups.filter(g => g !== group);
+                    });
+                    saveAppData();
+                    renderStickerManager();
+                });
+            }
+        });
+        const selectedGroups = [];
+        const checkboxes = document.querySelectorAll('#user-sticker-groups-container input[type="checkbox"]:checked');
+        checkboxes.forEach(checkbox => {
+            selectedGroups.push(checkbox.value);
+        });
+        appData.globalUserProfile.selectedStickerGroups = selectedGroups;
+        saveAppData();
+        showToast('保存成功！', 'success');
+        switchToView('settings-view');
+    });
+
+    // 渲染用户表情包设置页面的函数
+    function renderUserStickerSettings() {
+        const container = document.getElementById('user-sticker-groups-container');
+        container.innerHTML = '';
+        const allGroupNames = Object.keys(appData.globalAiStickers);
+
+        if (allGroupNames.length === 0) {
+            container.innerHTML = '<p class="placeholder-text">仓库里还没有任何表情包分组，请先在“AI表情包仓库管理”中添加。</p>';
+            return;
+        }
+
+        const subscribedGroups = appData.globalUserProfile.selectedStickerGroups || [];
+
+        allGroupNames.forEach(groupName => {
+            const isChecked = subscribedGroups.includes(groupName);
+            const checkboxWrapper = document.createElement('div');
+            checkboxWrapper.className = 'checkbox-item';
+            checkboxWrapper.innerHTML = `
+                <input type="checkbox" id="user-sticker-group-${groupName}" value="${groupName}" ${isChecked ? 'checked' : ''}>
+                <label for="user-sticker-group-${groupName}">${groupName}</label>
+            `;
+            container.appendChild(checkboxWrapper);
+        });
+    }
+
     initialize();
 });
