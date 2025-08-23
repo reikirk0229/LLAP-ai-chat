@@ -529,8 +529,16 @@
                         </div>
                     </div>
 
-                    <!-- 面板2: URL上传 (对应您的图3) -->
+                    <!-- 面板2: URL上传 (V2.0 - 支持智能粘贴) -->
                     <div id="panel-url" class="upload-panel">
+                        <!-- ▼▼▼ 【【【全新：智能粘贴区域】】】 ▼▼▼ -->
+                        <div class="form-group smart-paste-area">
+                            <textarea id="smart-paste-textarea" rows="4" placeholder="在此粘贴，格式为：&#10;描述1&#10;链接1&#10;描述2&#10;链接2..."></textarea>
+                            <button id="parse-paste-btn" class="button-like-label" style="width:100%; margin-top:5px;">解析并填充下方列表</button>
+                        </div>
+                        <hr style="margin: 15px 0;">
+                        <!-- ▲▲▲▲▲ -->
+                        
                         <div id="url-input-pairs-container">
                             <!-- JS将在这里动态生成URL和描述的输入对 -->
                         </div>
