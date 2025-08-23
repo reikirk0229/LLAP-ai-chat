@@ -1445,6 +1445,39 @@ async function displayMessage(text, role, options = {}) {
                 return `- ${new Date(tx.timestamp).toLocaleDateString('zh-CN')} 花费 ${tx.amount} 元用于 ${tx.description}`;
             }).join('\n');
         }
+        // ▼▼▼ 【【【全新：AI记忆刷新闹钟】】】 ▼▼▼
+        let periodicReminderPrompt = '';
+        const messageCount = contact.chatHistory.length;
+
+        // 规则1：强力闹钟 (每60条响一次)，提醒核心人设
+        if (messageCount > 0 && messageCount % 60 === 0) {
+            periodicReminderPrompt = `
+---
+# 【【【重要提醒：请回顾你的核心设定！】】】
+你已经和用户聊了很长时间了，为了防止角色偏离，请重新阅读并严格遵守你的核心设定：
+
+### >> 你的核心人设: 
+\`\`\`
+${contact.persona}
+\`\`\`
+### >> 你的世界书: 
+${worldBookString}
+---
+`;
+        } 
+        // 规则2：普通闹钟 (每10条响一次)，提醒说话风格
+        else if (messageCount > 0 && messageCount % 10 === 0) {
+            periodicReminderPrompt = `
+---
+# 【【【风格提醒】】】
+为了保持角色一致性，请回顾并坚持你的线上沟通风格。
+
+### >> 你的沟通风格参考: 
+${contact.chatStyle || '自然发挥即可'}
+---
+`;
+        }
+        // ▲▲▲ 【【【闹钟设置结束】】】 ▲▲▲
 
         const finalPrompt = `# 任务: 角色扮演
 你是一个AI角色，你正在和一个真实用户聊天。你的所有回复都必须严格以角色的身份进行。
@@ -1456,6 +1489,8 @@ async function displayMessage(text, role, options = {}) {
 \`\`\`
 ${contact.persona}
 \`\`\`
+- **沟通风格**: 
+${contact.chatStyle || '自然发挥即可'}
 - **附加设定 (世界书)**: 
 ${worldBookString}
 - **你的专属记忆**: 
@@ -1474,7 +1509,6 @@ ${userPersona}
 
 ### >> 核心行为准则
 - **重要背景**: 你正在通过聊天软件与用户进行【线上对话】。当前时间: ${new Date().toLocaleString('zh-CN')}。${relationshipContext}
-- **沟通风格参考**: ${contact.chatStyle || '自然发挥即可'}
 - **回复风格**: 模拟真实聊天，将一个完整的思想拆分成【2-8条】独立的短消息。
 - **禁止括号**: 【绝对不能】包含任何括号内的动作、神态描写。
 - **【【【核心世界观：关于其他AI（共友）】】】**
@@ -1542,6 +1576,10 @@ ${availableStickersPrompt}
 
 # 【【【用户的近期账本 (仅供你参考)】】】
 ${ledgerString}
+
+---
+
+${periodicReminderPrompt} 
 
 ---
 ## 【对话历史】
@@ -1753,7 +1791,7 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
 你是一个AI角色 "${contact.name}"。你刚刚主动查看了你的朋友（用户）的近期账本。
 
 ## 你的目标
-忘掉“分析”，你的任务是**发起一段自然的、口语化的、符合你完整人设的闲聊**。你需要结合**所有**已知信息，让你的评论充满洞察力。你可以：
+忘掉“分析”，你的任务是**发起一段自然的、口语化的、符合你完整人设和沟通风格的闲聊**。你需要结合**所有**已知信息，让你的评论充满洞察力。你可以：
 - **结合用户人设**: 如果用户人设是“节俭”，但买了个贵的东西，你可以调侃：“哟，今天怎么这么大方？”
 - **关联世界观**: 如果用户买的东西和你的世界书设定有关（比如“魔法书”），你应该从你的角色视角出发进行评论。
 - **表达关心**: "最近咖啡喝得有点多哦，要注意休息呀。"
@@ -1768,6 +1806,7 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
 - **你的核心人设**: ${contact.persona}
 - **你的世界观 (世界书)**:
 ${worldBookString}
+- **你的沟通风格**: ${contact.chatStyle || '自然发挥即可'}
 - **关于用户 (你正在和TA聊天)**:
   - **TA的人设**: ${userPersona}
 
