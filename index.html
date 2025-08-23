@@ -267,10 +267,39 @@
                     <input type="number" id="context-limit-input" placeholder="">
                 </div>
                 <hr>
+                <!-- ▼▼▼ 【【【全新：为用户和AI分别添加入口】】】 ▼▼▼ -->
+                <div class="settings-group">
+                <div class="settings-item" id="manage-my-stickers-entry">
+                    <span>我的表情包</span>
+                    <span class="arrow">&gt;</span>
+                </div>
+                <div class="settings-item" id="manage-ai-stickers-entry">
+                    <span>AI表情包仓库管理</span>
+                    <span class="arrow">&gt;</span>
+                </div>
+            </div>
+                <!-- ▲▲▲▲▲ ▲▲▲▲▲ -->
                 <h3>全局设置 (待开发)</h3>
                 <p class="placeholder-text">未来可在这里添加全局预设、外观等设置。</p>
                 <button id="save-settings-button">保存设置</button>
             </div>
+        </div>
+        <!-- 【【【AI表情包仓库管理页面 (请确保此代码块完整存在)】】】 -->
+        <div id="ai-sticker-manager-view" class="view hidden">
+            <div class="header">
+                <button id="back-to-settings-from-sticker-manager-btn" class="header-button back-button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <span>AI表情包仓库管理</span>
+            </div>
+            
+            <!-- ▼▼▼ 罪魁祸首就是下面这个div在您的文件中缺失了 ▼▼▼ -->
+            <div id="sticker-manager-container" class="sticker-manager-container">
+                <!-- 表情包分组将由JS动态生成在这里 -->
+            </div>
+            <!-- ▲▲▲▲▲ -->
+
+            <button id="add-sticker-group-btn" class="fab">+</button>
         </div>
 
         <!-- 视图5: 单个联系人的聊天设置页面 -->
@@ -406,14 +435,21 @@
             </div>
         </div>
 
-        <!-- 视图7: AI表情包管理页面 -->
-        <div id="ai-sticker-manager-view" class="view hidden">
+        <!-- 【【【全新：用户表情包选择页面】】】 -->
+        <div id="user-sticker-settings-view" class="view hidden">
             <div class="header">
-                <button id="back-to-settings-from-sticker-btn" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <span>AI表情包管理</span>
+                <button id="back-to-settings-from-user-sticker-btn" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+                <span>我的表情包</span>
             </div>
-            <div id="sticker-manager-container"></div>
-            <button id="add-sticker-group-btn" class="fab">+</button>
+            <div id="ai-editor-form" style="padding-top: 25px;">
+                <div class="form-group">
+                    <label>选择你想在聊天中使用的表情包分组</label>
+                    <div id="user-sticker-groups-container">
+                        <!-- 复选框将由JS动态生成在这里 -->
+                    </div>
+                </div>
+                 <button id="save-user-sticker-settings-button" class="save-button" style="width: 100%; padding: 15px; border: none; background: var(--gradient-primary); color: white; border-radius: var(--radius-md); font-size: 16px; cursor: pointer;">保存</button>
+            </div>
         </div>
         <!-- ▼▼▼ 【【【全新：账本视图】】】 ▼▼▼ -->
         <div id="ledger-view" class="view hidden">
@@ -461,35 +497,50 @@
         </div>
     </div> 
 
-    <!-- 表情包上传弹窗 -->
+    <!-- 表情包上传弹窗 (V3.0 - 用户体验终极版) -->
     <div id="sticker-upload-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
                 <h3 id="sticker-upload-title">添加表情包</h3>
             </div>
             <div class="modal-body">
+                <!-- ▼▼▼ 【【【全新：分组选择器 (保持不变)】】】 ▼▼▼ -->
                 <div class="form-group">
-                    <label>表情预览</label>
-                    <div class="image-upload-area sticker-preview-area">
-                        <img id="sticker-upload-preview" class="image-preview" src="">
+                    <label for="sticker-upload-group-select">添加到分组</label>
+                    <select id="sticker-upload-group-select"></select>
+                </div>
+
+                <!-- ▼▼▼ 【【【全新：上传模式切换标签页】】】 ▼▼▼ -->
+                <div class="upload-mode-tabs">
+                    <button id="tab-btn-local" class="tab-button active" data-tab="local">本地上传</button>
+                    <button id="tab-btn-url" class="tab-button" data-tab="url">URL上传</button>
+                </div>
+
+                <!-- ▼▼▼ 【【【全新：两个独立的上传面板】】】 ▼▼▼ -->
+                <div class="upload-panels-container">
+                    <!-- 面板1: 本地上传 (对应您的图2) -->
+                    <div id="panel-local" class="upload-panel active">
+                        <div class="form-group">
+                            <label for="sticker-upload-file-input" class="button-like-label">点此选择多张图片</label>
+                            <input type="file" id="sticker-upload-file-input" class="hidden-file-input" accept="image/*" multiple>
+                        </div>
+                        <div id="local-preview-grid" class="local-preview-grid">
+                            <!-- JS将在这里动态生成图片预览和描述框 -->
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="sticker-upload-url-input">图片地址 (URL)</label>
-                    <input type="text" id="sticker-upload-url-input" placeholder="粘贴URL或选择本地文件">
-                </div>
-                 <div class="form-group">
-                    <label for="sticker-upload-file-input" class="button-like-label">从本地上传</label>
-                    <input type="file" id="sticker-upload-file-input" class="hidden-file-input" accept="image/*">
-                </div>
-                <div class="form-group">
-                    <label for="sticker-upload-desc-input">表情描述 (给AI看)</label>
-                    <textarea id="sticker-upload-desc-input" rows="3" placeholder="例如：一只微笑的柴犬"></textarea>
+
+                    <!-- 面板2: URL上传 (对应您的图3) -->
+                    <div id="panel-url" class="upload-panel">
+                        <div id="url-input-pairs-container">
+                            <!-- JS将在这里动态生成URL和描述的输入对 -->
+                        </div>
+                        <button id="add-url-pair-btn" class="add-more-button">+ 添加更多</button>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer-split">
                 <button id="cancel-sticker-upload-btn" class="modal-button secondary">取消</button>
-                <button id="confirm-sticker-upload-btn" class="modal-button primary">保存</button>
+                <button id="confirm-sticker-upload-btn" class="modal-button primary">开始上传</button>
             </div>
         </div>
     </div>
@@ -568,6 +619,22 @@
             </div>
         </div>
     </div>
+    <!-- 【【【全新：带输入框的自定义弹窗 (Prompt)】】】 -->
+        <div id="custom-prompt-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="custom-prompt-title">输入</h3>
+                </div>
+                <div class="modal-body">
+                    <p id="custom-prompt-text" style="margin-bottom: 15px;"></p>
+                    <input type="text" id="custom-prompt-input" class="modal-input">
+                </div>
+                <div class="modal-footer-split">
+                    <button id="custom-prompt-cancel-btn" class="modal-button secondary">取消</button>
+                    <button id="custom-prompt-ok-btn" class="modal-button primary">确认</button>
+                </div>
+            </div>
+        </div>
 
     <!-- 红包详情弹窗 -->
     <div id="red-packet-modal" class="modal-overlay hidden">
