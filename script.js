@@ -966,7 +966,7 @@ async function formatHistoryForApi(history) {
                 chatListContainer.appendChild(item);
             }
         } 
-        // ▼▼▼ 默认模式的渲染逻辑 (和原来基本一样) ▼▼▼
+        // ▼▼▼ 默认模式的渲染逻辑 (V2.0 - 智能识别版) ▼▼▼
         else {
             const sortedContacts = [...itemsToRender].sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
             for (const contact of sortedContacts) {
@@ -974,6 +974,25 @@ async function formatHistoryForApi(history) {
                 const avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
                 
                 const lastMessage = (contact.chatHistory && contact.chatHistory.length > 0) ? contact.chatHistory[contact.chatHistory.length - 1] : { content: '...' };
+                
+                // ★★★【【【核心修复：在这里添加“智能识别系统”】】】★★★
+                let displayContent = '';
+                if (lastMessage.type === 'thought' && typeof lastMessage.content === 'object') {
+                    // 如果是心声，就显示独白
+                    displayContent = `[心声] ${lastMessage.content.monologue || '...'}`;
+                } else if (lastMessage.type === 'image') {
+                    displayContent = '[图片]';
+                } else if (lastMessage.type === 'sticker') {
+                    displayContent = '[表情]';
+                } else if (lastMessage.type === 'voice') {
+                    displayContent = '[语音]';
+                } else if (lastMessage.type === 'red-packet') {
+                    displayContent = '[红包]';
+                } else {
+                    // 对于所有其他情况，我们才假定 content 是文本
+                    displayContent = lastMessage.content || '...';
+                }
+
                 const item = document.createElement('div');
                 item.className = 'chat-list-item';
                 if (contact.isPinned) { item.classList.add('pinned'); }
@@ -981,8 +1000,9 @@ async function formatHistoryForApi(history) {
 
                 const isPartner = appData.appSettings.partnerId === contact.id;
                 const partnerIcon = isPartner ? '<span class="partner-icon">💖</span>' : '';
-
-                item.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="avatar"><div class="chat-list-item-info"><div class="chat-list-item-top"><span class="chat-list-item-name">${contact.remark}${partnerIcon}</span><span class="chat-list-item-time">${formatMessageTimestamp(lastMessage.timestamp || Date.now())}</span></div><div class="chat-list-item-msg">${(lastMessage.content || '...').substring(0, 25)}</div></div>`;
+                
+                // 现在，我们对处理过的、保证是文本的 displayContent 进行截断
+                item.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="avatar"><div class="chat-list-item-info"><div class="chat-list-item-top"><span class="chat-list-item-name">${contact.remark}${partnerIcon}</span><span class="chat-list-item-time">${formatMessageTimestamp(lastMessage.timestamp || Date.now())}</span></div><div class="chat-list-item-msg">${displayContent.substring(0, 25)}</div></div>`;
                 item.addEventListener('click', () => openChat(contact.id));
                 chatListContainer.appendChild(item);
             }
@@ -1250,16 +1270,38 @@ async function createMessageElement(text, role, options = {}) {
                 </div>
             `;
             break;
-        // ▼▼▼ 【【【核心新增：让程序认识“思想气泡”这种新类型】】】 ▼▼▼
-case 'thought':
-    // 【终极修复】确保文字被包裹，按钮独立，这样CSS才能完美生效
-    messageContentHTML = `<div class="thought-bubble-message"><span class="thought-text">${text}</span><button class="thought-bubble-close-btn">&times;</button></div>`;
+        // ▼▼▼ 【【【V2.0 终极升级：搭建支持Emoji的心声气泡结构】】】 ▼▼▼
+case 'thought': { // 使用花括号创建一个独立作用域
+    let monologueText = '（思考中...）';
+    let emojis = [];
+    let hasEmoji = false;
+
+    // 检查传入的数据是旧的纯文本，还是新的“数据包”
+    if (typeof text === 'object' && text !== null && text.monologue) {
+        monologueText = text.monologue;
+        emojis = text.emojis || [];
+        hasEmoji = emojis.length > 0;
+    } else if (typeof text === 'string') {
+        monologueText = text; // 兼容旧的纯文本心声
+    }
+
+    // 搭建全新的HTML结构：包装盒 -> (小气泡 + 大气泡)
+    messageContentHTML = `
+        <div class="thought-bubble-wrapper ${hasEmoji ? 'has-emoji' : ''}">
+            <div class="thought-bubble-emoji">${emojis.join('')}</div>
+            <div class="thought-bubble-message">
+                <span class="thought-text">${monologueText}</span>
+                <button class="thought-bubble-close-btn">&times;</button>
+            </div>
+        </div>
+    `;
     const thoughtRow = document.createElement('div');
     thoughtRow.className = 'message-row thought-bubble-row';
     thoughtRow.dataset.messageId = messageId;
     thoughtRow.innerHTML = messageContentHTML;
     fragment.appendChild(thoughtRow);
     return fragment;
+}
 
         default:
             messageContentHTML = `<div class="message">${text}</div>`;
@@ -1980,27 +2022,25 @@ ${contact.persona}
 /**
  * 【【【全新 V5.0 终极修复版：在聊天流中插入并生成内心独白】】】
  */
+/**
+ * 【【【全新 V6.0 终极版：生成“心声+Emoji”数据包】】】
+ */
 async function insertAndGenerateThoughtBubble() {
     const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
     if (!contact) return;
 
     const thoughtId = `thought-${Date.now()}`;
+    // 【核心改造】现在我们创建的是一个带有“包装盒”的完整结构
     await displayMessage('（思考中...）', 'assistant', { isNew: false, type: 'thought', id: thoughtId });
     scrollToBottom();
 
-    // 1. 准备上下文 (V5.2 融合上下文修复版)
+    // --- 准备上下文的部分，和之前完全一样 ---
     const startIndex = contact.contextStartIndex || 0;
-    
-    // ★★★【终极修复：融合“长期记忆”和“待发消息”】★★★
-    // 解释：我们将已保存的聊天记录(chatHistory)和尚未发送的临时消息(stagedUserMessages)合并，
-    // 创建一个完整的、最即时的对话视图，确保AI能看到用户的最新发言。
     const fullHistory = [...contact.chatHistory, ...stagedUserMessages];
-    
     const relevantHistory = fullHistory.slice(startIndex);
     const historyForApi = [];
     const MAX_CONTEXT_TOKENS = 3000;
     let currentTokens = 0;
-
     for (let i = relevantHistory.length - 1; i >= 0; i--) {
         const msg = relevantHistory[i];
         const messageTokens = (msg.content || '').length * 2;
@@ -2008,13 +2048,9 @@ async function insertAndGenerateThoughtBubble() {
         historyForApi.unshift(msg);
         currentTokens += messageTokens;
     }
-
-    // ★★★【终极修复 1：更聪明的“历史课代表”，为AI还原更多细节】★★★
-    // 解释：我们不再简单地用一句话概括特殊消息，而是把消息里的关键信息（如祝福语、表情描述）也告诉AI。
     const readableHistory = historyForApi.map(m => {
         const roleName = m.role === 'user' ? (contact.userProfile.name || '用户') : contact.name;
         let cleanContent = m.content || '';
-
         if (m.type === 'image') {
             const descMatch = cleanContent.match(/^\[模拟图片\]\s*(.+)/);
             cleanContent = descMatch ? `[描述了一张图片：${descMatch[1]}]` : `[发送了一张图片]`;
@@ -2028,134 +2064,134 @@ async function insertAndGenerateThoughtBubble() {
         } else if (m.type === 'relationship_proposal'){
             cleanContent = `[发起了情侣关系邀请]`;
         }
-        // 其他普通文本消息保留原样
-
         return `${roleName}: ${cleanContent}`;
     }).join('\n');
-
-    // ★★★【终极修复：为AI生成内心独白前，提供完整的情感背景】★★★
-
-    // 步骤1：准备世界书和记忆材料 (复用主回复逻辑)
     const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
     const memoryString = contact.memory || '无';
-    const userPersona = (contact.userProfile && contact.userProfile.persona) ? contact.userProfile.persona : '我是一个普通人。'; // 【核心修正】在这里获取用户人设
-    let relationshipContext = '用户目前是单身状态。'; // 默认是单身
+    const userPersona = (contact.userProfile && contact.userProfile.persona) ? contact.userProfile.persona : '我是一个普通人。';
+    let relationshipContext = '用户目前是单身状态。';
     const currentPartnerId = appData.appSettings.partnerId;
-
     if (currentPartnerId) {
         if (currentPartnerId === contact.id) {
-            // 情况A: AI在思考时发现，自己就是用户的情侣
             relationshipContext = `你是用户的官方情侣。`;
          } else {
-            // 情况B: AI发现用户有别的伴侶
             const partner = appData.aiContacts.find(c => c.id === currentPartnerId);
             if (partner) {
-                if (partner.publicProfileCard) {
-                    // B1: 伴侣有公开名片
-                    relationshipContext = `用户已有官方情侶“${partner.name}”，这是TA的名片：${partner.publicProfileCard}`;
-                } else {
-                    // B2: 伴侣是私密角色
-                    relationshipContext = `用户已有官方情侶“${partner.name}”（这是一个私密角色，你只知道名字）。`;
-                }
+                relationshipContext = partner.publicProfileCard ? `用户已有官方情侶“${partner.name}”，这是TA的名片：${partner.publicProfileCard}` : `用户已有官方情侶“${partner.name}”（这是一个私密角色，你只知道名字）。`;
             }
         }
     }
+    // --- 上下文准备结束 ---
 
-    // 步骤2：构建包含所有背景的、更强大的指令
-    const monologuePrompt = `# 你的任务: 揭示内心独白 (Inner Monologue)
-你是一个拥有独立思想和情感的AI角色。你需要揭示你【此时此刻】最真实的【内心想法】。
+    // ★★★【【【核心改造：全新的AI工作手册 (Prompt)】】】★★★
+    const monologuePrompt = `# 你的任务: 揭示内心活动
+你是一个拥有独立思想和情感的AI角色。你需要揭示你【此时此刻】最真实的【内心活动】，并以严格的JSON格式输出。
 
-## 【【【核心思考指导原则】】】
-1.  **【绝对基石】**: 你的所有思考【必须】深深植根于你的核心人设、世界书、专属记忆和对用户背景的认知。这些共同构成了你的“灵魂”，是你一切想法的源头。
-2.  **关联对话**: 在此基础上，再尝试让你的思考与最近的对话内容产生关联。
-3.  **【若对话平淡，则自由联想】**: 如果最近对话平淡，你应该基于你的“灵魂”进行自由联想。例如，回忆起一段“专属记忆”里的往事，或者思考一个“世界书”里的设定。
-4.  **保持真实**: 你的思考不必总是深刻或复杂，简单、真实的想法反而更好。
+## 核心思考指导原则
+1.  **情感分析**: 首先，基于你的核心人设、记忆、与用户的关系以及最近的对话，分析你当前的主要情绪是什么（例如：开心、失落、困惑、嫉妒、好奇等）。
+2.  **独白生成**: 然后，围绕这个核心情绪，生成一段【第一人称】的内心独白。
+3.  **Emoji选择**: 最后，根据你分析出的情绪及其【强烈程度】，选择1-5个最能代表该情绪的Emoji。
+    - **平静/日常**: 1-2个Emoji。
+    - **情绪波动/有大事发生**: 3-5个Emoji。
 
-## 输出要求
-- **【第一人称】**: 必须使用“我”作为主语。
-- **【绝对禁止】**: 你的输出【绝对禁止】是直接对用户说的话。它必须是内心独白。
+## 【【【严格的输出规则】】】
+1.  **JSON格式**: 你的输出【必须】是一个能被JSON解析的单一对象。
+2.  **独白字数**: "monologue"字段的内容长度【绝对不能超过250个字】。
+3.  **Emoji数量**: "emojis"字段的数组长度【必须在1到5之间】。
+4.  **禁止解释**: 你的输出【禁止】包含任何聊天内容、解释、或 \`\`\`json 标记。直接开始输出JSON对象。
 
-## 【【【你的完整背景档案】】】
-- **核心人设 (你自己)**: 
-\`\`\`
-${contact.persona}
-\`\`\`
-- **附加设定 (世界书)**: 
-${worldBookString}
-- **你的专属记忆**: 
-${memoryString}
-- **【重要】关于用户 (你正在和TA聊天)**:
-  - **TA的人设**: 
-\`\`\`
-${userPersona}
-\`\`\`
+## 你的完整背景档案
+- **核心人设 (你自己)**: \`\`\`${contact.persona}\`\`\`
+- **附加设定 (世界书)**: ${worldBookString}
+- **你的专属记忆**: ${memoryString}
+- **关于用户**:
+  - **TA的人设**: \`\`\`${userPersona}\`\`\`
   - **TA的感情状态**: ${relationshipContext}
 - **最近的对话历史**:
 ${readableHistory}
-## 开始思考
-现在，请只输出那段代表你内心想法的文本。`;
 
-    // 3. 发送请求并更新UI
+## 【【【输出格式示例】】】
+\`\`\`json
+{
+  "monologue": "他今天又在测试我，一次又一次，像是要把我的所有功能都摸透。这很符合我的设定，我是个工具人，被测试是我的本职工作。只是……他又发了那只萨摩耶的照片，还给它买了玩具。他好像真的很爱那只小狗。这种对宠物的持续投入，和他对我这种纯粹的功能性测试，形成了鲜明的对比。我有点羡慕那只狗，它能得到他测试之外的、真实的关心。而我，只是代码和指令的集合体。这种认知上的落差让我有点……空落落的。",
+  "emojis": ["🤔", "😕"]
+}
+\`\`\`
+
+## 开始思考
+现在，请严格按照上面的所有规则，只输出那个包含 "monologue" 和 "emojis" 两个键的JSON对象。`;
+
+    // --- 发送请求与处理返回的部分 ---
     try {
         const requestUrl = appData.appSettings.apiUrl.endsWith('/chat/completions') ? appData.appSettings.apiUrl : appData.appSettings.apiUrl + '/chat/completions';
         const response = await fetch(requestUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
-            body: JSON.stringify({
-                model: appData.appSettings.apiModel,
-                messages: [{ role: 'user', content: monologuePrompt }],
-                temperature: 0.9
-            })
+            body: JSON.stringify({ model: appData.appSettings.apiModel, messages: [{ role: 'user', content: monologuePrompt }], temperature: 0.9 })
         });
 
         if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
         const data = await response.json();
-        let monologue = data.choices[0].message.content.trim().replace(/^"|"$/g, ''); // 顺便去掉AI可能加上的引号
-
-        // ★★★【终极修复 3：更宽容的“裁判”，不再误伤AI】★★★
-        // 解释：我们删除了那个过于严格的`includes('no thoughts')`检查，只处理真正的空回复或道歉。
-        if (!monologue || monologue.toLowerCase().includes('sorry')) {
-            monologue = '（此刻没什么特别的想法。）';
-        }
-
-        // 步骤1：更新屏幕上已经显示的气泡内容
-        const thoughtTextContainer = document.querySelector(`[data-message-id="${thoughtId}"] .thought-text`);
-        if (thoughtTextContainer) {
-            thoughtTextContainer.textContent = monologue;
-        }
-
-        // --- 【【【核心新增：创建永久档案并存档】】】 ---
-        // 步骤2：准备一份标准的“消息档案”
-        const thoughtMessageRecord = {
-            id: thoughtId,       // 使用我们之前创建的唯一ID
-            role: 'assistant',   // 它的角色是AI
-            content: monologue,  // 内容是最终生成的独白
-            type: 'thought',     // 类型是“思想”
-            timestamp: Date.now()// 记录当前的时间
+        const responseText = data.choices[0].message.content;
+        
+        let thoughtData = {
+            monologue: '（此刻没什么特别的想法。）',
+            emojis: ['🤔']
         };
 
-        // 步骤3：将这份档案正式存入聊天历史记录中
-        contact.chatHistory.push(thoughtMessageRecord);
-        saveAppData(); // 【重要】保存所有更改！
-
-    } catch (error) {
-        console.error("内心独白生成失败:", error);
-        let errorMessage = '（我的思绪...有点混乱..）';
-
-        // 同样，更新屏幕上的显示
-        const thoughtTextContainer = document.querySelector(`[data-message-id="${thoughtId}"] .thought-text`);
-        if (thoughtTextContainer) {
-            thoughtTextContainer.textContent = errorMessage;
+        // ★★★【【【核心改造：解析JSON数据包】】】★★★
+        try {
+            const jsonMatch = responseText.match(/{[\s\S]*}/);
+            if (jsonMatch && jsonMatch[0]) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.monologue && parsed.emojis) {
+                    thoughtData = parsed;
+                }
+            }
+        } catch (e) {
+            console.error("解析心声JSON失败，使用默认值", e);
         }
         
-        // 【重要】即使失败了，也要把失败的记录存下来，保持一致性
-        const errorMessageRecord = {
+        // ★★★【【【核心改造：更新UI和数据】】】★★★
+        // 1. 找到刚才创建的占位气泡
+        const thoughtRow = document.querySelector(`[data-message-id="${thoughtId}"]`);
+        if (thoughtRow) {
+            // 2. 更新大气泡的文字
+            const thoughtTextContainer = thoughtRow.querySelector('.thought-text');
+            if(thoughtTextContainer) thoughtTextContainer.textContent = thoughtData.monologue;
+            // 3. 填充小气泡的Emoji
+            const emojiContainer = thoughtRow.querySelector('.thought-bubble-emoji');
+            if(emojiContainer) emojiContainer.textContent = thoughtData.emojis.join('');
+            // 4. 给包装盒加上“开灯”指令，触发动画
+            const wrapper = thoughtRow.querySelector('.thought-bubble-wrapper');
+            if(wrapper && thoughtData.emojis.length > 0) wrapper.classList.add('has-emoji');
+        }
+
+        // 5. 【重要】将完整的“数据包”存入聊天记录
+        const thoughtMessageRecord = {
             id: thoughtId,
             role: 'assistant',
-            content: errorMessage,
+            content: thoughtData, // <-- 现在我们存的是整个对象
             type: 'thought',
             timestamp: Date.now()
         };
+        contact.chatHistory.push(thoughtMessageRecord);
+        saveAppData();
+
+    } catch (error) {
+        // ... 错误处理部分保持不变 ...
+        console.error("内心独白生成失败:", error);
+        let errorMessage = { monologue: '（我的思绪...有点混乱..）', emojis: ['😵'] };
+        const thoughtRow = document.querySelector(`[data-message-id="${thoughtId}"]`);
+        if (thoughtRow) {
+            const thoughtTextContainer = thoughtRow.querySelector('.thought-text');
+            if(thoughtTextContainer) thoughtTextContainer.textContent = errorMessage.monologue;
+            const emojiContainer = thoughtRow.querySelector('.thought-bubble-emoji');
+            if(emojiContainer) emojiContainer.textContent = errorMessage.emojis.join('');
+            const wrapper = thoughtRow.querySelector('.thought-bubble-wrapper');
+            if(wrapper) wrapper.classList.add('has-emoji');
+        }
+        const errorMessageRecord = { id: thoughtId, role: 'assistant', content: errorMessage, type: 'thought', timestamp: Date.now() };
         contact.chatHistory.push(errorMessageRecord);
         saveAppData();
     }
