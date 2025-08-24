@@ -2700,32 +2700,31 @@ input:checked + .slider:before {
 /* 1. 思想气泡消息行的特殊布局 */
 .thought-bubble-row {
     justify-content: flex-start; /* 确保它出现在左边 */
-    padding-left: 60px; /* 为左边的头像留出空间 */
+    /* 【【【终极修复 V2.0】】】恢复合理的左右内边距，确保对称且不贴边 */
+    padding-left: 40px; 
+    padding-right: 40px;
     position: relative;
     margin: 10px 0;
+    box-sizing: border-box; /* 确保内边距不会撑大布局 */
+    width: 100%;
 }
 
 /* 2. 思想气泡本身 */
 .thought-bubble-message {
     background: #f0f4f8; /* 一个淡淡的、特殊的背景色 */
     color: #555;
-    /* --- 控制大小 --- */
-    /* 上下15px, 左右22px的内边距，让气泡更“胖”一点 */
     padding: 15px 22px; 
-    /* --- 控制最大宽度 --- */
-    /* 允许气泡占据更大的宽度 */
-    max-width: calc(100% - 60px); 
-
-    /* --- 控制形状 (圆角) --- */
-    /* 值越大，角越圆。可以试试 8px (更方正) 或 24px (更圆润) */
-    border-radius: 24px; 
     
-    /* --- 控制字体大小 --- */
-    font-size: 14px; /* 可以改成 13px (更小) 或 16px (更大) */
+    /* 【【【核心修复2】】】彻底删除最大宽度的限制！让它自由生长！ */
+    /* max-width: calc(100% - 60px);  <-- 这行代码被我们删除了 */
 
+    border-radius: 24px; 
+    font-size: 14px;
     position: relative;
     border: 1px solid #e0e4e8;
     font-style: italic; /* 用斜体来区分心声和对话 */
+    width: 100%; /* 【【【核心新增】】】让气泡主动撑满它的包装盒 */
+    box-sizing: border-box; /* 确保padding不会让它溢出包装盒 */
 }
 
 .thought-bubble-message::before {
@@ -3167,4 +3166,60 @@ input:checked + .slider:before {
 /* 步骤3: 确保“头部”和“尾部”高度固定，不被挤压 */
 .modal-header, .modal-footer-split {
     flex-shrink: 0; /* 禁止它们收缩 */
+}
+/* --- 【全新】心声Emoji气泡专属样式 --- */
+
+/* 1. “包装盒”样式：负责占位和提供定位基准 */
+.thought-bubble-wrapper {
+    position: relative;
+    padding-top: 30px;
+    max-width: 100%; 
+    /* 【【【终极修复 V2.0】】】删除最小宽度限制，让短气泡可以自由收缩！ */
+    /* min-width: 160px; <-- 这行错误的限制被我们删除了 */
+    display: inline-block; 
+    vertical-align: top;
+}
+/* 2. Emoji小气泡核心样式 */
+.thought-bubble-emoji {
+    position: absolute; /* 开启“自由飞行”模式 */
+    top: -8px; /* 修正后的最佳高度 */
+    right: -20px; /* 【【【终极微调】】】使用负值，让气泡向右“出界”15像素 */
+    
+    /* 模仿大号心声气泡的外观，但所有尺寸都小一号 */
+    background: #f0f4f8;
+    border: 1px solid #e0e4e8;
+    border-radius: 12px;
+    padding: 6px 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    
+    /* 让里面的Emoji更好看 */
+    display: flex;
+    gap: 3px;
+    font-size: 14px; /* 控制Emoji的大小 */
+    z-index: 5; /* 确保它显示在最前面 */
+    
+    /* 默认状态：完全透明，并且稍微往下、往小缩一点，为动画做准备 */
+    opacity: 0;
+    transform: translateY(10px) scale(0.8);
+    transition: all 0.4s ease; /* 让所有变化都带上0.4秒的平滑动画 */
+}
+
+/* 3. 为Emoji小气泡也加上“思想的小尾巴” */
+.thought-bubble-emoji::before {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: -22px; /* 修正后的最佳位置 */
+    width: 20px;
+    height: 20px;
+    /* 我们复用原来的SVG背景图，但用background-size把它缩小 */
+    background-image: url("data:image/svg+xml,%3Csvg width='30' height='30' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='60' cy='50' rx='25' ry='18' fill='%23f0f4f8' stroke='%23e0e4e8' stroke-width='3'/%3E%3Cellipse cx='18' cy='80' rx='18' ry='13' fill='%23f0f4f8' stroke='%23e0e4e8' stroke-width='3'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+/* 4. “开灯”指令：当包装盒有 .has-emoji 这个类时，让小气泡优雅地浮现 */
+.thought-bubble-wrapper.has-emoji .thought-bubble-emoji {
+    opacity: 1;
+    transform: translateY(0) scale(1); /* 恢复到正常状态 */
 }
