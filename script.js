@@ -1494,16 +1494,25 @@ async function displayMessage(text, role, options = {}) {
             });
         }
         const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
-        const memoryString = contact.memory || '无'; // 【核心修正】在这里补上对 memoryString 的定义
+        const memoryString = contact.memory || '无';
         const startIndex = contact.contextStartIndex || 0;
         const relevantHistory = contact.chatHistory.slice(startIndex);
+        
+        // ★★★【【【终极修复 V2.0：优先使用你的设置！】】】★★★
+        // 1. 读取你在设置中定义的上下文条数，如果没设置，则默认50条
+        const userContextLimit = appData.appSettings.contextLimit || 50;
+        
+        // 2. 使用你的设置来截取最近的聊天记录
+        const recentHistory = relevantHistory.slice(-userContextLimit);
+        
         const MAX_CONTEXT_TOKENS = 3000;
         let currentTokens = 0;
         const historyForApi = [];
     
-        for (let i = relevantHistory.length - 1; i >= 0; i--) {
-            const msg = relevantHistory[i];
-            const messageTokens = (msg.content || '').length * 2;
+        // 3. 现在，我们处理的是你指定数量的记录
+        for (let i = recentHistory.length - 1; i >= 0; i--) {
+            const msg = recentHistory[i];
+            const messageTokens = (typeof msg.content === 'string' ? msg.content.length : 50) * 2; // 对非文本内容给一个估算值
             if (currentTokens + messageTokens > MAX_CONTEXT_TOKENS) { break; }
             historyForApi.unshift(msg);
             currentTokens += messageTokens;
@@ -2034,16 +2043,26 @@ async function insertAndGenerateThoughtBubble() {
     await displayMessage('（思考中...）', 'assistant', { isNew: false, type: 'thought', id: thoughtId });
     scrollToBottom();
 
-    // --- 准备上下文的部分，和之前完全一样 ---
+    // --- 准备上下文的部分 (V3.0 - 优先使用用户设置) ---
     const startIndex = contact.contextStartIndex || 0;
     const fullHistory = [...contact.chatHistory, ...stagedUserMessages];
     const relevantHistory = fullHistory.slice(startIndex);
+    
+    // ★★★【【【终极修复 V2.0：在这里也优先使用你的设置！】】】★★★
+    // 1. 同样，读取你在设置中定义的上下文条数
+    const userContextLimit = appData.appSettings.contextLimit || 50;
+    
+    // 2. 使用你的设置来截取最近的聊天记录
+    const recentHistory = relevantHistory.slice(-userContextLimit);
+    
     const historyForApi = [];
     const MAX_CONTEXT_TOKENS = 3000;
     let currentTokens = 0;
-    for (let i = relevantHistory.length - 1; i >= 0; i--) {
-        const msg = relevantHistory[i];
-        const messageTokens = (msg.content || '').length * 2;
+
+    // 3. 现在，生成心声时参考的也是你指定数量的记录
+    for (let i = recentHistory.length - 1; i >= 0; i--) {
+        const msg = recentHistory[i];
+        const messageTokens = (typeof msg.content === 'string' ? msg.content.length : 50) * 2;
         if (currentTokens + messageTokens > MAX_CONTEXT_TOKENS) break;
         historyForApi.unshift(msg);
         currentTokens += messageTokens;
