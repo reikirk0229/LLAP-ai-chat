@@ -1505,7 +1505,66 @@ async function displayMessage(text, role, options = {}) {
         aiSuggestionPanel.classList.add('hidden');
         
         await displayMessage('对方正在输入...', 'assistant', { isLoading: true });
-    
+        
+        // ▼▼▼ 【【【终极改造 V7.0：多模态日记助理】】】 ▼▼▼
+        let diaryParts = []; // 准备一个空的“图文包裹”，它是一个数组
+        const lastUserMessage = contact.chatHistory[contact.chatHistory.length - 1];
+        
+        const diaryKeywords = ['日记', '手账', '我写了', '记录', '心情'];
+
+        if (lastUserMessage && lastUserMessage.role === 'user' && diaryKeywords.some(keyword => lastUserMessage.content.includes(keyword))) {
+            
+            if (appData.userDiary && appData.userDiary.length > 0) {
+                const latestDiary = appData.userDiary[appData.userDiary.length - 1];
+                
+                if (latestDiary.visibility === 'all' || latestDiary.visibility == activeChatContactId) {
+                    
+                    // 【核心】全新的“图文打包”翻译机
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = latestDiary.htmlContent;
+
+                    // 1. 先准备好给AI的引导指令
+                    diaryParts.push({
+                        type: 'text',
+                        text: `
+# 【【【重要参考：用户最新图文日记】】】
+用户刚刚提到了TA的日记，这是TA最近写的一篇，其中可能包含图片。你的首要任务是，像一个真正关心TA的朋友一样，结合日记的【文字内容】和【图片细节】进行评论或提问，然后再继续你们之前的话题。
+---
+[日期: ${new Date(latestDiary.timestamp).toLocaleDateString('zh-CN')}]
+[内容如下:]
+`
+                    });
+
+                    // 2. 遍历日记的所有内容（文字和图片），逐个打包
+                    for (const node of tempDiv.childNodes) {
+                        if (node.nodeType === 3) { // 这是一个纯文本节点
+                            const text = (node.textContent || "").trim();
+                            if (text) {
+                                diaryParts.push({ type: 'text', text: text });
+                            }
+                        } else if (node.nodeType === 1) { // 这是一个元素节点
+                            // 如果是包裹图片的P标签，就找到里面的图片
+                            const img = node.tagName === 'IMG' ? node : node.querySelector('img');
+                            if (img && img.src) {
+                                // 图片需要以Base64 Data URL的格式发送
+                                if (img.src.startsWith('data:image')) {
+                                    diaryParts.push({
+                                        type: 'image_url',
+                                        image_url: { url: img.src }
+                                    });
+                                }
+                            } else { // 如果不是图片，就当成普通文本处理
+                                 const text = (node.textContent || "").trim();
+                                 if (text) {
+                                    diaryParts.push({ type: 'text', text: text });
+                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // ▲▲▲▲▲ 多模态助理模块结束 ▲▲▲▲▲
         let availableStickersPrompt = "你没有任何可用的表情包。";
         const availableStickers = [];
         contact.stickerGroups.forEach(groupName => {
@@ -1736,7 +1795,36 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
 请根据上面的所有设定和下面的对话历史，对用户的最新消息做出回应，并只输出符合上述格式的JSON对象。`;
 
         
-        const finalMessagesForApi = [ { role: "system", content: finalPrompt }, ...messagesForApi ];
+        // 【【【核心终极改造 V7.0：在这里为最后一条消息注入“多模态”能力】】】
+        let finalMessagesForApi;
+
+        // 1. 先检查我们的“日记包裹”里有没有东西
+        if (diaryParts.length > 0) {
+            // 如果有，就进行“升级改造”
+            const lastUserMessageFromApiHistory = messagesForApi.pop(); // 先把最后一条用户消息拿出来
+            
+            // 创建一个新的、内容是数组的“豪华版”用户消息
+            const multiModalUserMessage = {
+                role: 'user',
+                content: [
+                    // a. 把用户在聊天框里说的话放进去
+                    { type: 'text', text: lastUserMessageFromApiHistory.content },
+                    // b. 把整个“日记包裹”也放进去
+                    ...diaryParts
+                ]
+            };
+            
+            // 把改造后的消息放回队伍，完成最终的API请求队列
+            finalMessagesForApi = [
+                { role: "system", content: finalPrompt },
+                ...messagesForApi, // 这是去掉了最后一条的旧历史
+                multiModalUserMessage // 这是升级后的新消息
+            ];
+
+        } else {
+            // 如果“日记包裹”是空的，说明一切照旧，不需要改造
+            finalMessagesForApi = [ { role: "system", content: finalPrompt }, ...messagesForApi ];
+        }
         
         try {
             let requestUrl = appData.appSettings.apiUrl;
@@ -4490,7 +4578,11 @@ ${chatLog}
             }
         }
         
-        diaryToolbar.addEventListener('click', (e) => {
+        // 【核心改造1】我们监听 'mousedown' 事件，而不是 'click'
+        diaryToolbar.addEventListener('mousedown', (e) => {
+            // 【核心改造2】念出我们的“魔法咒语”，阻止浏览器默认的失焦行为
+            e.preventDefault(); 
+            
             const btn = e.target.closest('.tool-btn');
             if (!btn) return;
 
@@ -4499,24 +4591,17 @@ ${chatLog}
             
             // 【核心改造】检查是处理图片还是文本
             if (selectedImageForResize && (format === 'justifyLeft' || format === 'justifyCenter' || format === 'justifyRight')) {
-                // --- 专为图片设计的对齐逻辑 ---
                 let wrapper = selectedImageForResize.parentElement;
-                
-                // 1. 确保图片有一个“盘子”（P标签）
                 if (wrapper.tagName !== 'P') {
                     let newWrapper = document.createElement('p');
                     selectedImageForResize.parentNode.insertBefore(newWrapper, selectedImageForResize);
                     newWrapper.appendChild(selectedImageForResize);
                     wrapper = newWrapper;
                 }
-                
-                // 2. 给“盘子”打上专属类名和对齐属性
                 wrapper.className = 'diary-image-wrap';
                 const alignValue = format.replace('justify', '').toLowerCase();
                 wrapper.setAttribute('align', alignValue);
-
             } else if (command === 'changeFontSize') {
-                // ... (字号逻辑保持不变)
                 const direction = btn.dataset.value;
                 const selection = window.getSelection();
                 if (!selection.rangeCount) return;
@@ -4537,8 +4622,7 @@ ${chatLog}
                          fontElements[i].style.fontSize = newSize + "px";
                      }
                 }
-
-            } else if (format) { // 处理其他所有命令
+            } else if (format) {
                  if (format === 'insertImage') {
                     const fileInput = document.createElement('input');
                     fileInput.type = 'file';
@@ -4548,10 +4632,8 @@ ${chatLog}
                         if (file) {
                             const reader = new FileReader();
                             reader.onload = (e) => {
-                                // 【核心】插入图片后，立即给它包上“盘子”
                                 const uniqueId = `img-${Date.now()}`;
                                 document.execCommand('insertHTML', false, `<p class="diary-image-wrap" align="left"><img id="${uniqueId}" src="${e.target.result}"></p>`);
-                                // 选中刚刚插入的图片，方便立即缩放
                                 const newImg = document.getElementById(uniqueId);
                                 if (newImg) newImg.click();
                             };
@@ -4560,31 +4642,23 @@ ${chatLog}
                     };
                     fileInput.click();
                 } else {
-                    // 对于文本的加粗、对齐等，继续使用老方法
                     document.execCommand(format, false, null);
                 }
             }
-            
-            diaryEditorContent.focus();
+            // 【核心改造3】我们不再需要强行让编辑器获取焦点了
+            // diaryEditorContent.focus(); // <-- 这行代码被删除了
         });
 
-        // 为高亮颜色选择器绑定事件
+        // 【核心改造4】为颜色选择器也应用同样的修复逻辑
         highlightColorPicker.addEventListener('input', (e) => {
-            const color = e.target.value;
-            // 【核心】使用 'backColor' 命令来实现高亮
-            document.execCommand('backColor', false, color);
-            // 更新图标的填充色以提供反馈
-            e.target.nextElementSibling.style.fill = color; 
-            diaryEditorContent.focus();
+            document.execCommand('backColor', false, e.target.value);
+            e.target.nextElementSibling.style.fill = e.target.value; 
+            // diaryEditorContent.focus(); // <-- 删除
         });
-
-        // 为文字颜色选择器绑定事件 (逻辑与之前类似)
         textColorPicker.addEventListener('input', (e) => {
-            const color = e.target.value;
-            document.execCommand('foreColor', false, color);
-            // 更新图标的描边色以提供反馈
-            e.target.nextElementSibling.style.stroke = color;
-            diaryEditorContent.focus();
+            document.execCommand('foreColor', false, e.target.value);
+            e.target.nextElementSibling.style.stroke = e.target.value;
+            // diaryEditorContent.focus(); // <-- 删除
         });
 
         // 【【【核心修复：在这里为日记查看器的按钮接上“电线”】】】
@@ -4892,6 +4966,10 @@ ${chatLog}
     async function openDiaryEditor(diaryId = null) {
         currentEditingDiaryId = diaryId;
         
+        // 【核心修复1】在开始任何操作前，先把“桌面”清理干净！
+        // 这能防止上一次取消操作时遗留的背景图影响本次新日记。
+        delete diaryEditorContent.newBackgroundImageFile;
+
         diaryVisibilitySelect.innerHTML = '<option value="all">所有AI可见</option>';
         appData.aiContacts.forEach(contact => {
             const option = document.createElement('option');
@@ -4917,33 +4995,33 @@ ${chatLog}
             const bgBlob = await db.getImage(currentBgKey);
             diaryEditorContent.style.backgroundImage = bgBlob ? `url(${URL.createObjectURL(bgBlob)})` : 'none';
         } else {
+            // 【核心修复2】现在这个'none'指令是安全的，因为它不会覆盖掉我们即将设置的新背景
             diaryEditorContent.style.backgroundImage = 'none';
         }
 
         diaryEditorModal.classList.remove('hidden');
     }
-
     /**
      * 【全新 V3.0】关闭日记编辑器
      */
     function closeDiaryEditor() {
         diaryEditorModal.classList.add('hidden');
-        currentEditingDiaryId = null;
+        currentEditingDiaryId = null; // 清空临时便签
+        
+        // 【核心修复】在关闭编辑器时，也把“桌面”清理干净！
+        delete diaryEditorContent.newBackgroundImageFile;
     }
-
-    /**
-     * 【全新 V3.0】保存一篇日记 (带独立背景逻辑)
-     */
-    function saveDiaryEntry() {
+    async function saveDiaryEntry() { // <-- 把它变成 async 函数
         const htmlContent = diaryEditorContent.innerHTML;
-        if (htmlContent.trim() === '') {
-            showToast('日记内容不能为空哦！', 'error');
+        if (htmlContent.trim() === '' && !diaryEditorContent.newBackgroundImageFile) {
+            showToast('日记内容和背景不能都为空哦！', 'error');
             return;
         }
 
         const visibility = diaryVisibilitySelect.value;
 
         if (currentEditingDiaryId) {
+            // 更新现有日记 (逻辑不变)
             const entry = appData.userDiary.find(d => d.id === currentEditingDiaryId);
             if (entry) {
                 entry.htmlContent = htmlContent;
@@ -4951,6 +5029,7 @@ ${chatLog}
                 entry.timestamp = Date.now();
             }
         } else {
+            // 创建新日记 (逻辑大升级)
             const newEntry = {
                 id: `diary-${Date.now()}`,
                 author: 'user',
@@ -4960,8 +5039,24 @@ ${chatLog}
                 comments: [],
                 backgroundKey: null 
             };
+            
+            // 【核心改造】检查之前有没有暂存背景图
+            if (diaryEditorContent.newBackgroundImageFile) {
+                const newBgKey = `diary-bg-${newEntry.id}`;
+                try {
+                    await db.saveImage(newBgKey, diaryEditorContent.newBackgroundImageFile);
+                    newEntry.backgroundKey = newBgKey; // 把背景房卡存进去
+                } catch (error) {
+                    console.error("保存暂存背景失败", error);
+                    showToast('背景保存失败，请稍后再试', 'error');
+                }
+            }
+            
             appData.userDiary.push(newEntry);
         }
+
+        // 清理暂存的背景文件
+        delete diaryEditorContent.newBackgroundImageFile;
 
         saveAppData();
         renderUserDiary();
@@ -5004,20 +5099,81 @@ ${chatLog}
 
         // 【【【核心修复：在这里补上被遗忘的背景按钮“电线”】】】
         
-        // 设置背景按钮
-        document.getElementById('diary-set-bg-btn').addEventListener('click', () => {
+        
+        // 移除背景按钮 (V2.0 智能版 - 已修复并升级)
+        document.getElementById('diary-remove-bg-btn').addEventListener('click', async () => {
+            // 【核心升级】第一步：先处理“新建日记”时移除暂存背景的情况
             if (!currentEditingDiaryId) {
-                showToast('请先保存日记后，再为它设置背景', 'error');
+                delete diaryEditorContent.newBackgroundImageFile;
+                diaryEditorContent.style.backgroundImage = 'none';
+                showToast('暂存背景已移除', 'info');
+                return; // 操作完成，直接退出
+            }
+
+            // 第二步：处理“编辑旧日记”时移除已存背景的情况 (这部分是恢复你丢失的功能)
+            const entry = appData.userDiary.find(d => d.id === currentEditingDiaryId);
+            if (!entry || !entry.backgroundKey) {
+                showToast('这篇日记没有设置背景', 'info');
                 return;
             }
+            try {
+                await db.deleteImage(entry.backgroundKey);
+                entry.backgroundKey = null;
+                saveAppData();
+                diaryEditorContent.style.backgroundImage = 'none';
+                showToast('背景已移除', 'success');
+            } catch(error) {
+                showToast('移除背景失败', 'error');
+            }
+        });
+        // 【【【核心修复：在这里恢复被意外删除的图片缩放和编辑器交互逻辑】】】
+        diaryEditorContent.addEventListener('click', (e) => {
+            // 点击图片时，选中它并显示缩放工具
+            if (e.target.tagName === 'IMG') {
+                diaryEditorContent.querySelectorAll('img.resizable-image').forEach(img => img.classList.remove('resizable-image'));
+                e.target.classList.add('resizable-image');
+                selectedImageForResize = e.target;
+                imageSizeSlider.value = selectedImageForResize.style.maxWidth.replace('%', '') || 100;
+                imageResizeControls.classList.remove('hidden');
+            } else {
+                // 如果点击的是其他地方，就取消选中并隐藏工具
+                if (selectedImageForResize) {
+                    selectedImageForResize.classList.remove('resizable-image');
+                    selectedImageForResize = null;
+                }
+                imageResizeControls.classList.add('hidden');
+            }
+        });
+
+        // 监听滑块的拖动
+        imageSizeSlider.addEventListener('input', () => {
+            if (selectedImageForResize) {
+                selectedImageForResize.style.maxWidth = `${imageSizeSlider.value}%`;
+            }
+        });
+        // 设置背景按钮 (V2.0 智能版)
+        document.getElementById('diary-set-bg-btn').addEventListener('click', () => {
             const fileInput = document.createElement('input');
             fileInput.type = 'file';
             fileInput.accept = 'image/*';
             fileInput.onchange = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
+
+                // 【核心改造】如果当前是“新建日记”模式，我们先在本地预览
+                if (!currentEditingDiaryId) {
+                    // 我们把图片文件暂存起来，等待保存时一起处理
+                    diaryEditorContent.newBackgroundImageFile = file; 
+                    // 立即应用新背景进行预览
+                    diaryEditorContent.style.backgroundImage = `url(${URL.createObjectURL(file)})`;
+                    showToast('背景已暂存，保存日记后生效', 'info');
+                    return; // 结束本次操作
+                }
+                
+                // --- 如果是“编辑旧日记”模式，逻辑保持不变 ---
                 const entry = appData.userDiary.find(d => d.id === currentEditingDiaryId);
                 if (!entry) return;
+
                 const newBgKey = `diary-bg-${entry.id}`;
                 try {
                     if (entry.backgroundKey) {
@@ -5033,25 +5189,6 @@ ${chatLog}
                 }
             };
             fileInput.click();
-        });
-
-        // 移除背景按钮
-        document.getElementById('diary-remove-bg-btn').addEventListener('click', async () => {
-            if (!currentEditingDiaryId) return;
-            const entry = appData.userDiary.find(d => d.id === currentEditingDiaryId);
-            if (!entry || !entry.backgroundKey) {
-                showToast('这篇日记没有设置背景', 'info');
-                return;
-            }
-            try {
-                await db.deleteImage(entry.backgroundKey);
-                entry.backgroundKey = null;
-                saveAppData();
-                diaryEditorContent.style.backgroundImage = 'none';
-                showToast('背景已移除', 'success');
-            } catch(error) {
-                showToast('移除背景失败', 'error');
-            }
         });
     }
 
