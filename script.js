@@ -91,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 1. 全局数据存储 ---
     let appData = {};
     let activeChatContactId = null;
+    let currentEditingDiaryId = null;
     let lastReceivedSuggestions = [];
     let stagedUserMessages = [];
     let imageUploadMode = 'upload';
@@ -242,6 +243,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const ledgerContainer = document.getElementById('ledger-container');
     const addTransactionFab = document.getElementById('add-transaction-fab');
     const transactionEditorModal = document.getElementById('transaction-editor-modal');
+    const diaryView = document.getElementById('diary-view');
+    const myDiaryContent = document.getElementById('my-diary-content');
+    const aiDiaryContent = document.getElementById('ai-diary-content');
+    const addDiaryEntryFab = document.getElementById('add-diary-entry-fab');
+    const diaryEditorModal = document.getElementById('diary-editor-modal');
+    const diaryEditorContent = document.getElementById('diary-editor-content');
+    const diaryVisibilitySelect = document.getElementById('diary-visibility-select');
+    const diaryViewerModal = document.getElementById('diary-viewer-modal');
+    const diaryViewerContent = document.getElementById('diary-viewer-content');
+    const imageResizeControls = document.getElementById('image-resize-controls');
+    const imageSizeSlider = document.getElementById('image-size-slider');
+    let selectedImageForResize = null;
+    const closeFunctionsPanel = () => {
+    const extendedFunctionsPanel = document.getElementById('extended-functions-panel');
+    const moreFunctionsButton = document.getElementById('more-functions-button');
+    const closeExtendedFunctionsBtn = document.getElementById('close-extended-functions-btn');
+
+    if (extendedFunctionsPanel) extendedFunctionsPanel.classList.remove('is-open');
+    if (moreFunctionsButton) moreFunctionsButton.classList.remove('hidden');
+    if (closeExtendedFunctionsBtn) closeExtendedFunctionsBtn.classList.add('hidden');
+};
 
 function scrollToBottom() {
     // 这个函数只有一个使命：把聊天容器平滑地滚动到底部。
@@ -873,6 +895,13 @@ async function formatHistoryForApi(history) {
                 }
             });
         }
+        
+        // ▼▼▼ 【【【全新：为用户建立“日记本”】】】 ▼▼▼
+        if (!appData.userDiary) {
+            // 用户的日记本是一个条目的数组
+            appData.userDiary = [];
+        }
+        // ▲▲▲▲▲
 
         saveAppData();
     }
@@ -3100,7 +3129,7 @@ function closeTextEditorModal() {
         document.getElementById('fn-video-call').addEventListener('click', () => { alert('视频通话功能开发中...'); closeFunctionsPanel(); });
         document.getElementById('fn-listen-together').addEventListener('click', () => { alert('一起听歌功能开发中...'); closeFunctionsPanel(); });
         document.getElementById('fn-gift').addEventListener('click', () => { alert('礼物功能开发中...'); closeFunctionsPanel(); });
-        document.getElementById('fn-diary').addEventListener('click', () => { alert('日记本功能开发中...'); closeFunctionsPanel(); });
+        // 我们已经把日记按钮的旧指令删除了，新的指令在文件末尾
         aiHelperButton.addEventListener('click', () => {
             if (aiSuggestionPanel.classList.contains('hidden')) { displaySuggestions(); } 
             else { hideSuggestionUI(); }
@@ -4388,6 +4417,187 @@ ${chatLog}
         document.getElementById('cancel-tx-editor-btn').addEventListener('click', closeTransactionEditor);
         document.getElementById('save-tx-editor-btn').addEventListener('click', saveTransaction);
 
+        // 【【【核心终极修复：在这里调用日记系统的总开关，让所有日记按钮生效！】】】
+        bindDiaryEventListeners();
+    
+        
+        // ▼▼▼ 【【【全新：日记系统事件绑定】】】 ▼▼▼
+        // 1. "更多"功能抽屉里的日记按钮
+        document.getElementById('fn-diary').addEventListener('click', () => {
+            closeFunctionsPanel(); // 先关闭功能面板
+            switchToView('diary-view');
+            renderDiaryView(); // 每次进入都重新渲染
+        });
+
+        // 2. 从日记本返回聊天列表
+        document.getElementById('back-to-chat-from-diary').addEventListener('click', () => switchToView('chat-window-view'));
+
+        // 3. 日记本内部的Tab切换
+        document.querySelector('.diary-tabs').addEventListener('click', (e) => {
+            if (e.target.classList.contains('diary-tab-btn')) {
+                document.querySelectorAll('.diary-tab-btn, .diary-tab-content').forEach(el => el.classList.remove('active'));
+                e.target.classList.add('active');
+                document.getElementById(e.target.dataset.tab + '-content').classList.add('active');
+            }
+        });
+
+        // 4. 点击"+"号，打开日记编辑器
+        addDiaryEntryFab.addEventListener('click', () => openDiaryEditor());
+
+        // 5. 日记编辑器的按钮
+        document.getElementById('cancel-diary-btn').addEventListener('click', closeDiaryEditor);
+        document.getElementById('save-diary-btn').addEventListener('click', saveDiaryEntry);
+
+        // 6. 编辑器工具栏的按钮 V3.0 (专业版)
+        const diaryToolbar = document.querySelector('.diary-toolbar');
+        const highlightColorPicker = document.getElementById('diary-highlight-color-picker');
+        const textColorPicker = document.getElementById('diary-text-color-picker');
+        
+        /**
+         * 【全新辅助函数】一个更强大的文本样式修改器
+         * @param {string} styleProperty - CSS属性名, e.g., 'backgroundColor'
+         * @param {string} styleValue - CSS属性值, e.g., '#FF0000'
+         */
+        function applyStyleToSelection(styleProperty, styleValue) {
+            const selection = window.getSelection();
+            if (!selection.rangeCount) return;
+
+            const range = selection.getRangeAt(0);
+            const selectedText = range.toString();
+
+            // 如果没有选择任何文本，则不做任何事
+            if (selectedText.length === 0) return;
+            
+            // 检查选区是否已经有这个样式了
+            let parent = range.commonAncestorContainer;
+            if (parent.nodeType !== 1) parent = parent.parentNode; // 确保是元素节点
+
+            // 【核心：取消高亮/样式的逻辑】
+            if (parent.style[styleProperty] === styleValue) {
+                 document.execCommand('removeFormat', false, null); // 尝试用通用方法移除
+                 parent.style[styleProperty] = ''; // 强制移除
+                 // 如果span上没有其他样式了，就把span也脱掉
+                 if (!parent.getAttribute('style')) {
+                    parent.outerHTML = parent.innerHTML;
+                 }
+            } else {
+                // 创建一个新的<span>标签来包裹选中的文本
+                const span = document.createElement('span');
+                span.style[styleProperty] = styleValue;
+                
+                // 用span包裹住选中的内容
+                range.surroundContents(span);
+            }
+        }
+        
+        diaryToolbar.addEventListener('click', (e) => {
+            const btn = e.target.closest('.tool-btn');
+            if (!btn) return;
+
+            const format = btn.dataset.format;
+            const command = btn.dataset.command;
+            
+            // 【核心改造】检查是处理图片还是文本
+            if (selectedImageForResize && (format === 'justifyLeft' || format === 'justifyCenter' || format === 'justifyRight')) {
+                // --- 专为图片设计的对齐逻辑 ---
+                let wrapper = selectedImageForResize.parentElement;
+                
+                // 1. 确保图片有一个“盘子”（P标签）
+                if (wrapper.tagName !== 'P') {
+                    let newWrapper = document.createElement('p');
+                    selectedImageForResize.parentNode.insertBefore(newWrapper, selectedImageForResize);
+                    newWrapper.appendChild(selectedImageForResize);
+                    wrapper = newWrapper;
+                }
+                
+                // 2. 给“盘子”打上专属类名和对齐属性
+                wrapper.className = 'diary-image-wrap';
+                const alignValue = format.replace('justify', '').toLowerCase();
+                wrapper.setAttribute('align', alignValue);
+
+            } else if (command === 'changeFontSize') {
+                // ... (字号逻辑保持不变)
+                const direction = btn.dataset.value;
+                const selection = window.getSelection();
+                if (!selection.rangeCount) return;
+                let parent = selection.getRangeAt(0).commonAncestorContainer;
+                if (parent.nodeType !== 1) parent = parent.parentNode;
+                const currentSize = parseFloat(window.getComputedStyle(parent).fontSize) || 16;
+                let newSize;
+                if (direction === 'increase') {
+                    newSize = Math.min(currentSize + 2, 72);
+                } else {
+                    newSize = Math.max(currentSize - 2, 10);
+                }
+                document.execCommand("fontSize", false, "1");
+                const fontElements = diaryEditorContent.getElementsByTagName("font");
+                for (let i = 0, len = fontElements.length; i < len; ++i) {
+                     if (fontElements[i].size == "1") {
+                         fontElements[i].removeAttribute("size");
+                         fontElements[i].style.fontSize = newSize + "px";
+                     }
+                }
+
+            } else if (format) { // 处理其他所有命令
+                 if (format === 'insertImage') {
+                    const fileInput = document.createElement('input');
+                    fileInput.type = 'file';
+                    fileInput.accept = 'image/*';
+                    fileInput.onchange = (event) => {
+                        const file = event.target.files[0];
+                        if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                // 【核心】插入图片后，立即给它包上“盘子”
+                                const uniqueId = `img-${Date.now()}`;
+                                document.execCommand('insertHTML', false, `<p class="diary-image-wrap" align="left"><img id="${uniqueId}" src="${e.target.result}"></p>`);
+                                // 选中刚刚插入的图片，方便立即缩放
+                                const newImg = document.getElementById(uniqueId);
+                                if (newImg) newImg.click();
+                            };
+                            reader.readAsDataURL(file);
+                        }
+                    };
+                    fileInput.click();
+                } else {
+                    // 对于文本的加粗、对齐等，继续使用老方法
+                    document.execCommand(format, false, null);
+                }
+            }
+            
+            diaryEditorContent.focus();
+        });
+
+        // 为高亮颜色选择器绑定事件
+        highlightColorPicker.addEventListener('input', (e) => {
+            const color = e.target.value;
+            // 【核心】使用 'backColor' 命令来实现高亮
+            document.execCommand('backColor', false, color);
+            // 更新图标的填充色以提供反馈
+            e.target.nextElementSibling.style.fill = color; 
+            diaryEditorContent.focus();
+        });
+
+        // 为文字颜色选择器绑定事件 (逻辑与之前类似)
+        textColorPicker.addEventListener('input', (e) => {
+            const color = e.target.value;
+            document.execCommand('foreColor', false, color);
+            // 更新图标的描边色以提供反馈
+            e.target.nextElementSibling.style.stroke = color;
+            diaryEditorContent.focus();
+        });
+
+        // 【【【核心修复：在这里为日记查看器的按钮接上“电线”】】】
+        document.getElementById('close-diary-viewer-btn').addEventListener('click', closeDiaryViewer);
+        document.getElementById('edit-diary-fab').addEventListener('click', () => {
+            const diaryId = diaryViewerModal.dataset.currentDiaryId;
+            if (diaryId) {
+                closeDiaryViewer();
+                openDiaryEditor(diaryId);
+            }
+        });
+    
+
         // --- 【全新】用户表情包设置逻辑 ---
     const manageMyStickersEntry = document.getElementById('manage-my-stickers-entry');
     const manageAiStickersEntry = document.getElementById('manage-ai-stickers-entry');
@@ -4584,6 +4794,270 @@ ${chatLog}
             container.appendChild(checkboxWrapper);
         });
     }
+    // ---------------------------------------------------
+    // --- 【【【全新 V3.0 整合版】】】日记系统核心功能模块 ---
+    // ---------------------------------------------------
 
+    /**
+     * 渲染整个日记本视图
+     */
+    function renderDiaryView() {
+        renderUserDiary();
+        // renderAiDiary(); // AI日记的渲染我们下一步再做
+    }
+
+    /**
+     * 【全新 V3.0】渲染用户的日记列表 (带删除按钮和纯文本预览)
+     */
+    function renderUserDiary() {
+        myDiaryContent.innerHTML = '';
+        if (appData.userDiary.length === 0) {
+            myDiaryContent.innerHTML = '<p class="placeholder-text" style="padding: 20px;">你还没有写过日记哦~</p>';
+            return;
+        }
+
+        const sortedDiary = [...appData.userDiary].reverse();
+        sortedDiary.forEach(entry => {
+            const card = document.createElement('div');
+            card.className = 'diary-entry-card';
+            card.dataset.diaryId = entry.id;
+
+            const date = new Date(entry.timestamp);
+            const dateString = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+            
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = entry.htmlContent;
+            const summaryText = (tempDiv.textContent || tempDiv.innerText || "").trim();
+
+            card.innerHTML = `
+                <div class="diary-header">
+                    <span class="diary-author">${appData.globalUserProfile.name}</span>
+                    <span class="diary-meta">${dateString}</span>
+                </div>
+                <div class="diary-content">
+                    <p style="max-height: 90px; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);">
+                        ${summaryText}
+                    </p>
+                </div>
+                <button class="diary-delete-btn" title="删除日记">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 14H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg>
+                </button>
+            `;
+            
+            card.addEventListener('click', (e) => {
+                if (e.target.closest('.diary-delete-btn')) {
+                    return; // 点击删除按钮时，不触发查看
+                }
+                openDiaryViewer(entry.id);
+            });
+            myDiaryContent.appendChild(card);
+        });
+    }
+    
+    /**
+     * 【全新 V3.0】打开日记查看器 (加载独立背景)
+     */
+    async function openDiaryViewer(diaryId) {
+        const entry = appData.userDiary.find(d => d.id === diaryId);
+        if (!entry) return;
+
+        document.getElementById('diary-viewer-author').textContent = `${appData.globalUserProfile.name} 的手账`;
+        diaryViewerContent.innerHTML = entry.htmlContent;
+        diaryViewerModal.dataset.currentDiaryId = diaryId;
+        
+        if (entry.backgroundKey) {
+            try {
+                const bgBlob = await db.getImage(entry.backgroundKey);
+                diaryViewerContent.style.backgroundImage = bgBlob ? `url(${URL.createObjectURL(bgBlob)})` : 'none';
+            } catch (error) {
+                diaryViewerContent.style.backgroundImage = 'none';
+            }
+        } else {
+             diaryViewerContent.style.backgroundImage = 'none';
+        }
+
+        diaryViewerModal.classList.remove('hidden');
+    }
+
+    /**
+     * 【全新 V3.0】关闭日记查看器
+     */
+    function closeDiaryViewer() {
+        diaryViewerModal.classList.add('hidden');
+    }
+
+    /**
+     * 【全新 V3.0】打开日记编辑器 (加载独立背景)
+     */
+    async function openDiaryEditor(diaryId = null) {
+        currentEditingDiaryId = diaryId;
+        
+        diaryVisibilitySelect.innerHTML = '<option value="all">所有AI可见</option>';
+        appData.aiContacts.forEach(contact => {
+            const option = document.createElement('option');
+            option.value = contact.id;
+            option.textContent = `仅 ${contact.remark} 可见`;
+            diaryVisibilitySelect.appendChild(option);
+        });
+
+        let currentBgKey = null;
+        if (diaryId) {
+            const entry = appData.userDiary.find(d => d.id === diaryId);
+            if (entry) {
+                diaryEditorContent.innerHTML = entry.htmlContent;
+                diaryVisibilitySelect.value = entry.visibility;
+                currentBgKey = entry.backgroundKey;
+            }
+        } else {
+            diaryEditorContent.innerHTML = '';
+            diaryVisibilitySelect.value = 'all';
+        }
+        
+        if (currentBgKey) {
+            const bgBlob = await db.getImage(currentBgKey);
+            diaryEditorContent.style.backgroundImage = bgBlob ? `url(${URL.createObjectURL(bgBlob)})` : 'none';
+        } else {
+            diaryEditorContent.style.backgroundImage = 'none';
+        }
+
+        diaryEditorModal.classList.remove('hidden');
+    }
+
+    /**
+     * 【全新 V3.0】关闭日记编辑器
+     */
+    function closeDiaryEditor() {
+        diaryEditorModal.classList.add('hidden');
+        currentEditingDiaryId = null;
+    }
+
+    /**
+     * 【全新 V3.0】保存一篇日记 (带独立背景逻辑)
+     */
+    function saveDiaryEntry() {
+        const htmlContent = diaryEditorContent.innerHTML;
+        if (htmlContent.trim() === '') {
+            showToast('日记内容不能为空哦！', 'error');
+            return;
+        }
+
+        const visibility = diaryVisibilitySelect.value;
+
+        if (currentEditingDiaryId) {
+            const entry = appData.userDiary.find(d => d.id === currentEditingDiaryId);
+            if (entry) {
+                entry.htmlContent = htmlContent;
+                entry.visibility = visibility;
+                entry.timestamp = Date.now();
+            }
+        } else {
+            const newEntry = {
+                id: `diary-${Date.now()}`,
+                author: 'user',
+                htmlContent: htmlContent,
+                visibility: visibility,
+                timestamp: Date.now(),
+                comments: [],
+                backgroundKey: null 
+            };
+            appData.userDiary.push(newEntry);
+        }
+
+        saveAppData();
+        renderUserDiary();
+        closeDiaryEditor();
+        showToast('日记已保存！', 'success');
+    }
+
+        /**
+     * 【全新 V4.0 终极修复版】为所有日记相关按钮绑定事件
+     */
+    function bindDiaryEventListeners() {
+        // 总管家：处理删除按钮的点击
+        myDiaryContent.addEventListener('click', (e) => {
+            const deleteBtn = e.target.closest('.diary-delete-btn');
+            if (deleteBtn) {
+                const card = deleteBtn.closest('.diary-entry-card');
+                const diaryId = card.dataset.diaryId;
+                showCustomConfirm('删除确认', '确定要删除这篇日记吗？\n此操作无法撤销。', () => {
+                    const entryToDelete = appData.userDiary.find(d => d.id === diaryId);
+                    if (entryToDelete && entryToDelete.backgroundKey) {
+                        db.deleteImage(entryToDelete.backgroundKey);
+                    }
+                    appData.userDiary = appData.userDiary.filter(d => d.id !== diaryId);
+                    saveAppData();
+                    renderUserDiary();
+                    showToast('日记已删除', 'success');
+                });
+            }
+        });
+
+        // 查看器按钮
+        document.getElementById('close-diary-viewer-btn').addEventListener('click', closeDiaryViewer);
+        document.getElementById('edit-diary-fab').addEventListener('click', () => {
+            const diaryId = diaryViewerModal.dataset.currentDiaryId;
+            if (diaryId) {
+                closeDiaryViewer();
+                openDiaryEditor(diaryId);
+            }
+        });
+
+        // 【【【核心修复：在这里补上被遗忘的背景按钮“电线”】】】
+        
+        // 设置背景按钮
+        document.getElementById('diary-set-bg-btn').addEventListener('click', () => {
+            if (!currentEditingDiaryId) {
+                showToast('请先保存日记后，再为它设置背景', 'error');
+                return;
+            }
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            fileInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const entry = appData.userDiary.find(d => d.id === currentEditingDiaryId);
+                if (!entry) return;
+                const newBgKey = `diary-bg-${entry.id}`;
+                try {
+                    if (entry.backgroundKey) {
+                        await db.deleteImage(entry.backgroundKey);
+                    }
+                    await db.saveImage(newBgKey, file);
+                    entry.backgroundKey = newBgKey;
+                    saveAppData();
+                    diaryEditorContent.style.backgroundImage = `url(${URL.createObjectURL(file)})`;
+                    showToast('背景设置成功！', 'success');
+                } catch (error) {
+                    showToast('背景保存失败！', 'error');
+                }
+            };
+            fileInput.click();
+        });
+
+        // 移除背景按钮
+        document.getElementById('diary-remove-bg-btn').addEventListener('click', async () => {
+            if (!currentEditingDiaryId) return;
+            const entry = appData.userDiary.find(d => d.id === currentEditingDiaryId);
+            if (!entry || !entry.backgroundKey) {
+                showToast('这篇日记没有设置背景', 'info');
+                return;
+            }
+            try {
+                await db.deleteImage(entry.backgroundKey);
+                entry.backgroundKey = null;
+                saveAppData();
+                diaryEditorContent.style.backgroundImage = 'none';
+                showToast('背景已移除', 'success');
+            } catch(error) {
+                showToast('移除背景失败', 'error');
+            }
+        });
+    }
+
+    // 在主事件绑定函数中调用日记的事件绑定
+    // (请确保 bindEventListeners 函数中有这行代码)
+    // bindDiaryEventListeners();
+    
     initialize();
 });
