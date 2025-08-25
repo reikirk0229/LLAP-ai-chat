@@ -3542,12 +3542,15 @@ input:checked + .slider:before {
     background-position: center;
     background-repeat: no-repeat;
 }
-/* 【核心】让编辑器的背景图设置逻辑更完善 */
-.diary-editor-area {
+/* 【核心终极修复】让编辑器和查看器的内容区真正撑满屏幕 */
+.diary-editor-area,
+.diary-viewer-area {
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    flex-grow: 1; /* 让它填满剩余空间 */
+    flex-grow: 1; /* 【关键】命令内容区“长大”，填满所有垂直方向的剩余空间 */
+    padding: 20px; /* 增加内边距，让文字和图片不会贴着屏幕边缘 */
+    overflow-y: auto; /* 当内容超多时，允许自身滚动 */
 }
 /* --- 【全新 V4.0】图片对齐样式 --- */
 
