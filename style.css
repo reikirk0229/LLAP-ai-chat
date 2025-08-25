@@ -3223,3 +3223,383 @@ input:checked + .slider:before {
     opacity: 1;
     transform: translateY(0) scale(1); /* 恢复到正常状态 */
 }
+/* --- 【全新】日记系统专属样式 --- */
+.diary-tabs {
+    display: flex;
+    flex-shrink: 0;
+    background: var(--glass-bg);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border-bottom: 1px solid var(--glass-border);
+    padding: 5px 20px 0;
+}
+.diary-tab-btn {
+    flex: 1;
+    padding: 12px 10px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    position: relative;
+    transition: all 0.3s ease;
+}
+.diary-tab-btn.active {
+    color: var(--qq-blue);
+}
+.diary-tab-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 15%;
+    width: 70%;
+    height: 3px;
+    background-color: var(--qq-blue);
+    border-radius: 3px 3px 0 0;
+}
+.diary-container {
+    flex-grow: 1;
+    overflow-y: auto;
+    background-color: var(--background-light);
+    padding: 15px;
+}
+.diary-tab-content {
+    display: none;
+}
+.diary-tab-content.active {
+    display: block;
+}
+/* 单篇日记卡片样式 */
+.diary-entry-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 15px;
+    padding: 18px 22px;
+    box-shadow: 0 4px 15px rgba(80, 151, 205, 0.1);
+}
+.diary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.diary-meta {
+    font-size: 13px;
+    color: var(--text-secondary);
+    /* 【核心修复】给日期右边增加40px的“安全距离”，防止被按钮遮挡 */
+    padding-right: 40px; 
+}
+.diary-author {
+    font-weight: bold;
+    color: var(--text-dark);
+}
+.diary-content {
+    line-height: 1.8;
+    font-size: 15px;
+    color: var(--text-dark);
+    word-break: break-word;
+}
+.diary-content img {
+    max-width: 100%;
+    border-radius: var(--radius-md);
+    margin: 10px 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* 日记编辑器样式 */
+.diary-toolbar {
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--glass-border);
+    padding-bottom: 10px;
+}
+.diary-toolbar .tool-btn {
+    padding: 8px 12px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    margin-right: 5px;
+    transition: all 0.2s ease;
+}
+.diary-toolbar .tool-btn:hover {
+    background: rgba(80, 151, 205, 0.1);
+    border-color: var(--qq-blue);
+}
+.diary-editor-area {
+    width: 100%;
+    min-height: 200px;
+    padding: 15px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--glass-bg);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    font-size: 15px;
+    line-height: 1.6;
+    outline: none;
+    overflow-y: auto;
+}
+.diary-editor-area:focus {
+    border-color: var(--qq-blue);
+    box-shadow: 0 0 0 3px rgba(80, 151, 205, 0.1);
+}
+.diary-editor-area:empty::before {
+    content: attr(placeholder);
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+/* --- 【全新】日记编辑器工具栏 V2.0 样式 --- */
+.diary-toolbar {
+    display: flex;
+    flex-wrap: wrap; /* 允许换行 */
+    gap: 8px; /* 按钮间距 */
+}
+/* 针对文字颜色选择器的特殊样式 */
+.color-picker-label {
+    position: relative;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.color-picker-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0; /* 隐藏原始的颜色选择器UI */
+    cursor: pointer;
+}
+.color-picker-label b {
+    /* 在字母A下面画一条线，这条线的颜色会由JS动态改变 */
+    border-bottom: 3px solid #333; 
+}
+/* 针对对齐按钮的微调，让图标看起来不一样 */
+.tool-btn[data-format="justifyLeft"] { text-align: left; }
+.tool-btn[data-format="justifyCenter"] { text-align: center; }
+.tool-btn[data-format="justifyRight"] { text-align: right; }
+
+/* --- 【全新】为高亮和字号定义样式 --- */
+/* 注意：这里我们只是定义了高亮样式，但实际高亮会通过行内style实现 */
+.text-highlight {
+    background-color: #FFEB3B; /* 一个明亮的黄色 */
+}
+/* 定义可用的字号 */
+.diary-font-size-1 { font-size: 12px; }
+.diary-font-size-2 { font-size: 14px; }
+.diary-font-size-3 { font-size: 16px; /* 默认 */ }
+.diary-font-size-4 { font-size: 18px; }
+.diary-font-size-5 { font-size: 22px; }
+.diary-font-size-6 { font-size: 26px; }
+/* --- 【全新】日记编辑器工具栏 V3.0 样式 --- */
+.diary-toolbar {
+    display: flex;
+    flex-wrap: nowrap; /* 强制不换行 */
+    gap: 8px;
+    padding-bottom: 10px;
+    overflow-x: auto; /* 【核心】当按钮太多时，允许水平滚动 */
+    -webkit-overflow-scrolling: touch; /* 在移动端实现平滑滚动 */
+}
+/* 为SVG图标设置统一样式 */
+.tool-btn svg {
+    width: 20px;
+    height: 20px;
+    stroke: var(--text-dark);
+    stroke-width: 2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+/* 针对文字颜色选择器的特殊样式 */
+.color-picker-label {
+    position: relative;
+    padding: 8px 10px; /* 调整内边距适应图标 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.color-picker-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+/* 高亮按钮图标的颜色会动态变化 */
+#diary-highlight-color-picker + svg {
+    fill: #FFEB3B; /* 默认显示黄色填充 */
+    stroke: none; /* 填充模式下通常不需要描边 */
+}
+/* 文字颜色按钮图标的颜色会动态变化 */
+#diary-text-color-picker + svg {
+    stroke: #333333; /* 默认显示黑色 */
+}
+
+/* 【【【重要】】】我们不再需要 .text-highlight 和 .diary-font-size-X 这些类了 */
+/* 因为新功能会直接把样式写在HTML元素上，更加灵活 */
+/* --- 【全新 V2.0】日记系统豪华版样式 --- */
+
+/* 1. 赋予“全屏身份证”真正的力量 */
+.modal-fullscreen {
+    width: 100%;
+    height: 100%;
+    max-width: none !important; /* 覆盖旧限制 */
+    max-height: none !important; /* 覆盖旧限制 */
+    border-radius: 0 !important; /* 全屏不需要圆角 */
+    padding: 0 !important; /* 全屏不需要内边距 */
+}
+.modal-fullscreen .modal-header {
+    padding: 10px 15px;
+    border-radius: 0;
+    height: auto;
+    min-height: 50px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.modal-fullscreen .modal-body {
+    padding: 0; /* body也不需要内边距了 */
+    display: flex; /* 启用flex，让工具栏和编辑器可以垂直排列 */
+    flex-direction: column;
+}
+.modal-fullscreen .modal-footer-split {
+    border-radius: 0;
+}
+
+/* --- 【终极修复 V4.0】恢复工具栏滚动条并进行美化 --- */
+
+/* 1. 我们只对“编辑器”和“查看器”这两个大区域，隐藏垂直滚动条 */
+.diary-editor-area,
+.diary-viewer-area {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+.diary-editor-area::-webkit-scrollbar,
+.diary-viewer-area::-webkit-scrollbar {
+    display: none;
+}
+
+/* 2. 【核心】我们为“工具栏”专门设计一个纤细、漂亮的水平滚动条 */
+.diary-toolbar::-webkit-scrollbar {
+    height: 6px; /* 【核心】设置一个很细的高度，而不是0！ */
+}
+.diary-toolbar::-webkit-scrollbar-track {
+    background-color: rgba(0,0,0,0.05); /* 轨道的背景色，淡淡的几乎看不见 */
+    border-radius: 10px;
+}
+.diary-toolbar::-webkit-scrollbar-thumb {
+    background-color: #ccc; /* 滚动条滑块本身的颜色 */
+    border-radius: 10px;
+    transition: background-color 0.2s ease; /* 添加平滑过渡效果 */
+}
+.diary-toolbar::-webkit-scrollbar-thumb:hover {
+    background-color: #999; /* 鼠标悬停在滑块上时颜色变深 */
+}
+
+/* 3. 日记查看器专属样式 */
+.diary-viewer-area {
+    flex-grow: 1;
+    padding: 20px;
+    overflow-y: auto;
+    font-size: 16px;
+    line-height: 1.8;
+}
+
+/* 4. 图片尺寸调节器样式 */
+#image-resize-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+#image-size-slider {
+    width: 120px;
+}
+
+/* 5. 让被选中的图片有一个特殊标记，方便识别 */
+.diary-editor-area img.resizable-image {
+    outline: 3px solid var(--qq-blue);
+    outline-offset: 2px;
+    cursor: pointer;
+}
+/* --- 【终极修复 V3.0】确保日记查看器也能完美全屏 --- */
+.diary-viewer-modal .modal-body {
+    padding: 0;
+}
+.diary-viewer-area {
+    /* 【核心】我们现在把背景应用到这里，而不是编辑器上 */
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+/* 【核心】让编辑器的背景图设置逻辑更完善 */
+.diary-editor-area {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    flex-grow: 1; /* 让它填满剩余空间 */
+}
+/* --- 【全新 V4.0】图片对齐样式 --- */
+
+/* 定义三种“盘子”的摆放方式 */
+.diary-image-wrap {
+    /* 清除浏览器可能给P标签带来的默认边距 */
+    margin: 10px 0;
+    padding: 0;
+}
+.diary-image-wrap[align="center"] {
+    text-align: center;
+}
+.diary-image-wrap[align="right"] {
+    text-align: right;
+}
+.diary-image-wrap[align="left"] {
+    text-align: left;
+}
+
+/* 图片在“盘子”里要表现得像一个文字，才能被text-align影响 */
+.diary-image-wrap img {
+    display: inline-block;
+    max-width: 100%; /* 确保在右对齐或居中时，过大的图片不会把盘子撑破 */
+}
+/* --- 【全新 V5.0】日记卡片删除按钮样式 --- */
+.diary-delete-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    width: 32px;
+    height: 32px;
+    background-color: rgba(0,0,0,0.05);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.5;
+    transition: all 0.2s ease;
+}
+.diary-entry-card:hover .diary-delete-btn {
+    opacity: 1;
+}
+.diary-delete-btn:hover {
+    background-color: rgba(229, 57, 53, 0.2); /* 悬停时显示淡淡的红色 */
+}
+.diary-delete-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke: var(--text-secondary);
+}
+.diary-delete-btn:hover svg {
+    stroke: #e53935; /* 悬停时图标变红 */
+}
