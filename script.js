@@ -4536,51 +4536,12 @@ ${chatLog}
         document.getElementById('cancel-diary-btn').addEventListener('click', closeDiaryEditor);
         document.getElementById('save-diary-btn').addEventListener('click', saveDiaryEntry);
 
-        // 6. 编辑器工具栏的按钮 V3.0 (专业版)
+                       // 6. 编辑器工具栏的按钮 V7.0 (最终稳定版 - 依赖浏览器原生状态)
         const diaryToolbar = document.querySelector('.diary-toolbar');
-        const highlightColorPicker = document.getElementById('diary-highlight-color-picker');
-        const textColorPicker = document.getElementById('diary-text-color-picker');
         
-        /**
-         * 【全新辅助函数】一个更强大的文本样式修改器
-         * @param {string} styleProperty - CSS属性名, e.g., 'backgroundColor'
-         * @param {string} styleValue - CSS属性值, e.g., '#FF0000'
-         */
-        function applyStyleToSelection(styleProperty, styleValue) {
-            const selection = window.getSelection();
-            if (!selection.rangeCount) return;
-
-            const range = selection.getRangeAt(0);
-            const selectedText = range.toString();
-
-            // 如果没有选择任何文本，则不做任何事
-            if (selectedText.length === 0) return;
-            
-            // 检查选区是否已经有这个样式了
-            let parent = range.commonAncestorContainer;
-            if (parent.nodeType !== 1) parent = parent.parentNode; // 确保是元素节点
-
-            // 【核心：取消高亮/样式的逻辑】
-            if (parent.style[styleProperty] === styleValue) {
-                 document.execCommand('removeFormat', false, null); // 尝试用通用方法移除
-                 parent.style[styleProperty] = ''; // 强制移除
-                 // 如果span上没有其他样式了，就把span也脱掉
-                 if (!parent.getAttribute('style')) {
-                    parent.outerHTML = parent.innerHTML;
-                 }
-            } else {
-                // 创建一个新的<span>标签来包裹选中的文本
-                const span = document.createElement('span');
-                span.style[styleProperty] = styleValue;
-                
-                // 用span包裹住选中的内容
-                range.surroundContents(span);
-            }
-        }
-        
-        // 【核心改造1】我们监听 'mousedown' 事件，而不是 'click'
+        // --- 核心交互逻辑 ---
         diaryToolbar.addEventListener('mousedown', (e) => {
-            // 【核心改造2】念出我们的“魔法咒语”，阻止浏览器默认的失焦行为
+            // 【魔法】阻止默认失焦行为，这是在移动端保住选区的关键！
             e.preventDefault(); 
             
             const btn = e.target.closest('.tool-btn');
@@ -4589,79 +4550,85 @@ ${chatLog}
             const format = btn.dataset.format;
             const command = btn.dataset.command;
             
-            // 【核心改造】检查是处理图片还是文本
-            if (selectedImageForResize && (format === 'justifyLeft' || format === 'justifyCenter' || format === 'justifyRight')) {
-                let wrapper = selectedImageForResize.parentElement;
-                if (wrapper.tagName !== 'P') {
-                    let newWrapper = document.createElement('p');
-                    selectedImageForResize.parentNode.insertBefore(newWrapper, selectedImageForResize);
-                    newWrapper.appendChild(selectedImageForResize);
-                    wrapper = newWrapper;
+            // 【核心简化】按钮的唯一职责就是“下命令”，不再管理任何内部状态
+            if (format) {
+                if (format === 'insertImage') {
+                    const fileInput = document.createElement('input');
+                    fileInput.type = 'file';
+                    fileInput.accept = 'image/*';
+                    fileInput.onchange = (event) => {
+                         const file = event.target.files[0];
+                         if(file){
+                             const reader = new FileReader();
+                             reader.onload = (e) => {
+                                document.execCommand('insertHTML', false, `<p class="diary-image-wrap" align="left"><img src="${e.target.result}" style="max-width: 100%; height: auto;"></p>`);
+                             };
+                             reader.readAsDataURL(file);
+                         }
+                    };
+                    fileInput.click();
+                } else {
+                    // 对于B,U,S,对齐等所有命令，直接执行
+                    document.execCommand(format, false, null);
                 }
-                wrapper.className = 'diary-image-wrap';
-                const alignValue = format.replace('justify', '').toLowerCase();
-                wrapper.setAttribute('align', alignValue);
             } else if (command === 'changeFontSize') {
-                const direction = btn.dataset.value;
+                const value = btn.dataset.value;
                 const selection = window.getSelection();
                 if (!selection.rangeCount) return;
                 let parent = selection.getRangeAt(0).commonAncestorContainer;
                 if (parent.nodeType !== 1) parent = parent.parentNode;
                 const currentSize = parseFloat(window.getComputedStyle(parent).fontSize) || 16;
-                let newSize;
-                if (direction === 'increase') {
-                    newSize = Math.min(currentSize + 2, 72);
-                } else {
-                    newSize = Math.max(currentSize - 2, 10);
-                }
+                let newSize = (value === 'increase') ? currentSize + 2 : currentSize - 2;
+                newSize = Math.max(10, Math.min(newSize, 72));
                 document.execCommand("fontSize", false, "1");
                 const fontElements = diaryEditorContent.getElementsByTagName("font");
-                for (let i = 0, len = fontElements.length; i < len; ++i) {
-                     if (fontElements[i].size == "1") {
-                         fontElements[i].removeAttribute("size");
-                         fontElements[i].style.fontSize = newSize + "px";
-                     }
-                }
-            } else if (format) {
-                 if (format === 'insertImage') {
-                    const fileInput = document.createElement('input');
-                    fileInput.type = 'file';
-                    fileInput.accept = 'image/*';
-                    fileInput.onchange = (event) => {
-                        const file = event.target.files[0];
-                        if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (e) => {
-                                const uniqueId = `img-${Date.now()}`;
-                                document.execCommand('insertHTML', false, `<p class="diary-image-wrap" align="left"><img id="${uniqueId}" src="${e.target.result}"></p>`);
-                                const newImg = document.getElementById(uniqueId);
-                                if (newImg) newImg.click();
-                            };
-                            reader.readAsDataURL(file);
-                        }
-                    };
-                    fileInput.click();
-                } else {
-                    document.execCommand(format, false, null);
+                for (let el of fontElements) {
+                    if (el.size == "1") {
+                        el.removeAttribute("size");
+                        el.style.fontSize = newSize + "px";
+                    }
                 }
             }
-            // 【核心改造3】我们不再需要强行让编辑器获取焦点了
-            // diaryEditorContent.focus(); // <-- 这行代码被删除了
+            
+            // 【重要】操作完成后，立即让“侦察兵”更新一次按钮状态
+            updateToolbarStatus();
         });
 
-        // 【核心改造4】为颜色选择器也应用同样的修复逻辑
-        highlightColorPicker.addEventListener('input', (e) => {
-            document.execCommand('backColor', false, e.target.value);
-            e.target.nextElementSibling.style.fill = e.target.value; 
-            // diaryEditorContent.focus(); // <-- 删除
+        // 颜色选择器的逻辑 (也使用mousedown来防止失焦)
+        document.getElementById('diary-highlight-color-picker').addEventListener('mousedown', (e) => e.preventDefault());
+        document.getElementById('diary-highlight-color-picker').addEventListener('input', (e) => {
+            document.execCommand('hiliteColor', false, e.target.value);
         });
-        textColorPicker.addEventListener('input', (e) => {
+
+        document.getElementById('diary-text-color-picker').addEventListener('mousedown', (e) => e.preventDefault());
+        document.getElementById('diary-text-color-picker').addEventListener('input', (e) => {
             document.execCommand('foreColor', false, e.target.value);
-            e.target.nextElementSibling.style.stroke = e.target.value;
-            // diaryEditorContent.focus(); // <-- 删除
         });
 
-        // 【【【核心修复：在这里为日记查看器的按钮接上“电线”】】】
+        // 【核心“侦察兵”】它的唯一职责：读取浏览器状态，更新UI
+        const updateToolbarStatus = () => {
+            if (diaryEditorModal.classList.contains('hidden')) return;
+
+            ['bold', 'underline', 'strikeThrough', 'justifyLeft', 'justifyCenter', 'justifyRight'].forEach(format => {
+                try { // 增加一个try...catch以防止在某些特殊选区下报错
+                    const isActive = document.queryCommandState(format);
+                    const btn = diaryToolbar.querySelector(`[data-format=${format}]`);
+                    if (btn) {
+                        btn.classList.toggle('is-active', isActive);
+                    }
+                } catch (e) {
+                    // console.error(`Error querying command state for: ${format}`, e);
+                }
+            });
+        };
+        // 我们在多个时机触发侦察，确保状态最准确实时
+        document.addEventListener('selectionchange', updateToolbarStatus);
+        diaryEditorContent.addEventListener('keyup', updateToolbarStatus);
+        diaryEditorContent.addEventListener('mouseup', updateToolbarStatus);
+        diaryEditorContent.addEventListener('focus', updateToolbarStatus);
+
+
+        // 【核心】把查看器按钮的“电线”重新接在这里，确保功能完整
         document.getElementById('close-diary-viewer-btn').addEventListener('click', closeDiaryViewer);
         document.getElementById('edit-diary-fab').addEventListener('click', () => {
             const diaryId = diaryViewerModal.dataset.currentDiaryId;
@@ -4960,9 +4927,10 @@ ${chatLog}
         diaryViewerModal.classList.add('hidden');
     }
 
-    /**
-     * 【全新 V3.0】打开日记编辑器 (加载独立背景)
-     */
+
+    // 【全新】编辑器的“状态管理器”
+    // (这里的旧声明已被删除)
+
     async function openDiaryEditor(diaryId = null) {
         currentEditingDiaryId = diaryId;
         
