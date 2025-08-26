@@ -483,8 +483,8 @@
                 </div>
                 <!-- 日记切换标签 -->
                 <div class="diary-tabs">
-                    <button class="diary-tab-btn active" data-tab="my-diary">我的手账</button>
-                    <button class="diary-tab-btn" data-tab="ai-diary">AI的手账</button>
+                    <button class="diary-tab-btn active" data-tab="my-diary">我的日记</button>
+                    <button class="diary-tab-btn" data-tab="ai-diary">AI的日记</button>
                 </div>
                 <!-- 日记内容容器 -->
                 <div class="diary-container">
@@ -514,40 +514,38 @@
     <!-- #####          所有的弹窗(Modal)都应该放在这里            ##### -->
     <!-- ############################################################### -->
 
-    <!-- ▼▼▼ 【【【终极修复 V3.0：全屏日记查看器】】】 ▼▼▼ -->
+        <!-- ▼▼▼ 【【【终极修复 V3.0：全屏日记查看器】】】 ▼▼▼ -->
     <div id="diary-viewer-modal" class="modal-overlay hidden">
         <div class="modal-content modal-fullscreen">
-            <div class="modal-header">
-                <h3 id="diary-viewer-author"></h3>
-                <button id="close-diary-viewer-btn" class="close-button">&times;</button>
+                        <div class="modal-header">
+                <!-- 【【【核心最终修复：将标题和编辑按钮分组】】】 -->
+                <div class="header-title-group">
+                    <h3 id="diary-viewer-author"></h3>
+                    <button id="edit-diary-fab" class="header-button-inline">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    </button>
+                </div>
+                <button id="close-diary-viewer-btn" class="header-button close-button">&times;</button>
             </div>
-            <div class="modal-body" style="position: relative;"> <!-- 【核心】为编辑按钮的定位提供基准 -->
+            <div class="modal-body">
                 <div id="diary-viewer-content" class="diary-viewer-area">
                     <!-- 日记内容会显示在这里 -->
                 </div>
-                <!-- 【核心】编辑按钮被改造成了漂亮的悬浮按钮 -->
-                <button id="edit-diary-fab" class="fab" style="bottom: 20px; right: 20px;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                </button>
             </div>
         </div>
     </div>
     <!-- ▲▲▲▲▲ 日记查看器弹窗结束 ▲▲▲▲▲ -->
 
 
-   <!-- ▼▼▼ 【【【终极修复 V3.0：补全家具的全屏编辑器】】】 ▼▼▼ -->
+            <!-- ▼▼▼ 【【【终极修复 V5.0：按需重构编辑器布局】】】 ▼▼▼ -->
     <div id="diary-editor-modal" class="modal-overlay hidden">
         <div class="modal-content modal-fullscreen">
-            <div class="modal-header">
-                <h3>写手账日记</h3>
-                <div id="image-resize-controls" class="hidden">
-                    <span>图片大小:</span>
-                    <input type="range" id="image-size-slider" min="10" max="100" value="100">
-                </div>
-            </div>
+            <!-- 头部现在是空的，因为所有东西都移到下面了 -->
+            <div class="modal-header"></div>
+            
             <div class="modal-body">
+                <!-- 1. 工具栏现在是第一项 -->
                 <div class="diary-toolbar">
-                    <!-- ... (SVG图标按钮保持不变) ... -->
                     <button class="tool-btn" data-format="bold" title="加粗"><svg viewBox="0 0 24 24"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></svg></button>
                     <button class="tool-btn" data-format="underline" title="下划线"><svg viewBox="0 0 24 24"><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg></button>
                     <button class="tool-btn" data-format="strikeThrough" title="删除线"><svg viewBox="0 0 24 24"><line x1="4" y1="12" x2="20" y2="12"></line><path d="M16 4H9a3 3 0 0 0-2.83 2M14 12a4 4 0 0 1 0 8H6"></path><path d="M4 12h16"></path></svg></button>
@@ -559,24 +557,37 @@
                     <button class="tool-btn" data-format="justifyCenter" title="居中对齐"><svg viewBox="0 0 24 24"><line x1="21" y1="10" x2="3" y2="10"></line><line x1="18" y1="6" x2="6" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="18" y1="18" x2="6" y2="18"></line></svg></button>
                     <button class="tool-btn" data-format="justifyRight" title="右对齐"><svg viewBox="0 0 24 24"><line x1="21" y1="10" x2="3" y2="10"></line><line x1="21" y1="6" x2="10" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="21" y1="18" x2="10" y2="18"></line></svg></button>
                     <button class="tool-btn" data-format="insertImage" title="插入图片"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></button>
-                    
-                    <!-- 【核心改造】背景管理按钮也换上SVG图标 -->
+                    <input type="file" id="diary-insert-image-input" accept="image/*" style="display: none;">
                     <button class="tool-btn" id="diary-set-bg-btn" title="设置背景"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="M21 12.5V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5.5"></path><path d="m14 4 3 3h-3V4z"></path><path d="M4 14.5l6-6 4 4L18.5 9"></path></svg></button>
                     <button class="tool-btn" id="diary-remove-bg-btn" title="移除背景"><svg viewBox="0 0 24 24"><path d="M12 22A10 10 0 1 1 12 2a10 10 0 0 1 0 20z"></path><path d="m15 9-6 6"></path><path d="m9 9 6 6"></path></svg></button>
                 </div>
-                <div id="diary-editor-content" class="diary-editor-area" contenteditable="true" placeholder="今天发生了什么有趣的事吗..."></div>
                 
-                <!-- 【核心】把被误删的“可见性”下拉菜单重新加回来！ -->
-                <div class="form-group" style="margin: 15px; flex-shrink: 0;">
+                <!-- 2. 标题栏是第二项 -->
+                <div class="form-group" style="padding: 0 15px;">
+                    <input type="text" id="diary-editor-title" placeholder="给日记起个标题吧..." style="width: 100%; border: none; border-bottom: 1px solid #eee; padding: 15px 0; font-size: 18px; font-weight: bold; background: none; outline: none;">
+                </div>
+
+                <!-- 3. 【重要】内容区和缩放条现在是邻居，方便定位 -->
+                <div id="diary-editor-content-wrapper" style="position: relative; flex-grow: 1; min-height: 0;">
+                    <div id="diary-editor-content" class="diary-editor-area" contenteditable="true" placeholder="今天发生了什么有趣的事吗..."></div>
+                    <div id="image-resize-controls" class="hidden">
+                        <span>图片大小:</span>
+                        <input type="range" id="image-size-slider" min="10" max="100" value="100">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer-combined">
+                <div class="form-group visibility-selector">
                     <label for="diary-visibility-select">谁可以看</label>
                     <select id="diary-visibility-select">
                         <option value="all">所有AI可见</option>
                     </select>
                 </div>
-            </div>
-            <div class="modal-footer-split">
-                <button id="cancel-diary-btn" class="modal-button secondary">取消</button>
-                <button id="save-diary-btn" class="modal-button primary">保存</button>
+                <div class="footer-actions">
+                    <button id="cancel-diary-btn" class="modal-button secondary">取消</button>
+                    <button id="save-diary-btn" class="modal-button primary">保存</button>
+                </div>
             </div>
         </div>
     </div>
