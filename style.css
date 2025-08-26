@@ -964,7 +964,7 @@ input:checked + .slider:before {
 }
 
 /* --- 用户信息弹窗样式 --- */
-.modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; }
 .modal-content {
     /* 【核心】把背景色从纯白改为带有70%不透明度的白色 */
     background: var(--glass-bg);
@@ -984,6 +984,19 @@ input:checked + .slider:before {
     box-shadow: 0 5px 20px rgba(0,0,0,0.25); 
     display: flex; 
     flex-direction: column; 
+}
+/* --- 【【【真正解决问题的终极修复代码】】】 --- */
+/* 这段代码的作用是：专门针对日记窗口的“外框”，命令它放弃居中对齐的特性 */
+#diary-viewer-modal,
+#diary-editor-modal {
+    display: block; /* 覆盖掉 display:flex，解除居中魔咒 */
+    align-items: initial; /* 重置对齐属性 */
+    justify-content: initial; /* 重置对齐属性 */
+    
+    /* 由于内层窗口会全屏，外框的背景和模糊效果就不需要了，可以移除以提升性能 */
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 .modal-header { 
     display: flex; 
@@ -3331,6 +3344,7 @@ input:checked + .slider:before {
     background: rgba(80, 151, 205, 0.1);
     border-color: var(--qq-blue);
 }
+
 .diary-editor-area {
     width: 100%;
     min-height: 200px;
@@ -3605,4 +3619,490 @@ input:checked + .slider:before {
 }
 .diary-delete-btn:hover svg {
     stroke: #e53935; /* 悬停时图标变红 */
+}
+/*
+ ===============================================
+  V30.0 - 日记系统UI/UX终极优化 (两端定位最终版)
+ ===============================================
+*/
+
+/* 1. 强制全屏：使用left:0和right:0，自动适应滚动条 */
+#diary-viewer-modal .modal-content,
+#diary-editor-modal .modal-content {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%; /* <-- 【【【真正解决问题的关键代码】】】 */
+    
+    max-width: none !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
+    overflow: hidden;
+    z-index: 1001;
+    box-sizing: border-box; /* 加上这个属性，让内外边距更可控 */
+}
+
+/* 2. 头部布局：加入安全边距 */
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: 16px;
+    padding-right: 10px;
+    border-bottom: 1px solid #f0f0f0;
+    flex-shrink: 0;
+    height: calc(56px + env(safe-area-inset-top, 0px));
+    box-sizing: border-box;
+    background-color: #fff;
+    z-index: 2;
+}
+.header-title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+}
+.header-title-group h3 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: #333;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+.header-button-inline {
+    background: none; border: none; padding: 4px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: #999;
+}
+.header-button-inline:hover { color: #333; }
+.header-button-inline svg { width: 20px; height: 20px; }
+.modal-header .close-button {
+    width: 44px; height: 44px; background: none; border: none;
+    cursor: pointer; color: #888; display: flex;
+    align-items: center; justify-content: center;
+    font-size: 26px; font-weight: 400; padding: 0;
+}
+
+
+/* 3. 内容区和输入框最大化 (保持不变) */
+#diary-viewer-modal .modal-body,
+#diary-editor-modal .modal-body {
+    flex-grow: 1;
+    overflow: hidden;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+#diary-editor-content.diary-editor-area,
+#diary-viewer-content.diary-viewer-area {
+    flex-grow: 1;
+    padding: 15px;
+    overflow-y: auto;
+    background-size: cover;
+    background-position: center;
+    border: none; outline: none; font-size: 16px;
+}
+.diary-toolbar {
+    overflow-x: auto;
+    flex-shrink: 0;
+}
+
+/* 4. 底部栏布局 (保持不变) */
+.modal-footer-combined {
+    flex-shrink: 0;
+    background-color: #f7f8fa;
+    padding: 15px 15px calc(15px + env(safe-area-inset-bottom, 0px)) 15px;
+    border-top: 1px solid #eee;
+    z-index: 2;
+}
+.visibility-selector {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    background-color: #fff;
+    padding: 12px 15px;
+    border-radius: 8px;
+}
+.visibility-selector label {
+    font-size: 15px; color: #333; flex-shrink: 0;
+    white-space: nowrap; margin-right: 10px;
+}
+.visibility-selector select {
+    border: none; background: none; font-size: 15px;
+    color: #888; text-align: right; direction: rtl; 
+}
+.footer-actions { display: flex; gap: 10px; }
+.footer-actions .modal-button { flex: 1; }
+/*
+================================================================
+ V-ULTIMATE-FIX-2: 日记全屏终极修复补丁 (最强硬版本)
+================================================================
+*/
+
+/* 步骤 1: 强制外框铺满屏幕，不留任何余地 */
+/* 这条规则只在日记窗口“没有” .hidden 类的时候生效 */
+#diary-viewer-modal:not(.hidden),
+#diary-editor-modal:not(.hidden) {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important; /* 强制取消 flex 居中 */
+    background-color: #fff !important; /* 确保背景是纯白 */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    z-index: 1001 !important; /* 确保在最顶层 */
+}
+
+/* 步骤 2: 强制内层内容填满外框 */
+/* 这条规则同样只在日记窗口可见时生效 */
+#diary-viewer-modal:not(.hidden) .modal-content,
+#diary-editor-modal:not(.hidden) .modal-content {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    position: relative !important; /* 使用 relative 让它在正常的文档流中填充父元素 */
+    
+    /* 保持内部的 flex 布局以正确排列 header/body/footer */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+/*
+============================================================
+ V-FINAL-UI: 日记编辑器布局紧凑化终极补丁
+============================================================
+*/
+
+/* 步骤 1: 大幅压缩现在已经变空的“头部”区域的高度 */
+#diary-editor-modal .modal-header {
+    padding: 5px 15px; /* 极大地减少内边距 */
+    min-height: auto;  /* 取消最小高度限制 */
+    height: auto;      /* 高度自适应 */
+    border-bottom: none; /* 去掉它和工具栏之间的分割线 */
+    justify-content: flex-end; /* 让内部可能存在的元素（如图片缩放条）靠右对齐 */
+}
+
+/* 步骤 2: 重新“装修”工具栏，让它看起来像一个新的、紧凑的顶部栏 */
+#diary-editor-modal .diary-toolbar {
+    margin-bottom: 0; /* 移除和下方输入框的间距 */
+    padding: 10px 15px; /* 增加合适的内边距，让它看起来更舒服 */
+    border-bottom: 1px solid #f0f0f0; /* 添加一条分割线，将它与内容区分开 */
+}
+
+/* 步骤 3: 微调我们之前添加的“标题输入框”，让它和新布局更协调 */
+#diary-editor-modal #diary-editor-title {
+    padding: 10px 0; /* 减少上下的内边距 */
+    font-size: 16px; /* 适当减小字号 */
+}
+/*
+============================================================
+ V-FINAL-UI-2: 日记编辑器布局重塑终极补丁
+============================================================
+*/
+
+/* 步骤 1: 将“头部”重塑为一个灵活、紧凑的“超级工具栏” */
+#diary-editor-modal .modal-header {
+    flex-direction: column; /* 让内部元素（工具栏、缩放条）垂直排列 */
+    align-items: stretch;   /* 让内部元素宽度撑满 */
+    padding: 10px 0 0 0;  /* 调整内边距，顶部留空，其他方向为0 */
+    height: auto;           /* 高度完全自适应 */
+    min-height: auto;
+    border-bottom: 1px solid #f0f0f0; /* 在整个头部下方添加分割线 */
+}
+
+/* 步骤 2: 确保工具栏本身干净、无多余样式 */
+#diary-editor-modal .diary-toolbar {
+    padding: 0 15px 10px 15px; /* 为工具栏按钮设置左右和底部内边距 */
+    border-bottom: none; /* 移除它自己多余的分割线 */
+}
+
+/* 步骤 3: 确保图片缩放条也能正确显示 */
+#diary-editor-modal #image-resize-controls {
+    padding: 5px 15px;
+    background-color: #f7f8fa; /* 给它一个淡淡的背景色以示区分 */
+}
+
+/* 步骤 4: 确保“身体”部分（包含标题和内容）能最大化地利用空间 */
+#diary-editor-modal .modal-body {
+    padding-top: 5px; /* 稍微增加一点标题和顶部工具栏的间距 */
+}
+/*
+================================================================
+ V-ULTIMATE-FIX-3: 日记编辑器布局终极修复补丁 (Flexbox 垂直增长版)
+================================================================
+*/
+
+/* 步骤 1: 压缩“头部”的高度，只让它包裹标题文字 */
+#diary-editor-modal .modal-header {
+    height: auto;
+    min-height: auto;
+    padding: 15px 20px; /* 给标题一个舒适的内边距 */
+}
+
+/* 步骤 2: 【【【最核心的修复】】】 */
+/* 命令“身体”部分成为一个新的、垂直的、可以伸缩的容器 */
+#diary-editor-modal .modal-body {
+    display: flex;
+    flex-direction: column; /* 内部元素垂直排列 */
+    padding: 0; /* 移除它自身多余的内边距 */
+    flex-grow: 1; /* 命令它占据所有可用的垂直空间！ */
+    min-height: 0; /* 一个专业技巧，防止flex布局在某些浏览器上溢出 */
+}
+
+/* 步骤 3: 让工具栏和标题框的高度固定，不参与伸缩 */
+#diary-editor-modal .diary-toolbar,
+#diary-editor-modal .form-group {
+    flex-shrink: 0; /* 禁止它们被压缩 */
+}
+
+/* 步骤 4: 【【【第二核心修复】】】 */
+/* 命令真正的内容输入框“野蛮生长”，填满“身体”部分所有剩余的空间 */
+#diary-editor-modal #diary-editor-content {
+    flex-grow: 1; /* 命令它占据所有可用的垂直空间！ */
+    border: none; /* 移除它自己的边框，看起来更干净 */
+}
+/*
+================================================================
+ V-ULTIMATE-FIX-3: 日记编辑器布局终极修复补丁 (Flexbox 垂直增长版)
+================================================================
+*/
+
+/* 步骤 1: 压缩“头部”的高度，只让它包裹标题文字 */
+#diary-editor-modal .modal-header {
+    height: auto;
+    min-height: auto;
+    padding: 15px 20px; /* 给标题一个舒适的内边距 */
+}
+
+/* 步骤 2: 【【【最核心的修复】】】 */
+/* 命令“身体”部分成为一个新的、垂直的、可以伸缩的容器 */
+#diary-editor-modal .modal-body {
+    display: flex;
+    flex-direction: column; /* 内部元素垂直排列 */
+    padding: 0; /* 移除它自身多余的内边距 */
+    flex-grow: 1; /* 命令它占据所有可用的垂直空间！ */
+    min-height: 0; /* 一个专业技巧，防止flex布局在某些浏览器上溢出 */
+}
+
+/* 步骤 3: 让工具栏和标题框的高度固定，不参与伸缩 */
+#diary-editor-modal .diary-toolbar,
+#diary-editor-modal .form-group {
+    flex-shrink: 0; /* 禁止它们被压缩 */
+}
+
+/* 步骤 4: 【【【第二核心修复】】】 */
+/* 命令真正的内容输入框“野蛮生长”，填满“身体”部分所有剩余的空间 */
+#diary-editor-modal #diary-editor-content {
+    flex-grow: 1; /* 命令它占据所有可用的垂直空间！ */
+    border: none; /* 移除它自己的边框，看起来更干净 */
+}
+/*
+================================================================
+ V-ULTIMATE-FIX-3: 日记编辑器布局终极修复补丁 (Flexbox 垂直增长版)
+================================================================
+*/
+
+/* 步骤 1: 压缩“头部”的高度，只让它包裹标题文字 */
+#diary-editor-modal .modal-header {
+    height: auto;
+    min-height: auto;
+    padding: 10px 15px; /* 给一个紧凑的内边距 */
+    justify-content: flex-end; /* 让内部的缩放条靠右 */
+}
+
+/* 步骤 2: 【【【最核心的修复】】】 */
+/* 命令“身体”部分成为一个新的、垂直的、可以伸缩的容器 */
+#diary-editor-modal .modal-body {
+    display: flex;
+    flex-direction: column; /* 内部元素垂直排列 */
+    padding: 0; /* 移除它自身多余的内边距 */
+    flex-grow: 1; /* 命令它占据所有可用的垂直空间！ */
+    min-height: 0; /* 一个专业技巧，防止flex布局在某些浏览器上溢出 */
+}
+
+/* 步骤 3: 让工具栏和标题框的高度固定，不参与伸缩 */
+#diary-editor-modal .diary-toolbar,
+#diary-editor-modal .form-group {
+    flex-shrink: 0; /* 禁止它们被压缩 */
+}
+
+/* 步骤 4: 【【【第二核心修复】】】 */
+/* 命令真正的内容输入框“野蛮生长”，填满“身体”部分所有剩余的空间 */
+#diary-editor-modal #diary-editor-content {
+    flex-grow: 1; /* 命令它占据所有可用的垂直空间！ */
+    border: none; /* 移除它自己的边框，看起来更干净 */
+}
+
+/* 步骤 5: 【【【图片缩放功能视觉样式】】】 */
+/* 让被选中的图片有一个特殊标记，方便识别 */
+.diary-editor-area img.resizable-image {
+    outline: 3px solid var(--qq-blue);
+    outline-offset: 2px;
+    cursor: pointer;
+}
+/*
+================================================================
+ V-ULTIMATE-FIX-3: 日记编辑器布局终极修复补丁 (Flexbox 垂直增长版)
+================================================================
+*/
+
+/* 步骤 1: 压缩“头部”的高度 */
+#diary-editor-modal .modal-header {
+    height: auto;
+    min-height: auto;
+    padding: 10px 15px;
+    border-bottom: none; /* 移除和工具栏之间的分割线 */
+}
+
+/* 步骤 2: 【【【最核心的修复】】】 */
+#diary-editor-modal .modal-body {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    flex-grow: 1;
+    min-height: 0;
+}
+
+/* 步骤 3: 让工具栏和标题框的高度固定 */
+#diary-editor-modal .diary-toolbar,
+#diary-editor-modal .form-group {
+    flex-shrink: 0;
+}
+
+/* 步骤 4: 【【【第二核心修复】】】 */
+#diary-editor-modal #diary-editor-content {
+    flex-grow: 1;
+    border: none;
+    padding: 15px; /* 给内容区一点内边距，让文字不贴边 */
+}
+
+/* 步骤 5: 【【【图片缩放功能视觉样式】】】 */
+.diary-editor-area img.resizable-image {
+    outline: 3px solid var(--qq-blue);
+    outline-offset: 2px;
+    cursor: pointer;
+}
+/*
+============================================================
+ V-ULTIMATE-FIX-5: 日记编辑器P图效果还原补丁
+============================================================
+*/
+
+/* 1. 整体布局：命令“身体”部分成为可伸缩的容器 */
+#diary-editor-modal .modal-body {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    flex-grow: 1;
+    min-height: 0; /* 防止flex溢出 */
+}
+
+/* 2. 内容区包裹层：命令它“野蛮生长” */
+#diary-editor-content-wrapper {
+    flex-grow: 1; /* 占据所有剩余的垂直空间 */
+    display: flex; /* 让内部的内容区也能100%填满它 */
+}
+#diary-editor-content.diary-editor-area {
+    flex-grow: 1; /* 确保内容区本身也填满包裹层 */
+    border: none;
+    padding: 15px;
+    height: 100%; /* 高度撑满 */
+}
+
+/* 3. 图片缩放条：变身“悬浮弹窗” */
+#image-resize-controls {
+    position: absolute; /* 开启“自由飞行”模式 */
+    top: 20px; /* 距离顶部20px */
+    left: 50%; /* 先移动到中线 */
+    transform: translateX(-50%); /* 再向左移动自身宽度的一半，实现完美居中 */
+    
+    background-color: rgba(255, 255, 255, 0.9); /* 半透明背景 */
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 8px 15px;
+    border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 10; /* 确保它浮在最上层 */
+    
+    display: flex; /* 让内部的文字和滑块能对齐 */
+    align-items: center;
+    gap: 10px;
+}
+
+/* 4. 图片被选中时的视觉效果 */
+.diary-editor-area img.resizable-image {
+    outline: 3px solid #3B83A2; /* 你的主题色高亮 */
+    outline-offset: 2px;
+    cursor: pointer;
+}
+/*
+============================================================
+ V-ULTIMATE-FIX-6: 日记编辑器最终布局&缩放条样式补丁
+============================================================
+*/
+
+/* 1. 强制“头部”空盒子彻底消失，解决顶部空白问题 */
+#diary-editor-modal .modal-header {
+    height: 0 !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    margin: 0 !important;
+}
+
+/* 2. 【核心】让内容区的包裹层成为缩放条的“定位锚点” */
+#diary-editor-content-wrapper {
+    position: relative; /* 确保缩放条是相对于它来定位的 */
+}
+
+/* 3. 图片缩放条：变身“右上角迷你悬浮窗” */
+#image-resize-controls {
+    position: absolute; /* 开启“自由飞行”模式 */
+    top: 15px;          /* 距离内容区顶部15px */
+    right: 15px;         /* 距离内容区右侧15px */
+    
+    /* 移除之前错误的居中代码 */
+    left: auto;
+    transform: none;
+    
+    /* 变小！大幅缩小样式 */
+    padding: 5px 10px; /* 缩小内边距 */
+    font-size: 12px;   /* 缩小文字 */
+    gap: 8px;          /* 缩小内部间距 */
+    border-radius: 6px; /* 圆角也变小一点 */
+
+    /* 其他样式保持不变，让它依然好看 */
+    background-color: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(0,0,0,0.1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+}
+
+/* 4. 把滑块本身也变小 */
+#image-resize-controls input[type=range] {
+    width: 80px; /* 将滑块的长度缩短 */
 }
