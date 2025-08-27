@@ -964,7 +964,24 @@ input:checked + .slider:before {
 }
 
 /* --- 用户信息弹窗样式 --- */
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+/* ▼▼▼ 【【【终极修复：在这里解决键盘弹起时的白屏闪动问题】】】 ▼▼▼ */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    /* 核心修改：从“垂直居中”改为“从顶部开始对齐”，为键盘留出空间 */
+    align-items: flex-start;
+    /* 核心新增：给顶部增加一点安全距离，防止紧贴屏幕边缘 */
+    padding-top: 5vh;
+    /* 核心新增：为最外层容器也加上滚动能力，作为最后一道防线 */
+    overflow-y: auto;
+    z-index: 1000;
+}
 .modal-content {
     /* 【核心】把背景色从纯白改为带有70%不透明度的白色 */
     background: var(--glass-bg);
@@ -4166,38 +4183,164 @@ input:checked + .slider:before {
     cursor: pointer;
     margin-top: 10px;
 }
-/* --- 【全新 V3.0】作息编辑器UI终极修复补丁 (垂直布局版) --- */
+/* --- 【全新 V3.1】作息编辑器UI终极修复补丁 (垂直布局增强版) --- */
 
 /* 1. 改造主容器，让它垂直堆叠内部的每一行 */
 .schedule-time-range.vertical {
     display: flex;
-    flex-direction: column; /* 【核心】改为垂直方向！ */
-    gap: 12px; /* 设置每行之间的垂直间距 */
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 15px; /* 增加和上方下拉框的间距，让布局更清晰 */
 }
 
 /* 2. 定义每一行（标签+输入框）的样式 */
 .time-input-row {
     display: flex;
-    justify-content: space-between; /* 让标签和输入框左右两端对齐 */
-    align-items: center; /* 垂直居中 */
+    justify-content: space-between; /* 保持两端对齐，这是最直观的方式 */
+    align-items: center;
 }
 
 /* 3. 设置标签的样式 */
 .time-input-row label {
     font-size: 14px;
     color: #555;
-    font-weight: 600; /* 加粗，更清晰 */
+    font-weight: 600;
+    flex-shrink: 0; /* 禁止标签文字被压缩换行 */
+    padding-right: 15px; /* 与输入框保持安全距离 */
 }
 
-/* 4. 设置输入框的样式，确保它有足够的宽度并恢复舒适的内边距 */
+/* 4. 设置输入框的样式，让它更稳定 */
 #schedule-editor-modal .time-input-row input[type="time"] {
-    width: 120px; /* 给一个固定的、足够大的宽度 */
-    padding: 8px; /* 恢复一个舒适的内边距 */
+    width: 120px; /* 固定宽度，防止被挤压 */
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    text-align: center;
+    flex-shrink: 0; /* 禁止输入框被压缩 */
+}
+/* --- 【全新 V4.0】作息编辑器易用性UI样式 --- */
+.schedule-days-selector {
+    display: flex;
+    justify-content: space-around; /* 让星期均匀分布 */
+    padding: 10px 0;
+}
+.day-checkbox-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    font-size: 13px;
+    gap: 4px; /* 图标和文字的间距 */
+}
+.day-checkbox-label input[type="checkbox"] {
+    width: 18px; /* 放大复选框，方便点击 */
+    height: 18px;
+}
+
+.probability-input-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+}
+.probability-input-group label {
+    font-size: 14px;
+    color: #555;
+    font-weight: 600;
+}
+.probability-input-group input[type="number"] {
+    width: 80px;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    text-align: center;
+    font-weight: bold;
+}
+/* 隐藏数字输入框自带的上下箭头 */
+.probability-input-group input[type="number"]::-webkit-outer-spin-button,
+.probability-input-group input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.probability-input-group input[type="number"] {
+  -moz-appearance: textfield;
+}
+.probability-input-group span {
+    font-size: 16px;
+    font-weight: bold;
+    padding-left: 5px;
+}
+/* --- 【全新 V5.0】作息编辑器弹窗交互UI样式 --- */
+.schedule-display-btn {
+    cursor: pointer;
+    background-color: #f0f2f5;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-weight: 500;
+    color: #3B83A2;
+    border: 1px solid #e0e4e8;
+    text-align: right;
+    flex-grow: 1; /* 让按钮占据可用空间 */
+}
+.time-input-row {
+    padding: 8px 0;
+}
+.time-input-row label {
+    white-space: nowrap; /* 防止标签换行 */
+}
+/* 星期选择弹窗里的按钮样式 */
+.day-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    cursor: pointer;
+    font-weight: bold;
+}
+.day-btn.active {
+    background-color: var(--qq-blue, #3B83A2);
+    color: white;
+    border-color: var(--qq-blue, #3B83A2);
+}
+/* --- 【全新】弹窗层级修复补丁 --- */
+/* 这张“VIP通行证”拥有更高的z-index，可以确保它显示在最顶层 */
+.modal-overlay.modal-on-top {
+    z-index: 1005; 
+}
+/* --- 【全新 V6.0】作息编辑器按钮列表样式 --- */
+.schedule-item-button {
+    width: 100%;
+    padding: 12px 15px;
+    margin-bottom: 10px;
+    border: 1px solid #e0e4e8;
+    background-color: #fff;
+    border-radius: 8px;
+    text-align: left;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.schedule-item-button:hover {
+    background-color: #f7f8fa;
+}
+
+/* 确保按钮和“添加”按钮之间有间距 */
+#schedule-work-list, #schedule-leisure-list {
+    margin-bottom: 15px;
+}
+/* --- 【全新】作息编辑器时间输入框美化补丁 (V2 - 简化版) --- */
+/* 这段CSS现在只负责让原始的时间输入框看起来更协调 */
+#schedule-item-editor-modal .time-input-row input[type="time"] {
+    width: 120px;
+    padding: 8px;
     border-radius: 6px;
     border: 1px solid #ddd;
     text-align: center;
 }
-/* 核心修复：给三餐时间的文字标签增加一个右边的“安全距离” */
-.time-input-row label {
-    margin-right: 15px; /* 你可以调整这个数值来改变空隙的大小 */
+
+/* 让删除按钮看起来更醒目 */
+#delete-item-editor-btn {
+    padding: 12px;
+    font-size: 15px;
 }
