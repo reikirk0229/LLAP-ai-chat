@@ -1170,10 +1170,17 @@ async function openChat(contactId, messageIdToHighlight = null) {
     const numericContactId = Number(contactId);
     activeChatContactId = numericContactId;
 
-    resetChatState(); // 【重要】现在，我们只调用“大师”来完成所有重置工作
+    resetChatState();
 
     const contact = appData.aiContacts.find(c => c.id === numericContactId);
     if (!contact) return;
+
+    // ▼▼▼ 【【【第一处修改：在这里为AI配发“待办文件夹”】】】 ▼▼▼
+    // 检查这个AI角色有没有 unsentMessages 这个文件夹，如果没有，就给他创建一个空的
+    if (!contact.unsentMessages) {
+        contact.unsentMessages = [];
+    }
+    // ▲▲▲▲▲ ▲▲▲▲▲
 
     messageContainer.innerHTML = '<div id="load-more-btn" class="load-more-btn hidden"></div>';
     
@@ -1185,14 +1192,26 @@ async function openChat(contactId, messageIdToHighlight = null) {
     updateChatHeader();
     chatAiActivityStatus.textContent = contact.activityStatus || '';
     
-    switchToView('chat-window-view');
-    
-    // 我们依然先加载最新的一页历史记录
-    await loadAndDisplayHistory(true);
+            switchToView('chat-window-view');
+        
+        // 我们依然先加载最新的一页历史记录
+        await loadAndDisplayHistory(true);
 
-    // 【【【核心修复逻辑】】】
-    // 如果需要高亮某条消息，我们从这里开始特殊处理
-    if (messageIdToHighlight) {
+        // ▼▼▼ 【【【第二处修改：在这里读取“待办文件夹”】】】 ▼▼▼
+        // 加载完所有已发送的历史后，立刻检查这个AI的“待办文件夹”里有没有东西
+        if (contact.unsentMessages && contact.unsentMessages.length > 0) {
+            // 如果有，就一条一条地把它们显示在聊天界面上
+            for (const msg of contact.unsentMessages) {
+                await displayMessage(msg.content, 'user', { isStaged: true, ...msg });
+            }
+            // 显示完后，滚动到底部
+            scrollToBottom();
+        }
+        // ▲▲▲▲▲ ▲▲▲▲▲
+
+        // 【【【核心修复逻辑】】】
+        // 如果需要高亮某条消息，我们从这里开始特殊处理
+        if (messageIdToHighlight) {
         let targetMessage = messageContainer.querySelector(`[data-message-id="${messageIdToHighlight}"]`);
         
         // 【全新】如果第一页没找到，就启动“智能加载”循环
@@ -1484,102 +1503,140 @@ async function displayMessage(text, role, options = {}) {
     function removeLoadingBubble() {
         if (loadingBubbleElement) { loadingBubbleElement.remove(); loadingBubbleElement = null; }
     }
-    async function dispatchAndDisplayUserMessage(messageData) {
+            async function dispatchAndDisplayUserMessage(messageData) {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+
         const tempId = `staged-${Date.now()}`;
         
-        // 【【【核心终极修复 1：调度中心现在会检查“公共文件夹”了！】】】
         const finalMessageData = { 
             id: tempId, 
             role: 'user', 
             ...messageData,
-            quotedMessage: stagedQuoteData // 把暂存的引用数据一起打包！
+            quotedMessage: stagedQuoteData
         };
 
-        stagedUserMessages.push(finalMessageData);
+        // ▼▼▼ 【【【第三处修改：不再使用临时便签】】】 ▼▼▼
+        // 直接把新消息放进这个AI专属的、永久的“待办文件夹”里
+        contact.unsentMessages.push(finalMessageData);
+        // 【重要】立刻保存一次！确保刷新页面也不会丢失
+        saveAppData();
+        // ▲▲▲▲▲ ▲▲▲▲▲
         
-        // 在显示时，也把完整的引用信息传过去
         await displayMessage(finalMessageData.content, 'user', { isStaged: true, ...finalMessageData });
         
         scrollToBottom();
         
-        // 【重要】在所有工作都完成后，再清空“临时文件夹”
         cancelQuoteReply();
     }
     async function stageUserMessage() {
         const text = chatInput.value.trim();
         if (text === '') return;
         chatInput.value = '';
-        // 它现在只负责打包文字，然后调用中心，其他一概不管
         await dispatchAndDisplayUserMessage({ content: text, type: 'text' });
     }
 
-        async function commitAndSendStagedMessages() {
-        // 【【【核心流程重构 V5.0 - 逻辑固化版】】】
-
-        // 步骤 1: 打包用户输入 (逻辑不变)
-        if (chatInput.value.trim() !== '') {
-            await stageUserMessage();
-        }
-        if (stagedUserMessages.length === 0) return;
+    /**
+     * 【全新】现场勘查员：从墙上（DOM）恢复被遗忘的“便利贴”（staged messages）
+     */
+    function rebuildStagedMessagesFromDOM() {
+        // 如果记事本（stagedUserMessages）里本来就有东西，说明没失忆，不需要勘查
+        if (stagedUserMessages.length > 0) return;
 
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
+        
+        // 开始“现场勘查”
+        document.querySelectorAll('.message-row[data-staged="true"]').forEach(row => {
+            const messageId = row.dataset.messageId;
+            // 拿着“便利贴”的ID去“历史档案”（chatHistory）里反查，确保这不是一张伪造的便利贴
+            // 这一步是为了防止把已经发送的消息错误地又加回来
+            const alreadySent = contact.chatHistory.some(msg => msg.id === messageId);
 
-        // 步骤 2: 存档 (逻辑不变)
-        stagedUserMessages.forEach(msg => {
+            if (!alreadySent) {
+                // 勘查成功！这是一张被遗忘的真便利贴，我们需要重建它的所有信息
+                // 注意：我们无法完美恢复所有复杂信息（如红包数据），但至少能恢复文本内容
+                const messageContentElem = row.querySelector('.message');
+                let content = messageContentElem ? messageContentElem.textContent : '';
+                let type = 'text'; // 默认为文本
+
+                if (row.querySelector('.message-image-user')) type = 'image';
+                if (row.querySelector('.message-voice')) type = 'voice';
+                if (row.querySelector('.message-sticker')) type = 'sticker';
+
+                // 把勘查到的信息，重新记回“记事本”
+                stagedUserMessages.push({
+                    id: messageId,
+                    role: 'user',
+                    content: content,
+                    type: type
+                });
+            }
+        });
+    }
+
+        async function commitAndSendStagedMessages() {
+        // 【核心修复】第一步：在做任何事之前，先命令“管家”进行“现场勘查”！
+        // ▼▼▼ 【【【第二处修改：删除下面这一行代码】】】 ▼▼▼
+        // rebuildStagedMessagesFromDOM();  <-- 把这一行删掉
+
+        // 第二步：像以前一样，处理当前输入框里的新内容
+        if (chatInput.value.trim() !== '') {
+            await stageUserMessage();
+        }
+        
+                // 第三步：现在再检查“记事本”，它已经是完整的了！
+                const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+
+        // ▼▼▼ 【【【第三处修改：在这里替换数组名】】】 ▼▼▼
+        contact.unsentMessages.forEach(msg => {
+        // ▲▲▲▲▲ ▲▲▲▲▲
             const messageToSave = {
                 role: 'user', timestamp: Date.now(), ...msg,
                 id: msg.id || `${Date.now()}-${Math.random()}`
             };
             contact.chatHistory.push(messageToSave);
         });
-
-        // 步骤 3: 【【【核心逻辑重塑】】】决策AI的反应并“固化”状态
+        
         let shouldCallAI = true;
 
         if (contact.isScheduleEnabled) {
             const activity = calculateCurrentActivity(contact.schedule);
             if (activity.isAwake === false) {
                 contact.consecutiveMessagesWhileSleeping++;
-                const wakeupChance = contact.consecutiveMessagesWhileSleeping * 0.15; // 从0.2改为0.15
+                const wakeupChance = contact.consecutiveMessagesWhileSleeping * 0.08;
 
                                 if (Math.random() < wakeupChance) {
-                    // 决策：吵醒AI
                     forceRestartContext = true;
-                    contact.consecutiveMessagesWhileSleeping = 0; // 吵醒后，计数器归零
-
-                    // 【【【核心终极修复：把“钥匙”放到正确的口袋里！】】】
+                    contact.consecutiveMessagesWhileSleeping = 0; 
                     contact.schedule.forcefullyWokenAt = Date.now();
-
                 } else {
-                    // 决策：AI继续睡
                     displayMessage(`${contact.remark} 正在睡觉，似乎没有听到...`, 'system', { isNew: true, type: 'system' });
                     shouldCallAI = false; 
                 }
             } else {
-                // 如果AI是醒着的，确保计数器为零
                 contact.consecutiveMessagesWhileSleeping = 0;
             }
         } else {
-            // 如果作息功能关闭，也确保计数器为零
             contact.consecutiveMessagesWhileSleeping = 0;
         }
 
-        // 步骤 4: 统一清理和保存
-        document.querySelectorAll('[data-staged="true"]').forEach(el => {
+                document.querySelectorAll('[data-staged="true"]').forEach(el => {
             el.removeAttribute('data-staged');
         });
-        stagedUserMessages = [];
+        
+        // ▼▼▼ 【【【第四处修改：清空正确的文件夹并保存】】】 ▼▼▼
+        // 转移完成后，立刻清空“待办文件夹”
+        contact.unsentMessages = [];
+        // 【重要】最后，把所有改动（档案转移+清空待办）一次性永久保存
+        saveAppData();
+        // ▲▲▲▲▲ ▲▲▲▲▲
 
-        // 【【【最关键的修复 V2.0：更新活动时间戳并保存】】】
-        // 每当用户发送消息，我们都更新“最后互动时间”，就像按下了闹钟的“再睡一会”按钮
         contact.schedule.lastInteractionTimestamp = Date.now();
 
-        // 然后，把所有状态变化（包括chatHistory的更新、计数器、和最新的互动时间）
-        // 用 saveAppData() 进行一次最终的、权威的“盖章”保存！
         saveAppData();
 
-        // 步骤 5: 触发后续任务
         triggerAutoSummaryIfNeeded();
 
         if (shouldCallAI) {
