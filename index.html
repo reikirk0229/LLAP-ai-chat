@@ -321,12 +321,31 @@
                         <span class="arrow">&gt;</span>
                     </div>
                 </div>
-                <div class="settings-group">
+                                <div class="settings-group">
                     <div class="settings-item"><span>设为置顶</span><label class="switch"><input type="checkbox" id="cs-pin-toggle"><span class="slider"></span></label></div>
                     <div class="settings-item">
                         <span>允许AI主动求爱</span>
                         <label class="switch"><input type="checkbox" id="cs-propose-toggle"><span class="slider"></span></label>
                     </div>
+                </div>
+
+                <!-- ▼▼▼ 【【【全新：真实作息模拟，就放在这里！】】】 ▼▼▼ -->
+                <div class="settings-group">
+                    <div class="settings-item">
+                        <span>启用真实作息模拟</span>
+                        <div class="switch">
+                            <input type="checkbox" id="cs-schedule-toggle">
+                            <label for="cs-schedule-toggle" class="slider"></label>
+                        </div>
+                    </div>
+                    <div class="settings-item" id="cs-edit-schedule">
+                        <span>编辑生活作息</span>
+                        <span class="arrow">></span>
+                    </div>
+                </div>
+                <!-- ▲▲▲▲▲ 真实作息模拟结束 ▲▲▲▲▲ -->
+
+                <div class="settings-group">
                     <div class="settings-item"><span>导出/导入聊天记录</span><span class="arrow">&gt;</span></div>
                     <div class="settings-item" id="cs-restart-context">
                         <span>刷新AI记忆</span>
@@ -973,7 +992,80 @@
     </div>
     </div>
     </div>
+<!-- ▼▼▼ 【【【全新：AI生活作息编辑器弹窗】】】 ▼▼▼ -->
+    <div id="schedule-editor-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>编辑生活作息</h3>
+                <button id="close-schedule-editor-btn" class="close-button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- 睡眠习惯 -->
+                <div class="form-group">
+                    <label>睡眠习惯</label>
+                    <div class="schedule-item-card">
+                        <select id="schedule-sleep-type" class="form-control">
+                            <option value="regular">规律作息</option>
+                            <option value="irregular">不规律作息</option>
+                        </select>
+                        <div class="schedule-time-range">
+                            <input type="time" id="schedule-sleep-start">
+                            <span>至</span>
+                            <input type="time" id="schedule-sleep-end">
+                        </div>
+                    </div>
+                </div>
+                <!-- ▼▼▼ 【【【全新：三餐时间】】】 ▼▼▼ -->
+                <div class="form-group">
+                    <label>三餐习惯</label>
+                    <div class="schedule-item-card">
+                        <select id="schedule-meals-type" class="form-control">
+                            <option value="regular">三餐规律</option>
+                            <option value="irregular">三餐不规律</option>
+                        </select>
+                        <!-- 【核心改造】我们为这个容器增加一个 "vertical" 标识，并重构内部结构 -->
+                        <div class="schedule-time-range vertical">
+                            <div class="time-input-row">
+                                <label for="schedule-meals-breakfast">早餐时间</label>
+                                <input type="time" id="schedule-meals-breakfast">
+                            </div>
+                            <div class="time-input-row">
+                                <label for="schedule-meals-lunch">午餐时间</label>
+                                <input type="time" id="schedule-meals-lunch">
+                            </div>
+                            <div class="time-input-row">
+                                <label for="schedule-meals-dinner">晚餐时间</label>
+                                <input type="time" id="schedule-meals-dinner">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- ▲▲▲▲▲ 三餐时间结束 ▲▲▲▲▲ -->
 
+                <!-- 工作/学习 -->
+                <div class="form-group">
+                    <label>工作/学习安排</label>
+                    <div id="schedule-work-list">
+                        <!-- 工作项将由JS动态生成在这里 -->
+                    </div>
+                    <button id="add-work-item-btn" class="add-schedule-item-btn">+ 添加工作项</button>
+                </div>
+
+                <!-- 休闲娱乐 -->
+                <div class="form-group">
+                    <label>休闲娱乐</label>
+                    <div id="schedule-leisure-list">
+                        <!-- 休闲项将由JS动态生成在这里 -->
+                    </div>
+                    <button id="add-leisure-item-btn" class="add-schedule-item-btn">+ 添加休闲活动</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="save-schedule-btn" class="modal-button primary">保存作息</button>
+            </div>
+        </div>
+    </div>
+    <!-- ▲▲▲▲▲ 作息编辑器弹窗结束 ▲▲▲▲▲ -->
 
 
     <!-- ▼▼▼ 【【【全新：引入flatpickr日历功能】】】 ▼▼▼ -->
