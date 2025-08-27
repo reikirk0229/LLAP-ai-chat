@@ -1001,20 +1001,26 @@
             </div>
             <div class="modal-body">
                 <!-- 睡眠习惯 -->
-                <div class="form-group">
-                    <label>睡眠习惯</label>
-                    <div class="schedule-item-card">
-                        <select id="schedule-sleep-type" class="form-control">
-                            <option value="regular">规律作息</option>
-                            <option value="irregular">不规律作息</option>
-                        </select>
-                        <div class="schedule-time-range">
-                            <input type="time" id="schedule-sleep-start">
-                            <span>至</span>
-                            <input type="time" id="schedule-sleep-end">
-                        </div>
-                    </div>
-                </div>
+<div class="form-group">
+    <label>睡眠习惯</label>
+    <div class="schedule-item-card">
+        <select id="schedule-sleep-type" class="form-control">
+            <option value="regular">规律作息</option>
+            <option value="irregular">不规律作息</option>
+        </select>
+        <!-- 【核心改造】我们把这里也改成和“三餐”一样的垂直布局，彻底解决挤压问题 -->
+        <div class="schedule-time-range vertical">
+            <div class="time-input-row">
+                <label for="schedule-sleep-start">睡觉时间</label>
+                <input type="time" id="schedule-sleep-start" value="23:00">
+            </div>
+            <div class="time-input-row">
+                <label for="schedule-sleep-end">起床时间</label>
+                <input type="time" id="schedule-sleep-end" value="07:00">
+            </div>
+        </div>
+    </div>
+</div>
                 <!-- ▼▼▼ 【【【全新：三餐时间】】】 ▼▼▼ -->
                 <div class="form-group">
                     <label>三餐习惯</label>
@@ -1066,6 +1072,66 @@
         </div>
     </div>
     <!-- ▲▲▲▲▲ 作息编辑器弹窗结束 ▲▲▲▲▲ -->
+        <!-- ▼▼▼ 【【【全新：星期选择器弹窗】】】 ▼▼▼ -->
+    <div id="day-selector-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 300px;">
+            <div class="modal-header">
+                <h3>选择重复日期</h3>
+            </div>
+            <div class="modal-body">
+                <div id="day-selector-grid" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
+                    <!-- 星期按钮将由JS动态生成在这里 -->
+                </div>
+            </div>
+            <div class="modal-footer-split">
+                <button id="cancel-day-select-btn" class="modal-button secondary">取消</button>
+                <button id="save-day-select-btn" class="modal-button primary">确定</button>
+            </div>
+        </div>
+    </div>
+    <!-- ▲▲▲▲▲ 星期选择器弹窗结束 ▲▲▲▲▲ -->
+         <!-- ▼▼▼ 【【【全新 V2.0：单个作息项编辑器弹窗（精装修版）】】】 ▼▼▼ -->
+    <div id="schedule-item-editor-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="schedule-item-editor-title">编辑活动</h3>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>活动名称</label>
+                    <input type="text" id="item-editor-name" class="form-control">
+                </div>
+                                <!-- 1. 【UI终极修复】恢复成和“睡眠习惯”一样的、最简单的垂直布局 -->
+                <div class="schedule-time-range vertical">
+                    <div class="time-input-row">
+                        <label>开始时间</label>
+                        <input type="time" id="item-editor-startTime">
+                    </div>
+                    <div class="time-input-row">
+                        <label>结束时间</label>
+                        <input type="time" id="item-editor-endTime">
+                    </div>
+                </div>
+                <div class="time-input-row">
+                    <label>重复日期</label>
+                    <button id="item-editor-days-btn" class="schedule-display-btn">未设置</button>
+                </div>
+                <div class="time-input-row">
+                    <label>发生概率</label>
+                    <button id="item-editor-probability-btn" class="schedule-display-btn">100%</button>
+                </div>
+                <!-- 2. 【功能新增】在这里加上删除按钮 -->
+                <div style="margin-top: 20px;">
+                    <button id="delete-item-editor-btn" class="delete-schedule-item-btn" style="width: 100%;">删除此活动</button>
+                </div>
+            </div>
+            <div class="modal-footer-split">
+                <button id="cancel-item-editor-btn" class="modal-button secondary">取消</button>
+                <button id="save-item-editor-btn" class="modal-button primary">保存</button>
+            </div>
+        </div>
+    </div>
+    <!-- ▲▲▲▲▲ 单个作息项编辑器弹窗结束 ▲▲▲▲▲ -->
 
 
     <!-- ▼▼▼ 【【【全新：引入flatpickr日历功能】】】 ▼▼▼ -->
