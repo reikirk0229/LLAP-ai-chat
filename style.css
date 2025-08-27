@@ -4106,3 +4106,97 @@ input:checked + .slider:before {
 #image-resize-controls input[type=range] {
     width: 80px; /* 将滑块的长度缩短 */
 }
+/* --- 【全新】生活作息编辑器样式 --- */
+.schedule-item-card {
+    background: #f7f8fa;
+    border: 1px solid #e0e4e8;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 10px;
+}
+.schedule-item-card .form-control {
+    width: 100%;
+    margin-bottom: 10px;
+}
+.schedule-time-range {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.schedule-time-range input[type="time"] {
+    flex: 1;
+}
+.schedule-days-selector {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.schedule-days-selector label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    font-size: 12px;
+}
+.probability-slider-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.probability-slider-group input[type="range"] {
+    flex-grow: 1;
+}
+.add-schedule-item-btn {
+    width: 100%;
+    padding: 10px;
+    border: 1px dashed #ccc;
+    background-color: #f9f9f9;
+    cursor: pointer;
+    border-radius: 8px;
+    font-weight: bold;
+    color: #555;
+}
+.delete-schedule-item-btn {
+    background: #fbe9e7;
+    color: #c62828;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-top: 10px;
+}
+/* --- 【全新 V3.0】作息编辑器UI终极修复补丁 (垂直布局版) --- */
+
+/* 1. 改造主容器，让它垂直堆叠内部的每一行 */
+.schedule-time-range.vertical {
+    display: flex;
+    flex-direction: column; /* 【核心】改为垂直方向！ */
+    gap: 12px; /* 设置每行之间的垂直间距 */
+}
+
+/* 2. 定义每一行（标签+输入框）的样式 */
+.time-input-row {
+    display: flex;
+    justify-content: space-between; /* 让标签和输入框左右两端对齐 */
+    align-items: center; /* 垂直居中 */
+}
+
+/* 3. 设置标签的样式 */
+.time-input-row label {
+    font-size: 14px;
+    color: #555;
+    font-weight: 600; /* 加粗，更清晰 */
+}
+
+/* 4. 设置输入框的样式，确保它有足够的宽度并恢复舒适的内边距 */
+#schedule-editor-modal .time-input-row input[type="time"] {
+    width: 120px; /* 给一个固定的、足够大的宽度 */
+    padding: 8px; /* 恢复一个舒适的内边距 */
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    text-align: center;
+}
+/* 核心修复：给三餐时间的文字标签增加一个右边的“安全距离” */
+.time-input-row label {
+    margin-right: 15px; /* 你可以调整这个数值来改变空隙的大小 */
+}
