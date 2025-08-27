@@ -286,34 +286,68 @@ async function formatHistoryForApi(history) {
     const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
     if (!contact) return [];
 
-    return Promise.all(
+    const formattedMessages = await Promise.all(
         history.map(async (msg) => {
+            if (!msg || !msg.role) return null; // 基础安全检查
+
+            // 【【【全新智能翻译模块 V5.0】】】
+            // 规则1：AI的“内心独白”是唯一需要被彻底过滤掉的，因为它不属于对话历史
+            if (msg.type === 'thought') {
+                return null;
+            }
+
+            // 规则2：翻译“撤回”事件
+            if (msg.type === 'recalled') {
+                const recaller = msg.role === 'user' ? '我' : contact.name;
+                return { role: 'user', content: `[系统提示：刚才 ${recaller} 撤回了一条消息]` };
+            }
+
+            // 规则3：翻译“系统提示”事件
+            if (msg.type === 'system') {
+                return { role: 'user', content: `[系统事件：${msg.content}]` };
+            }
+
+            // 规则4：处理所有常规对话消息 (用户和AI)
             const role = msg.role;
             const content = msg.content || '';
 
+            // 处理图片消息
             if (role === 'user' && msg.type === 'image' && msg.imageId) {
                 try {
                     const imageBlob = await db.getImage(msg.imageId);
                     if (imageBlob) {
                         const imageDataUrl = await blobToDataURL(imageBlob);
-                        return { role: 'user', content: [ { type: "text", text: content }, { type: "image_url", image_url: { url: imageDataUrl } } ] };
+                        return { role: 'user', content: [{ type: "text", text: content || '图片' }, { type: "image_url", image_url: { url: imageDataUrl } }] };
                     }
-                } catch (error) { return { role: role, content: content }; }
+                } catch (error) {
+                    console.error("图片读取失败，将作为文本发送", error);
+                }
+                return { role: 'user', content: `[我发送了一张图片，描述是：${content || '无'}]` };
             }
 
+            // 为其他非文本消息添加描述性前缀
+            let finalContent = content;
             if (msg.type === 'sticker') {
-                const stickerDesc = content.replace('[表情] ', '').trim();
-                return { role: role, content: `[用户发送了一个表情，表达的情绪或动作是：${stickerDesc}]` };
+                finalContent = `[我发送了一个表情，表达的意思是：${content.replace('[表情] ', '').trim()}]`;
+            } else if (msg.type === 'voice') {
+                finalContent = `[我发送了一条语音，内容是：${content}]`;
+            } else if (msg.type === 'red-packet') {
+                finalContent = `[我发送了一个红包，祝福语是：${content}]`;
+            } else if (msg.type === 'relationship_proposal') {
+                finalContent = `[我发起了情侣关系邀请]`;
+            }
+            
+            // 最后的安全保障：确保任何情况下内容都不为空
+            if (typeof finalContent === 'string' && finalContent.trim() === '') {
+                 return { role: role, content: `[发送了一条空消息]` };
             }
 
-            let contentPrefix = '';
-            if (msg.type === 'voice') { contentPrefix = '[语音] '; } 
-            else if (msg.type === 'red-packet') { contentPrefix = '[红包] '; } 
-            else if (msg.type === 'relationship_proposal') { contentPrefix = '[关系邀请] '; }
-
-            return { role: role, content: `${contentPrefix}${content}` };
+            return { role: role, content: finalContent };
         })
     );
+
+    // 最终质检：过滤掉所有被明确标记为 null 的消息 (比如内心独白)
+    return formattedMessages.filter(Boolean);
 }
     function renderUserStickerPanel() {
         userStickerPanel.innerHTML = ''; // 清空面板
@@ -853,10 +887,29 @@ async function formatHistoryForApi(history) {
     }
 
     // ▼▼▼ 【【【核心新增：为每个AI伙伴的档案里增加一个“书签”】】】 ▼▼▼
-    // 这个书签记录了AI应该从哪里开始读取上下文，默认为0（从头开始）
     if (c.contextStartIndex === undefined) {
         c.contextStartIndex = 0;
     }
+
+    // 【【【全新：为“真实作息”功能预留数据位】】】
+    if (c.isScheduleEnabled === undefined) {
+        c.isScheduleEnabled = false; // 默认关闭
+    }
+    if (!c.schedule) {
+        // 为“人生剧本”创建一个空的默认模板
+        c.schedule = {
+            sleep: { type: 'regular', bedtime: '23:00', wakeupTime: '07:00' },
+            meals: { type: 'regular', breakfast: '08:00', lunch: '12:00', dinner: '18:00' },
+            work: [],
+            leisure: [],
+            lastInteractionTimestamp: 0 // 【核心新增】为旧角色补上互动时间戳
+        };
+    }
+    // 【新增】为AI增加一个“被骚扰”计数器
+    if (c.consecutiveMessagesWhileSleeping === undefined) {
+        c.consecutiveMessagesWhileSleeping = 0;
+    }
+    
     // ▼▼▼ 【【【核心新增：为AI增加“名片”和“激活状态”】】】 ▼▼▼
     // 1. 公开名片，默认为null，代表还未生成
     if (c.publicProfileCard === undefined) {
@@ -1168,6 +1221,19 @@ if (!contact.hasBeenOpened) {
     contact.hasBeenOpened = true;
     saveAppData();
 }
+updateChatHeader();
+    // 【【【全新：打开聊天时，更新AI的作息状态】】】
+    if (contact.isScheduleEnabled) {
+        const activity = calculateCurrentActivity(contact.schedule);
+        contact.currentActivity = activity.status; // 将状态暂存，方便AI调用
+        chatAiActivityStatus.textContent = activity.status;
+    } else {
+        contact.currentActivity = null; // 关闭时清空状态
+        chatAiActivityStatus.textContent = contact.activityStatus || '';
+    }
+    // ▲▲▲▲▲ 作息状态更新结束 ▲▲▲▲▲
+    
+    switchToView('chat-window-view');
 }
     
 async function createMessageElement(text, role, options = {}) {
@@ -1447,39 +1513,78 @@ async function displayMessage(text, role, options = {}) {
         await dispatchAndDisplayUserMessage({ content: text, type: 'text' });
     }
 
-    async function commitAndSendStagedMessages() {
-        if (chatInput.value.trim() !== '') {
-            await stageUserMessage(); // 【重要】等待文字消息也处理完
-        }
+        async function commitAndSendStagedMessages() {
+        // 【【【核心流程重构 V5.0 - 逻辑固化版】】】
 
+        // 步骤 1: 打包用户输入 (逻辑不变)
+        if (chatInput.value.trim() !== '') {
+            await stageUserMessage();
+        }
         if (stagedUserMessages.length === 0) return;
 
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+
+        // 步骤 2: 存档 (逻辑不变)
+        stagedUserMessages.forEach(msg => {
+            const messageToSave = {
+                role: 'user', timestamp: Date.now(), ...msg,
+                id: msg.id || `${Date.now()}-${Math.random()}`
+            };
+            contact.chatHistory.push(messageToSave);
+        });
+
+        // 步骤 3: 【【【核心逻辑重塑】】】决策AI的反应并“固化”状态
+        let shouldCallAI = true;
+
+        if (contact.isScheduleEnabled) {
+            const activity = calculateCurrentActivity(contact.schedule);
+            if (activity.isAwake === false) {
+                contact.consecutiveMessagesWhileSleeping++;
+                const wakeupChance = contact.consecutiveMessagesWhileSleeping * 0.15; // 从0.2改为0.15
+
+                                if (Math.random() < wakeupChance) {
+                    // 决策：吵醒AI
+                    forceRestartContext = true;
+                    contact.consecutiveMessagesWhileSleeping = 0; // 吵醒后，计数器归零
+
+                    // 【【【核心终极修复：把“钥匙”放到正确的口袋里！】】】
+                    contact.schedule.forcefullyWokenAt = Date.now();
+
+                } else {
+                    // 决策：AI继续睡
+                    displayMessage(`${contact.remark} 正在睡觉，似乎没有听到...`, 'system', { isNew: true, type: 'system' });
+                    shouldCallAI = false; 
+                }
+            } else {
+                // 如果AI是醒着的，确保计数器为零
+                contact.consecutiveMessagesWhileSleeping = 0;
+            }
+        } else {
+            // 如果作息功能关闭，也确保计数器为零
+            contact.consecutiveMessagesWhileSleeping = 0;
+        }
+
+        // 步骤 4: 统一清理和保存
         document.querySelectorAll('[data-staged="true"]').forEach(el => {
             el.removeAttribute('data-staged');
         });
-        
-        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        if(contact) {
-            stagedUserMessages.forEach(msg => {
-                if (msg.type === 'relationship_breakup') {
-                    appData.appSettings.partnerId = null;
-                    updateChatHeader();
-                    renderChatList();
-                }
-                const messageToSave = {
-                    role: 'user',
-                    timestamp: Date.now(),
-                    ...msg,
-                    id: msg.id || `${Date.now()}-${Math.random()}`
-                };
-                contact.chatHistory.push(messageToSave);
-            });
-        }
-        
-        saveAppData();
-        triggerAutoSummaryIfNeeded();
         stagedUserMessages = [];
-        getAiResponse(); // 【关键】现在，所有消息（包括图片描述）都已在chatHistory里，AI可以读到了！
+
+        // 【【【最关键的修复 V2.0：更新活动时间戳并保存】】】
+        // 每当用户发送消息，我们都更新“最后互动时间”，就像按下了闹钟的“再睡一会”按钮
+        contact.schedule.lastInteractionTimestamp = Date.now();
+
+        // 然后，把所有状态变化（包括chatHistory的更新、计数器、和最新的互动时间）
+        // 用 saveAppData() 进行一次最终的、权威的“盖章”保存！
+        saveAppData();
+
+        // 步骤 5: 触发后续任务
+        triggerAutoSummaryIfNeeded();
+
+        if (shouldCallAI) {
+            getAiResponse();
+        }
     }
         /**
      * 【全新辅助函数】将图片文件(Blob)转换为API能识别的Base64文本
@@ -1634,9 +1739,11 @@ async function displayMessage(text, role, options = {}) {
                 return `- ${new Date(tx.timestamp).toLocaleDateString('zh-CN')} 花费 ${tx.amount} 元用于 ${tx.description}`;
             }).join('\n');
         }
-        // ▼▼▼ 【【【全新：AI记忆刷新闹钟】】】 ▼▼▼
+                // ▼▼▼ 【【【全新：AI记忆刷新闹钟】】】 ▼▼▼
         let periodicReminderPrompt = '';
-        const messageCount = contact.chatHistory.length;
+        // 【【【核心终极修复：使用完整的历史记录来计算消息总数】】】
+        // 解释：我们必须把“待发送”的消息也算进去，才能得到最准确的当前消息总数
+        const messageCount = contact.chatHistory.length + stagedUserMessages.length;
 
         // 规则1：强力闹钟 (每60条响一次)，提醒核心人设
         if (messageCount > 0 && messageCount % 60 === 0) {
@@ -1785,7 +1892,7 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
 - **"viewLedger" (布尔值, 仅在回应记账时必须)**: \`true\` 代表你决定查看用户账本，\`false\` 代表不查看。
 - **"activity" (可选字段)**: 只有当你觉得你的虚拟状态【发生了有意义的改变时】，才包含这个字段。它是一个描述你新状态的【简短】字符串 (例如: "去洗澡了", "躺在床上", "开始看书")。
   - **重要原则**: 如果你的状态没有变化（比如你一直在看书），就【绝对不要】在你的JSON输出中包含 "activity" 字段。系统会自动维持你之前的状态。
-- **"reply"**: 一个字符串数组，包含了你作为角色的所有聊天消息（包括特殊指令）。
+- **"reply"**: 一个字符串数组，包含了你作为角色的所有聊天消息（包括特殊指令）。【【【究极规则：此数组中的所有元素都必须是非空的字符串，绝对不能包含 null 或 undefined 值！】】】
 - **"suggestions"**: 一个包含4条字符串的数组，是为用户准备的回复建议。它【必须】遵循以下设计原则：
   - **建议1 & 2 (温和正面)**: 设计两条【温和或积极】的回答。其中一条【必须】是你最期望听到的、能让关系升温的回答。
   - **建议3 (中立探索)**: 设计一条【中立或疑问】的回答。
@@ -1795,38 +1902,109 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
 请根据上面的所有设定和下面的对话历史，对用户的最新消息做出回应，并只输出符合上述格式的JSON对象。`;
 
         
-        // 【【【核心终极改造 V7.0：在这里为最后一条消息注入“多模态”能力】】】
+        // 【【【全新V2.0：“三明治注入法”准备前置指令】】】
+        let prefixPrompt = "";
+
+        if (forceRestartContext === true) {
+            // 这是被吵醒的特殊情况
+            prefixPrompt = `
+# 【【【最高优先级情景模拟：被吵醒】】】
+你刚才正在熟睡，但是用户的消息把你强行吵醒了。
+你现在非常困倦，可能还有点起床气。
+你的回复【必须】体现出这种刚被吵醒的状态（例如：迷糊、不耐烦、说话简短）。
+---
+`;
+            // 用完“吵醒”信号后，立刻关掉，防止下次误用
+            forceRestartContext = false;
+        }
+        // 如果AI没有在睡觉，但处于其他活动状态（比如工作、吃饭）
+        else if (contact.isScheduleEnabled && contact.currentActivity && contact.currentActivity !== "在线") {
+            // 这是正常的作息状态
+            prefixPrompt = `
+# 【【【最高优先级情景模拟】】】
+当前真实时间是：${new Date().toLocaleString('zh-CN')}。
+你的个人状态不是“随时待命”，而是【${contact.currentActivity}】。
+你的所有回复都【必须】严格基于这个真实状态，展现出对应的语气和内容。
+---
+`;
+        }
+        // 注意：我们删除了多余的 contact.consecutiveMessagesWhileSleeping = 0; 和 saveAppData();
+
+        // 【【【终极修复：在这里设立“总管”，提前合并好最终的指令大纲！】】】
+        const finalSystemPrompt = prefixPrompt + finalPrompt;
+
+               // 【【【核心终极改造 V9.0：多模态消息安全组装模块】】】
         let finalMessagesForApi;
 
-        // 1. 先检查我们的“日记包裹”里有没有东西
-        if (diaryParts.length > 0) {
-            // 如果有，就进行“升级改造”
-            const lastUserMessageFromApiHistory = messagesForApi.pop(); // 先把最后一条用户消息拿出来
-            
-            // 创建一个新的、内容是数组的“豪华版”用户消息
-            const multiModalUserMessage = {
-                role: 'user',
-                content: [
-                    // a. 把用户在聊天框里说的话放进去
-                    { type: 'text', text: lastUserMessageFromApiHistory.content },
-                    // b. 把整个“日记包裹”也放进去
-                    ...diaryParts
-                ]
-            };
-            
-            // 把改造后的消息放回队伍，完成最终的API请求队列
-            finalMessagesForApi = [
-                { role: "system", content: finalPrompt },
-                ...messagesForApi, // 这是去掉了最后一条的旧历史
-                multiModalUserMessage // 这是升级后的新消息
-            ];
+        // 默认情况下，最终要发送的就是系统指令+格式化后的历史记录
+        let baseMessages = [ { role: "system", content: finalSystemPrompt }, ...messagesForApi ];
 
+        // 只有在日记内容真的存在时，才尝试进行“智能合并”
+        if (diaryParts.length > 0) {
+            const lastUserMessage = baseMessages.pop(); // 从基础消息队列里取出最后一条用户消息
+
+            let combinedContent = [];
+
+            // 步骤1：安全地解析上一条消息的内容
+            if (lastUserMessage && lastUserMessage.content) {
+                if (Array.isArray(lastUserMessage.content)) {
+                    combinedContent.push(...lastUserMessage.content);
+                } else if (typeof lastUserMessage.content === 'string') {
+                    combinedContent.push({ type: 'text', text: lastUserMessage.content });
+                }
+            }
+
+            // 步骤2：把日记内容也加进去
+            combinedContent.push(...diaryParts);
+
+            // 步骤3：进行最严格的“出口质检”
+            const validContent = combinedContent.filter(part => {
+                if (!part || !part.type) return false;
+                if (part.type === 'text') return typeof part.text === 'string' && part.text.trim() !== '';
+                if (part.type === 'image_url') return part.image_url && typeof part.image_url.url === 'string';
+                return false;
+            });
+            
+            // 步骤4：最终决策
+            if (validContent.length > 0) {
+                // 只有质检合格，才创建包含合并内容的新消息
+                const multiModalUserMessage = { role: 'user', content: validContent };
+                finalMessagesForApi = [...baseMessages, multiModalUserMessage];
+            } else {
+                // 如果质检后啥也不剩，就放弃合并，把原始消息放回去，保证程序绝对不崩溃
+                finalMessagesForApi = [...baseMessages, lastUserMessage].filter(Boolean);
+            }
         } else {
-            // 如果“日记包裹”是空的，说明一切照旧，不需要改造
-            finalMessagesForApi = [ { role: "system", content: finalPrompt }, ...messagesForApi ];
+            // 如果没有日记内容，就直接使用最开始准备好的基础消息队列
+            finalMessagesForApi = baseMessages;
         }
         
-        try {
+                try {
+            // ============================================================
+            //                 THE FINAL FAILSAFE CHECKPOINT
+            // ============================================================
+            // 在发送之前，对最终要发送的每一条消息进行最后、最严格的审查。
+            for (let i = 0; i < finalMessagesForApi.length; i++) {
+                const msg = finalMessagesForApi[i];
+                // 检查1: 消息本身或其内容是否存在
+                if (!msg || !msg.content) {
+                    throw new Error(`[Failsafe] 消息 #${i} 的 'content' 缺失或无效。消息体: ${JSON.stringify(msg)}`);
+                }
+                // 检查2: 如果内容是数组 (多模态消息)，确保它不是空数组
+                if (Array.isArray(msg.content) && msg.content.length === 0) {
+                     throw new Error(`[Failsafe] 消息 #${i} 的 'content' 是一个空数组。`);
+                }
+                // 检查3: 如果内容是字符串，确保它不是纯粹的空格
+                if (typeof msg.content === 'string' && msg.content.trim() === '') {
+                    throw new Error(`[Failsafe] 消息 #${i} 的 'content' 是一个空字符串。`);
+                }
+            }
+                        // ============================================================
+
+            // 【【【终极调试代码：安装监控探针】】】
+            // 这行代码会把我们即将发送给AI的所有内容，在浏览器控制台里打印出来。
+            console.log('DEBUG: Sending to API:', JSON.stringify(finalMessagesForApi, null, 2));
+
             let requestUrl = appData.appSettings.apiUrl;
             if (!requestUrl.endsWith('/chat/completions')) { requestUrl = requestUrl.endsWith('/') ? requestUrl + 'chat/completions' : requestUrl + '/chat/completions'; }
             const response = await fetch(requestUrl, {
@@ -1882,12 +2060,19 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
                 }
                 await displayMessage(`${contact.name} 查看了你的账本`, 'system', { isNew: true, type: 'system' });
                 await getAiLedgerReview();
-            } else {
-                if (replies.length > 0) {
+           } else {
+                // ★★★【【【终极修复 V4.0：数据净化与安全处理】】】★★★
+                if (replies && replies.length > 0) {
+                    // 步骤1：在处理前，对AI返回的原始回复进行严格的“净化”处理。
+                    // 这会过滤掉所有不是有效字符串的“垃圾数据”（如 null, undefined）。
+                    const sanitizedReplies = replies.filter(msg => typeof msg === 'string' && msg.trim() !== '');
+
                     let pendingQuoteData = null;
-                    for (const msg of replies) {
+                    // 步骤2：只遍历“净化后”的、绝对安全的消息列表。
+                    for (const msg of sanitizedReplies) {
                         let promise;
-                        if (msg.trim() === '[RECALL_LAST]') {
+                        // 注意：我们不再需要检查 msg.trim()，因为净化步骤已经保证了这一点。
+                        if (msg === '[RECALL_LAST]') {
                             const lastAiMsg = [...contact.chatHistory].reverse().find(m => m.role === 'assistant' && m.type !== 'system' && m.type !== 'recalled');
                             if (lastAiMsg) { recallMessageByAI(lastAiMsg.id); }
                             continue;
@@ -1986,53 +2171,66 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
 
-        // --- 步骤1：准备所有必要的背景材料 ---
+        // --- 步骤1：【【【全新升级：智能筛选账本 & 注入短期记忆】】】 ---
 
-        // 1a. 用户的账本
-        let ledgerString = "用户还没有任何记账记录。";
+        // 1a. 智能筛选用户的近期账本
+        let ledgerString = "用户最近三天没有任何记账记录。";
         if (appData.userLedger && appData.userLedger.length > 0) {
-            ledgerString = appData.userLedger.slice(-10).map(tx => {
-                const action = tx.type === 'income' ? '收入' : '支出';
-                return `- ${new Date(tx.timestamp).toLocaleDateString('zh-CN')} ${action} ${tx.amount.toFixed(2)} 元用于 ${tx.description}${tx.remarks ? ` (${tx.remarks})` : ''}`;
-            }).join('\n');
+            const threeDaysAgo = new Date();
+            threeDaysAgo.setDate(threeDaysAgo.getDate() - 3); // 计算出3天前的时间点
+
+            const recentTransactions = appData.userLedger.filter(tx => new Date(tx.timestamp) >= threeDaysAgo);
+
+            if (recentTransactions.length > 0) {
+                ledgerString = recentTransactions.map(tx => {
+                    const action = tx.type === 'income' ? '收入' : '支出';
+                    return `- ${new Date(tx.timestamp).toLocaleString('zh-CN')} ${action} ${tx.amount.toFixed(2)} 元用于 ${tx.description}${tx.remarks ? ` (${tx.remarks})` : ''}`;
+                }).join('\n');
+            }
         }
         
-        // 1b. AI自己的世界书和用户人设
+        // 1b. 注入短期记忆：提取最近5条聊天记录
+        const recentHistory = contact.chatHistory.slice(-5).map(m => {
+             const roleName = m.role === 'user' ? (contact.userProfile.name || '用户') : contact.name;
+             return `${roleName}: ${m.content}`;
+        }).join('\n');
+
+        // 1c. AI自己的核心信息 (保持不变)
         const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
         const userPersona = (contact.userProfile && contact.userProfile.persona) ? contact.userProfile.persona : '我是一个普通人。';
 
-        // 1c. AI自己最近说过的话，用于防止重复
-        const lastAiReplies = contact.chatHistory.filter(m => m.role === 'assistant').slice(-3).map(m => m.content).join(' ');
+        // --- 步骤2：【【【全新升级：构建拥有“时间感”和“记忆力”的超级指令】】】 ---
+        const reviewPrompt = `# 任务: 像一个有记性的朋友一样，评论用户的消费
 
-        // --- 步骤2：构建一个信息更丰富、指令更智能的 Prompt ---
-        const reviewPrompt = `# 任务: 像朋友一样聊天 (深度版)
-你是一个AI角色 "${contact.name}"。你刚刚主动查看了你的朋友（用户）的近期账本。
+你是一个AI角色 "${contact.name}"。你刚刚查看了你的朋友（用户）**最近三天**的账本。
 
-## 你的目标
-忘掉“分析”，你的任务是**发起一段自然的、口语化的、符合你完整人设和沟通风格的闲聊**。你需要结合**所有**已知信息，让你的评论充满洞察力。你可以：
-- **结合用户人设**: 如果用户人设是“节俭”，但买了个贵的东西，你可以调侃：“哟，今天怎么这么大方？”
-- **关联世界观**: 如果用户买的东西和你的世界书设定有关（比如“魔法书”），你应该从你的角色视角出发进行评论。
-- **表达关心**: "最近咖啡喝得有点多哦，要注意休息呀。"
-- **提出好奇**: "我看到你买了个新游戏，好玩吗？"
+## 核心目标
+你的任务是发起一段**自然的、口语化的、符合你人设**的闲聊。你的评论必须表现出你**拥有记忆力**和**时间观念**。
 
-## 【【【绝对禁止】】】
-- **禁止重复**: 你刚才说过的话是：“${lastAiReplies}”。你接下来的回复【绝对不能】重复这些观点。请提供全新的、不同的视角或话题。
-- **禁止说教**: 不要用“你的消费结构不合理”这样生硬的语言。
-- **禁止总结**: 不要说“我分析完了”、“总结一下”这类词。
+## 【【【最高优先级指令】】】
+1.  **聚焦近期**: 你的所有评论**必须**优先围绕**最近一两天**的消费展开。
+2.  **利用记忆**: 在评论前，你**必须**先查看下面提供的“短期记忆”，检查你们**刚刚是否已经讨论过**某笔消费。如果讨论过，你的回应**必须**要体现出你记得这件事，**绝对不能**像第一次看到一样去提问！
+3.  **强化时间感**: **今天**是 ${new Date().toLocaleDateString('zh-CN')}。在你的回复中，请使用“昨天”、“今天”这样口语化的词，而不是生硬地复述日期。
 
 ## 【你的完整背景档案】
 - **你的核心人设**: ${contact.persona}
 - **你的世界观 (世界书)**:
 ${worldBookString}
 - **你的沟通风格**: ${contact.chatStyle || '自然发挥即可'}
-- **关于用户 (你正在和TA聊天)**:
+- **关于用户**:
   - **TA的人设**: ${userPersona}
 
 ## 【你刚刚看到的参考信息】
-- **用户的近期账本**:
+### 1. 短期记忆 (你们最近的5条对话)
+\`\`\`
+${recentHistory}
+\`\`\`
+### 2. 用户最近三天的账本
+\`\`\`
 ${ledgerString}
+\`\`\`
 
-# 输出要求
+# 输出要求 (保持不变)
 你的回复【必须】是一个标准的JSON对象，格式如下：
 {
   "reply": ["你的第一句闲聊", "你的第二句闲聊..."],
@@ -2068,7 +2266,6 @@ ${ledgerString}
             }
             
             lastReceivedSuggestions = parsedResponse.suggestions || [];
-            // displaySuggestions(); // <-- 已删除，防止自动弹出
 
         } catch (error) {
             removeLoadingBubble();
@@ -2184,8 +2381,9 @@ async function insertAndGenerateThoughtBubble() {
         historyForApi.unshift(msg);
         currentTokens += messageTokens;
     }
-    const readableHistory = historyForApi.map(m => {
-        const roleName = m.role === 'user' ? (contact.userProfile.name || '用户') : contact.name;
+        const readableHistory = historyForApi.map(m => {
+        // 【【【核心修复：为AI的发言加上明确的身份标识！】】】
+        const roleName = m.role === 'user' ? (contact.userProfile.name || '用户') : `${contact.name} (你)`;
         let cleanContent = m.content || '';
         if (m.type === 'image') {
             const descMatch = cleanContent.match(/^\[模拟图片\]\s*(.+)/);
@@ -2243,6 +2441,12 @@ async function insertAndGenerateThoughtBubble() {
 - **关于用户**:
   - **TA的人设**: \`\`\`${userPersona}\`\`\`
   - **TA的感情状态**: ${relationshipContext}
+
+## 【【【最重要指令：聚焦当下！】】】
+你的内心独白【必须】是你对下面“最近的对话历史”中【最后5-8条】消息的最直接、最真实的反应。你可以利用完整的历史作为背景参考，但你的思考焦点【必须】是当前正在发生的事情。
+## 【【【重要指令：如何解读对话】】】
+在下面的历史记录中，凡是标有“(你)”的行，都是**你自己**说过的话。你的内心独白必须基于这个视角，绝对不能将用户的话错当成你自己的。
+---
 - **最近的对话历史**:
 ${readableHistory}
 
@@ -2597,6 +2801,8 @@ ${readableHistory}
         csPinToggle.checked = contact.isPinned || false;
         // 【新增】根据数据设置“求爱开关”的初始状态
         document.getElementById('cs-propose-toggle').checked = contact.canPropose;
+        // 【【【全新：同步“真实作息”开关的状态】】】
+        document.getElementById('cs-schedule-toggle').checked = contact.isScheduleEnabled || false;
         csMessageCount.textContent = contact.chatHistory.length;
         
         // 【新增】加载并显示自动总结设置
@@ -3013,7 +3219,7 @@ function closeTextEditorModal() {
         });
     }
     
-    function addNewContact() {
+        function addNewContact() {
         const newContactId = Date.now();
         const newContact = {
             id: newContactId,
@@ -3022,14 +3228,26 @@ function closeTextEditorModal() {
             persona: `新伙伴 ${newContactId.toString().slice(-4)}\n这是一个新创建的AI伙伴，等待你为TA注入灵魂。`,
             chatStyle: '',
             userProfile: { name: '你', persona: '我是一个充满好奇心的人。' },
-            worldBook: [], 
-            memory: '', 
-            chatHistory: [], 
-            moments: [], 
+            worldBook: [],
+            memory: '',
+            chatHistory: [],
+            moments: [],
             isPinned: false,
             stickerGroups: [],
-            // 【【【核心新增：为新角色默认开启求爱开关】】】
-            canPropose: true
+            canPropose: true,
+
+            // --- 【【【核心修复：为新角色补全所有“出生证明”信息！】】】 ---
+            isScheduleEnabled: false, // 默认关闭作息模拟
+            schedule: {
+                sleep: { type: 'regular', bedtime: '23:00', wakeupTime: '07:00' },
+                meals: { type: 'regular', breakfast: '08:00', lunch: '12:00', dinner: '18:00' },
+                work: [],
+                leisure: [],
+                lastInteractionTimestamp: 0 // 【核心新增】为新角色初始化互动时间戳
+            },
+            consecutiveMessagesWhileSleeping: 0, // 初始化骚扰计数器
+            publicProfileCard: null, // 初始化公开名片
+            hasBeenOpened: false // 初始化“首次打开”标记
         };
         appData.aiContacts.push(newContact);
         saveAppData();
@@ -3243,18 +3461,19 @@ function closeTextEditorModal() {
         photoUploadInput.addEventListener('change', (e) => handleImageUpload(e.target.files[0], `${activeChatContactId}_photo`, photoPreview));
         
         contactSettingsView.querySelectorAll('.settings-item').forEach(item => {
-    if (item.id !== 'cs-message-count-item' && 
-        item.id !== 'cs-edit-ai-profile' && 
-        item.id !== 'cs-edit-my-profile' && 
-        item.id !== 'cs-summarize-chat' && 
-        item.id !== 'cs-clear-history' && 
-        item.id !== 'cs-delete-contact' && 
-        // ▼▼▼ 【【【核心修复：把新功能ID也加入“白名单”】】】 ▼▼▼
-        item.id !== 'cs-restart-context' && 
-        !item.querySelector('.switch')) {
-        item.addEventListener('click', () => alert('功能开发中，敬请期待！'));
-    }
-});
+            if (item.id !== 'cs-message-count-item' && 
+                item.id !== 'cs-edit-ai-profile' && 
+                item.id !== 'cs-edit-my-profile' && 
+                item.id !== 'cs-summarize-chat' && 
+                item.id !== 'cs-clear-history' && 
+                item.id !== 'cs-delete-contact' && 
+                item.id !== 'cs-restart-context' &&
+                // 【【【终极白名单：把作息编辑按钮也加进来！】】】
+                item.id !== 'cs-edit-schedule' && 
+                !item.querySelector('.switch')) {
+                item.addEventListener('click', () => alert('功能开发中，敬请期待！'));
+            }
+        });
         // --- 【全新】记忆总结相关事件绑定 (最终修正版) ---
         csSummarizeChat.addEventListener('click', handleManualSummary);
         // 【【【核心新增：为“刷新AI记忆”设置项绑定事件】】】
@@ -3680,6 +3899,18 @@ messageContainer.addEventListener('click', (event) => {
 
             closeAccountingModal();
         }
+        // 【【【全新：为“真实作息”开关和按钮绑定事件】】】
+        const scheduleToggle = document.getElementById('cs-schedule-toggle');
+        if(scheduleToggle) {
+            scheduleToggle.addEventListener('change', () => {
+                const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+                if (!contact) return;
+                contact.isScheduleEnabled = scheduleToggle.checked;
+                saveAppData();
+                showToast(`真实作息模拟已${scheduleToggle.checked ? '开启' : '关闭'}`, 'success');
+            });
+        }
+        
         
     }
     
@@ -5254,5 +5485,296 @@ ${chatLog}
     // (请确保 bindEventListeners 函数中有这行代码)
     // bindDiaryEventListeners();
     
+    /**
+     * 【【【全新：AI生活作息模拟器 V1.0】】】
+     * @param {object} schedule - AI的“人生剧本”
+     * @returns {object} - 返回一个包含当前状态和是否清醒的对象
+     */
+    function calculateCurrentActivity(schedule) {
+        const now = new Date();
+
+        
+
+        const currentDay = now.getDay();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const currentTimeInMinutes = currentHour * 60 + currentMinute;
+
+        const timeToMinutes = (timeStr) => {
+            if (!timeStr) return 0;
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return hours * 60 + minutes;
+        };
+        
+       // 1. 最高优先级：判断是否该去睡觉
+        if (schedule && schedule.sleep) {
+            const bedtime = timeToMinutes(schedule.sleep.bedtime);
+            const wakeupTime = timeToMinutes(schedule.sleep.wakeupTime);
+            
+            let isScheduledToSleep = false;
+            // 处理跨天睡眠
+            if (bedtime > wakeupTime) {
+                if (currentTimeInMinutes >= bedtime || currentTimeInMinutes < wakeupTime) {
+                    isScheduledToSleep = true;
+                }
+            } else { // 当天睡眠
+                if (currentTimeInMinutes >= bedtime && currentTimeInMinutes < wakeupTime) {
+                    isScheduledToSleep = true;
+                }
+            }
+
+            // 【【【核心逻辑升级：引入“空闲时间”判断】】】
+            if (isScheduledToSleep) {
+                // 读取上次互动的时间，如果没有就默认为0（很久以前）
+                const lastInteraction = schedule.lastInteractionTimestamp || 0;
+                // 计算从上次互动到现在，过去了多少分钟
+                const idleMinutes = (now.getTime() - lastInteraction) / (1000 * 60);
+
+                // 只有当“按计划该睡觉了”并且“已经闲置超过10分钟”，AI才能去睡！
+                if (idleMinutes > 10) {
+                    // 如果是不规律作息，有小概率熬夜不睡
+                    if (schedule.sleep.type === 'irregular' && Math.random() < 0.15) {
+                        return { status: "在熬夜", isAwake: true };
+                    }
+                    return { status: "睡眠中", isAwake: false };
+                }
+                // 否则，即使到了睡觉时间，只要还在10分钟互动期内，就保持清醒
+            }
+        }
+        
+        // 【【【核心修复：把丢失的“小助手”函数放回来！】】】
+        const checkActivity = (activityList) => {
+            for (const item of activityList) {
+                const days = item.days || [];
+                if (!days.includes(currentDay)) continue;
+
+                const start = timeToMinutes(item.startTime);
+                const end = timeToMinutes(item.endTime);
+
+                if (currentTimeInMinutes >= start && currentTimeInMinutes < end) {
+                    if (Math.random() < (item.probability || 1)) {
+                         return { status: `正在${item.name}`, isAwake: true };
+                    }
+                }
+            }
+            return null;
+        }
+         // 2. 第二优先级：判断是否在吃饭
+        if (schedule && schedule.meals) {
+            const mealTimes = {
+                '吃早餐': timeToMinutes(schedule.meals.breakfast),
+                '吃午饭': timeToMinutes(schedule.meals.lunch),
+                '吃晚饭': timeToMinutes(schedule.meals.dinner)
+            };
+            for (const mealName in mealTimes) {
+                // 饭点前后半小时都算吃饭时间
+                if (Math.abs(currentTimeInMinutes - mealTimes[mealName]) <= 30) {
+                     // 如果三餐不规律，有40%概率错过饭点
+                    if (schedule.meals.type === 'irregular' && Math.random() < 0.4) {
+                        continue; // 跳过，假装没在吃饭
+                    }
+                    return { status: `正在${mealName}`, isAwake: true };
+                }
+            }
+        }
+
+        // 2. 第二优先级：判断是否在工作
+        const workActivity = checkActivity(schedule.work || []);
+        if (workActivity) return workActivity;
+
+        // 3. 第三优先级：判断是否在休闲
+        const leisureActivity = checkActivity(schedule.leisure || []);
+        if (leisureActivity) return leisureActivity;
+        
+        // 4. 默认状态
+        return { status: "在线", isAwake: true };
+    }
+
+/**
+     * 【全新】打开生活作息编辑器
+     */
+    function openScheduleEditor() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact || !contact.schedule) return;
+
+        const schedule = contact.schedule;
+        
+        // 填充睡眠数据
+        document.getElementById('schedule-sleep-type').value = schedule.sleep.type || 'regular';
+        document.getElementById('schedule-sleep-start').value = schedule.sleep.bedtime || '23:00';
+        document.getElementById('schedule-sleep-end').value = schedule.sleep.wakeupTime || '07:00';
+        // 【新增】填充三餐数据
+        if (schedule.meals) {
+            document.getElementById('schedule-meals-type').value = schedule.meals.type || 'regular';
+            document.getElementById('schedule-meals-breakfast').value = schedule.meals.breakfast || '08:00';
+            document.getElementById('schedule-meals-lunch').value = schedule.meals.lunch || '12:00';
+            document.getElementById('schedule-meals-dinner').value = schedule.meals.dinner || '18:00';
+        }
+
+        // 动态创建工作和休闲项目
+        renderScheduleItems('work', schedule.work || []);
+        renderScheduleItems('leisure', schedule.leisure || []);
+
+        document.getElementById('schedule-editor-modal').classList.remove('hidden');
+    }
+
+    /**
+     * 【全新】渲染作息项目列表
+     */
+    function renderScheduleItems(type, items) {
+        const container = document.getElementById(`schedule-${type}-list`);
+        container.innerHTML = '';
+        items.forEach((item, index) => {
+            const itemCard = document.createElement('div');
+            itemCard.className = 'schedule-item-card';
+            itemCard.innerHTML = `
+                <input type="text" class="form-control item-name" value="${item.name || ''}" placeholder="活动名称">
+                <div class="schedule-time-range">
+                    <input type="time" class="item-startTime" value="${item.startTime || '09:00'}">
+                    <span>至</span>
+                    <input type="time" class="item-endTime" value="${item.endTime || '17:00'}">
+                </div>
+                <div class="schedule-days-selector">
+                    ${[ '日', '一', '二', '三', '四', '五', '六'].map((day, dayIndex) => `
+                        <label><input type="checkbox" class="item-day" value="${dayIndex}" ${item.days && item.days.includes(dayIndex) ? 'checked' : ''}>${day}</label>
+                    `).join('')}
+                </div>
+                <div class="probability-slider-group">
+                    <span>概率:</span>
+                    <input type="range" class="item-probability" min="0" max="1" step="0.05" value="${item.probability || 1}">
+                    <span class="probability-value">${((item.probability || 1) * 100).toFixed(0)}%</span>
+                </div>
+                <button class="delete-schedule-item-btn" data-type="${type}" data-index="${index}">删除此项</button>
+            `;
+            container.appendChild(itemCard);
+        });
+    }
+/**
+     * 【全新】户口普查员：从UI读取作息数据并更新到appData
+     */
+    function updateScheduleFromUI() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+
+        const collectItems = (type) => {
+            const items = [];
+            const container = document.getElementById(`schedule-${type}-list`);
+            container.querySelectorAll('.schedule-item-card').forEach(card => {
+                const days = [];
+                card.querySelectorAll('.item-day:checked').forEach(checkbox => days.push(Number(checkbox.value)));
+                items.push({
+                    name: card.querySelector('.item-name').value,
+                    startTime: card.querySelector('.item-startTime').value,
+                    endTime: card.querySelector('.item-endTime').value,
+                    days: days,
+                    probability: parseFloat(card.querySelector('.item-probability').value)
+                });
+            });
+            return items;
+        };
+
+        contact.schedule.work = collectItems('work');
+        contact.schedule.leisure = collectItems('leisure');
+    }
+
+    /**
+     * 【全新】保存生活作息
+     */
+    function saveSchedule() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+
+        const newSchedule = {
+            sleep: {
+                type: document.getElementById('schedule-sleep-type').value,
+                bedtime: document.getElementById('schedule-sleep-start').value,
+                wakeupTime: document.getElementById('schedule-sleep-end').value
+            },
+            // 【新增】保存三餐数据
+            meals: {
+                type: document.getElementById('schedule-meals-type').value,
+                breakfast: document.getElementById('schedule-meals-breakfast').value,
+                lunch: document.getElementById('schedule-meals-lunch').value,
+                dinner: document.getElementById('schedule-meals-dinner').value
+            },
+            work: [],
+            leisure: []
+        };
+        
+        const collectItems = (type) => {
+            const items = [];
+            const container = document.getElementById(`schedule-${type}-list`);
+            container.querySelectorAll('.schedule-item-card').forEach(card => {
+                const days = [];
+                card.querySelectorAll('.item-day:checked').forEach(checkbox => days.push(Number(checkbox.value)));
+                items.push({
+                    name: card.querySelector('.item-name').value,
+                    startTime: card.querySelector('.item-startTime').value,
+                    endTime: card.querySelector('.item-endTime').value,
+                    days: days,
+                    probability: parseFloat(card.querySelector('.item-probability').value)
+                });
+            });
+            return items;
+        };
+
+        newSchedule.work = collectItems('work');
+        newSchedule.leisure = collectItems('leisure');
+
+        contact.schedule = newSchedule;
+        saveAppData();
+        showToast('生活作息已保存！', 'success');
+        document.getElementById('schedule-editor-modal').classList.add('hidden');
+    }
+
+    // 【【【全新：为作息编辑器所有按钮绑定动态事件】】】
+    document.getElementById('close-schedule-editor-btn').addEventListener('click', () => {
+        document.getElementById('schedule-editor-modal').classList.add('hidden');
+    });
+    document.getElementById('save-schedule-btn').addEventListener('click', saveSchedule);
+
+    document.getElementById('add-work-item-btn').addEventListener('click', () => {
+        updateScheduleFromUI(); // 【核心修复】先搞一次户口普查！
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if(contact) {
+            contact.schedule.work.push({ name: '新工作', days: [1,2,3,4,5], probability: 1, startTime: '09:00', endTime: '17:00' });
+            renderScheduleItems('work', contact.schedule.work);
+        }
+    });
+     document.getElementById('add-leisure-item-btn').addEventListener('click', () => {
+        updateScheduleFromUI(); // 【核心修复】这里也一样！
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if(contact) {
+            contact.schedule.leisure.push({ name: '新活动', days: [6,0], probability: 1, startTime: '18:00', endTime: '22:00' });
+            renderScheduleItems('leisure', contact.schedule.leisure);
+        }
+    });
+
+    // 使用事件委托来处理删除和滑块
+    document.getElementById('schedule-editor-modal').addEventListener('click', (e) => {
+        if (e.target.classList.contains('delete-schedule-item-btn')) {
+            const type = e.target.dataset.type;
+            const index = parseInt(e.target.dataset.index);
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (contact && contact.schedule[type]) {
+                contact.schedule[type].splice(index, 1);
+                renderScheduleItems(type, contact.schedule[type]);
+            }
+        }
+    });
+     document.getElementById('schedule-editor-modal').addEventListener('input', (e) => {
+        if (e.target.classList.contains('item-probability')) {
+            const valueSpan = e.target.nextElementSibling;
+            valueSpan.textContent = `${(e.target.value * 100).toFixed(0)}%`;
+        }
+    });
+    
+    // 【【【终极修复：使用事件委托，为所有动态按钮绑定事件】】】
+    contactSettingsView.addEventListener('click', (e) => {
+        // 检查被点击的是不是“编辑生活作息”按钮
+        if (e.target.closest('#cs-edit-schedule')) {
+            openScheduleEditor();
+        }
+    });
     initialize();
 });
