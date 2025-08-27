@@ -4125,6 +4125,7 @@ input:checked + .slider:before {
 }
 .schedule-time-range input[type="time"] {
     flex: 1;
+    min-width: 0; /* 【核心修复】允许输入框在空间不足时收缩到比内容更窄 */
 }
 .schedule-days-selector {
     display: flex;
