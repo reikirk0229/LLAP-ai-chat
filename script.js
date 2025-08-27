@@ -5909,8 +5909,39 @@ ${chatLog}
         modal.classList.remove('modal-on-top');
     });
     
-    // 【全新】保存生活作息 (现在变得超级简单)
+        // 【全新】保存生活作息 (V2.0 - 真正读取数据版)
     function saveSchedule() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) {
+            showToast('错误：找不到当前角色', 'error');
+            return;
+        }
+
+        // 步骤1：读取所有睡眠设置的值
+        const sleepType = document.getElementById('schedule-sleep-type').value;
+        const sleepStart = document.getElementById('schedule-sleep-start').value;
+        const sleepEnd = document.getElementById('schedule-sleep-end').value;
+
+        // 步骤2：读取所有三餐设置的值
+        const mealsType = document.getElementById('schedule-meals-type').value;
+        const breakfastTime = document.getElementById('schedule-meals-breakfast').value;
+        const lunchTime = document.getElementById('schedule-meals-lunch').value;
+        const dinnerTime = document.getElementById('schedule-meals-dinner').value;
+        
+        // 步骤3：将读取到的新值，更新到AI的档案(schedule对象)里
+        contact.schedule.sleep = {
+            type: sleepType,
+            bedtime: sleepStart,
+            wakeupTime: sleepEnd
+        };
+        contact.schedule.meals = {
+            type: mealsType,
+            breakfast: breakfastTime,
+            lunch: lunchTime,
+            dinner: dinnerTime
+        };
+
+        // 步骤4：现在才执行保存，并关闭窗口
         saveAppData();
         showToast('生活作息已保存！', 'success');
         document.getElementById('schedule-editor-modal').classList.add('hidden');
