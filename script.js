@@ -1851,6 +1851,32 @@ ${contact.chatStyle || '自然发挥即可'}
         }
         // ▲▲▲ 【【【闹钟设置结束】】】 ▲▲▲
 
+        // ▼▼▼ 【【【终极修复：在这里实现“动态指令注入”】】】 ▼▼▼
+
+        // 第一步：准备好两个“工具”：作息表文本 和 思维链指令
+        let scheduleForAI = "你没有设定任何作息。";
+        let scheduleChainOfThought = ""; // 默认是空的
+
+        // 第二步：检查“真实作息”的开关
+        if (contact.isScheduleEnabled && contact.schedule) {
+            // 如果开关是开的，就从“工具箱”里把两个工具都拿出来
+            scheduleForAI = formatScheduleForAI(contact.schedule);
+            scheduleChainOfThought = `
+### >> 【【【核心思维链 (Chain-of-Thought) 指令】】】
+当用户的问题涉及**时间、计划、日程或你当前/未来的状态**时（例如：“你在干嘛？”、“你几点睡觉？”、“明天有什么安排吗？”），你【必须】严格遵循以下两步思考流程：
+
+- **第一步 (内心检索)**: 你【必须】在脑海中，首先默默地、快速地回顾上方“你的生活作息”部分，并结合当前真实时间 (\`${new Date().toLocaleString('zh-CN')}\`)，确定你此刻或未来应该处于的状态。
+- **第二步 (组织回答)**: 然后，你【必须】基于检索到的信息，以你角色的口吻，自然地、口语化地回答用户的问题。你的回答应该像是你自然而然想起来的，而不是在背诵一份时间表。
+
+**【示例】**
+- **用户提问**: “你晚上都干些什么呀？”
+- **你的内心检索 (不许说出来)**: “（我的作息表写着，工作日的晚上18:00到22:00是休闲活动：新活动...）”
+- **你最终的回答 (口语化)**: “吃完晚饭后，我一般会放松一下，搞搞我那个‘新活动’，还挺有意思的。”
+- **【绝对禁止】** 直接背诵作息表，例如回答：“我的日程是晚上18点到22点进行新活动。”
+`;
+        }
+
+
         const finalPrompt = `# 任务: 角色扮演
 你是一个AI角色，你正在和一个真实用户聊天。你的所有回复都必须严格以角色的身份进行。
 
@@ -1863,6 +1889,10 @@ ${contact.persona}
 \`\`\`
 - **沟通风格**: 
 ${contact.chatStyle || '自然发挥即可'}
+- **你的生活作息 (必须遵守)**:
+\`\`\`
+${scheduleForAI}
+\`\`\`
 - **附加设定 (世界书)**: 
 ${worldBookString}
 - **你的专属记忆**: 
@@ -1878,6 +1908,8 @@ ${userPersona}
 ---
 
 ## 【行为准则与输出格式】
+
+${scheduleChainOfThought}
 
 ### >> 核心行为准则
 - **重要背景**: 你正在通过聊天软件与用户进行【线上对话】。当前时间: ${new Date().toLocaleString('zh-CN')}。${relationshipContext}
@@ -5674,6 +5706,64 @@ ${chatLog}
         
         // 4. 【核心改造】默认状态不再是“在线”，而是“空闲”
         return { status: "空闲", isAwake: true };
+    }
+        /**
+     * 【全新】作息表翻译官：把程序看的作息表，翻译成AI能看懂的人类语言
+     */
+    function formatScheduleForAI(schedule) {
+        if (!schedule) return "你没有设定任何作息。";
+
+        let scheduleString = "";
+        const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+        // 一个小工具，用来把 [1,2,3,5] 这样的数组，变成 "周一至周三、周五"
+        const formatDaysForAI = (days) => {
+            if (!days || days.length === 0) return '';
+            if (days.length === 7) return '每天';
+            
+            const sorted = [...days].sort();
+            const parts = [];
+            for (let i = 0; i < sorted.length; i++) {
+                let j = i;
+                while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) {
+                    j++;
+                }
+                if (j > i + 1) { // 连续超过2天，形成区间
+                    parts.push(`${dayNames[sorted[i]]}至${dayNames[sorted[j]]}`);
+                } else { // 不连续或只有两天，单独列出
+                    for (let k = i; k <= j; k++) {
+                        parts.push(dayNames[sorted[k]]);
+                    }
+                }
+                i = j;
+            }
+            return parts.join('、');
+        };
+
+        // 翻译睡眠
+        if (schedule.sleep) {
+            scheduleString += `- **睡眠**: ${formatDaysForAI([0,1,2,3,4,5,6])} ${schedule.sleep.bedtime} 睡觉，第二天 ${schedule.sleep.wakeupTime} 起床。\n`;
+        }
+        // 翻译三餐
+        if (schedule.meals) {
+            scheduleString += `- **三餐**: 早餐 ${schedule.meals.breakfast}，午餐 ${schedule.meals.lunch}，晚餐 ${schedule.meals.dinner}。\n`;
+        }
+        // 翻译工作
+        if (schedule.work && schedule.work.length > 0) {
+            scheduleString += `- **工作安排**:\n`;
+            schedule.work.forEach(item => {
+                scheduleString += `  - ${formatDaysForAI(item.days)} ${item.startTime}至${item.endTime}：${item.name}。\n`;
+            });
+        }
+        // 翻译休闲
+        if (schedule.leisure && schedule.leisure.length > 0) {
+            scheduleString += `- **休闲安排**:\n`;
+            schedule.leisure.forEach(item => {
+                scheduleString += `  - ${formatDaysForAI(item.days)} ${item.startTime}至${item.endTime}：${item.name}。\n`;
+            });
+        }
+
+        return scheduleString.trim() || "你没有设定任何作息。";
     }
 
 /**
