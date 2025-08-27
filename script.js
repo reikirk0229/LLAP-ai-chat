@@ -3112,52 +3112,59 @@ ${readableHistory}
     // 如果一条都没选 (count === 0)，那么所有按钮就保持最开始的隐藏状态，什么也不做。
 }
     
-    function editSelectedMessage() {
+        function editSelectedMessage() {
         if (selectedMessages.size !== 1) return;
         const messageId = selectedMessages.values().next().value;
-        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        if (!contact) return;
-
-        // 【【【核心终极修复：聪明的“两步查找法”】】】
-        let messageData = null;
-
-        // 步骤1: 先去“正式档案柜”里找
-        messageData = contact.chatHistory.find(msg => msg.id === messageId);
-
-        // 步骤2: 如果没找到，就去“桌面待发托盘”里找！
-        if (!messageData) {
-            messageData = stagedUserMessages.find(msg => msg.id === messageId);
-        }
         
-        // 如果没找到消息，或者消息既不是用户发的也不是AI发的，就放弃
-        if (!messageData || (messageData.role !== 'user' && messageData.role !== 'assistant')) {
+        // 【核心】使用我们升级后的“万能查找器”
+        const messageData = findMessageById(messageId);
+        
+        // 现在，无论是“正式员工”还是“访客”，只要是用户发的，都能被编辑
+        if (!messageData || messageData.role !== 'user') {
             exitSelectMode();
             return;
         }
 
-        // 找到了！现在可以正常打开编辑弹窗了
         openTextEditorModal(messageData.content, (newText) => {
             if (newText !== null && newText.trim() !== '') {
-                // 无论是在哪个列表里找到的，我们都可以直接修改它的内容
+                // 直接修改找到的消息对象的内容，无论它在哪本名册里
                 messageData.content = newText.trim();
-                saveAppData(); // 保存一下，以防万一
+                saveAppData(); // 保存改动
+                
+                // 更新界面上的气泡
                 const messageElement = messageContainer.querySelector(`[data-message-id="${messageId}"] .message`);
-                if (messageElement) { messageElement.textContent = newText.trim(); }
-                renderChatList(); // 刷新一下列表的最后消息
+                if (messageElement) { 
+                    // 确保只修改文本内容，不破坏其他HTML结构
+                    const textNode = Array.from(messageElement.childNodes).find(node => node.nodeType === 3);
+                    if (textNode) {
+                        textNode.textContent = newText.trim();
+                    } else {
+                        messageElement.textContent = newText.trim();
+                    }
+                }
+                renderChatList();
             }
             exitSelectMode();
         });
     }
 
-    function deleteSelectedMessages() {
+        function deleteSelectedMessages() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
+
+        // 【核心】同时清理“正式员工名册”和“访客登记簿”
         contact.chatHistory = contact.chatHistory.filter(msg => !selectedMessages.has(msg.id));
+        if (contact.unsentMessages) {
+            contact.unsentMessages = contact.unsentMessages.filter(msg => !selectedMessages.has(msg.id));
+        }
+        
         saveAppData();
+        
         selectedMessages.forEach(id => {
             const el = messageContainer.querySelector(`[data-message-id="${id}"]`);
             if (el) el.remove();
         });
+        
         exitSelectMode();
         renderChatList();
     }
@@ -4542,7 +4549,7 @@ ${chatLog}
         replyIndicator.style.display = 'none';
     }
     
-    // “工人”：执行撤回操作
+        // “工人” V2.0：执行撤回操作 (已升级，可以处理“访客”)
     function recallMessage() {
         if (!activeContextMenuMessageId) return;
 
@@ -4551,9 +4558,19 @@ ${chatLog}
 
         const messageIdToRecall = activeContextMenuMessageId;
         
-        // 【【【核心终极修复：引入“双轨制”处理逻辑】】】
+        // 检查《访客登记簿》
+        const messageIndexInUnsent = contact.unsentMessages.findIndex(msg => msg.id === messageIdToRecall);
+        if (messageIndexInUnsent > -1) {
+            // 对于“访客”，撤回就等于直接删除
+            contact.unsentMessages.splice(messageIndexInUnsent, 1);
+            saveAppData();
+            const el = messageContainer.querySelector(`[data-message-id="${messageIdToRecall}"]`);
+            if (el) el.remove();
+            renderChatList();
+            return; // 操作完成，结束
+        }
 
-        // 轨道一：处理“已发送”的消息 (书架上的书)
+        // 检查《正式员工名册》 (这部分逻辑保持不变)
         let messageIndexInHistory = contact.chatHistory.findIndex(msg => msg.id === messageIdToRecall);
         if (messageIndexInHistory > -1) {
             const originalMessage = contact.chatHistory[messageIndexInHistory];
@@ -4565,33 +4582,7 @@ ${chatLog}
             };
             contact.chatHistory.splice(messageIndexInHistory, 1, recalledMessage);
             saveAppData();
-            openChat(activeChatContactId); // 对于历史记录的重大改变，我们仍然需要“总馆长”来刷新
-            return; // 完成任务，立刻返回
-        }
-
-        // 轨道二：处理“待发送”的消息 (推车上的书) - 这是全新的、精准的“微创手术”
-        let messageIndexInStaged = stagedUserMessages.findIndex(msg => msg.id === messageIdToRecall);
-        if (messageIndexInStaged > -1) {
-            const originalMessage = stagedUserMessages[messageIndexInStaged];
-            const recalledMessage = {
-                id: originalMessage.id,
-                type: 'recalled',
-                role: originalMessage.role || 'user', // 待发消息默认是user
-                timestamp: originalMessage.timestamp || Date.now()
-            };
-            
-            // 步骤1: 在数据层面，用“墓碑”替换掉推车上的原书
-            stagedUserMessages.splice(messageIndexInStaged, 1, recalledMessage);
-            
-            // 步骤2: 在视觉层面，找到墙上对应的那个临时展示的气泡
-            const messageRow = messageContainer.querySelector(`[data-message-id="${messageIdToRecall}"]`);
-            if (messageRow) {
-                // 步骤3: 直接用“墓碑”的HTML内容，替换掉那个气泡的HTML内容！
-                const recallerName = '你'; // 待发消息只能是用户自己撤回
-                messageRow.className = 'message-recalled'; // 改变它的样式类
-                messageRow.innerHTML = `${recallerName}撤回了一条消息`;
-                // 我们不需要保存数据，因为stagedUserMessages是临时的，会在发送时一起处理
-            }
+            openChat(activeChatContactId);
         }
     }
     function recallMessageByAI(messageId) {
@@ -4617,23 +4608,20 @@ ${chatLog}
         }
     }
 
-    // “聪明的档案管理员”：一个能在所有地方查找消息的工具
+       // “聪明的档案管理员” V2.0 (已升级，可以查找“访客”/未发送消息)
     function findMessageById(messageId) {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return null;
+        
+        // 步骤1: 先在《正式员工名册》(chatHistory)里找
         let message = contact.chatHistory.find(msg => msg.id === messageId);
-        if (!message) {
-            message = stagedUserMessages.find(msg => msg.id === messageId);
+        
+        // 步骤2: 如果没找到，再去《访客登记簿》(unsentMessages)里找
+        if (!message && contact.unsentMessages) {
+            message = contact.unsentMessages.find(msg => msg.id === messageId);
         }
+        
         return message;
-        // 5. 【【【全新：为“加载更多”按钮绑定事件】】】
-        const loadMoreBtn = document.getElementById('load-more-btn');
-        if (loadMoreBtn) {
-            loadMoreBtn.addEventListener('click', () => {
-                // 直接调用加载函数即可，它会自动加载下一页
-                loadAndDisplayHistory();
-            });
-        }
     }
 // ▼▼▼ 【【【全新：账本系统核心逻辑】】】 ▼▼▼
 
