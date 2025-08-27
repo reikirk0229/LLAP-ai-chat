@@ -2774,10 +2774,11 @@ ${readableHistory}
         userProfileModal.classList.add('hidden');
     }
 
-    function openVoiceModal() {
+        function openVoiceModal() {
         voiceTextInput.value = '';
         voiceInputModal.classList.remove('hidden');
-        voiceTextInput.focus();
+        // 【核心修复】移除这里的自动聚焦，防止键盘自动弹出
+        // voiceTextInput.focus();
     }
 
     function closeVoiceModal() {
@@ -3125,19 +3126,27 @@ ${readableHistory}
     // ▼▼▼ 【【【全新植入：为“带输入框的弹窗”编写操作指令】】】 ▼▼▼
     let promptCallback = null;
 
-    function showCustomPrompt(title, text, defaultValue, onConfirm) {
+    function showCustomPrompt(title, text, defaultValue, onConfirm, isNested = false) {
+        const modal = document.getElementById('custom-prompt-modal');
         document.getElementById('custom-prompt-title').textContent = title;
         document.getElementById('custom-prompt-text').textContent = text;
         const input = document.getElementById('custom-prompt-input');
         input.value = defaultValue;
         promptCallback = onConfirm;
-        document.getElementById('custom-prompt-modal').classList.remove('hidden');
-        input.focus();
-        input.select();
+        
+        // 【核心改造】检查是否需要“VIP通行证”
+        if (isNested) {
+            modal.classList.add('modal-on-top');
+        }
+
+        modal.classList.remove('hidden');
     }
 
     function closeCustomPrompt() {
-        document.getElementById('custom-prompt-modal').classList.add('hidden');
+        const modal = document.getElementById('custom-prompt-modal');
+        modal.classList.add('hidden');
+        // 【核心改造】关闭时，把“VIP通行证”收回来，以备下次使用
+        modal.classList.remove('modal-on-top');
         promptCallback = null;
     }
 
@@ -3196,7 +3205,7 @@ function openTextEditorModal(initialText, onSave) {
         textEditorTextarea.value = initialText;
         textEditCallback = onSave; // 暂存“保存”按钮的回调函数
         textEditorModal.classList.remove('hidden');
-        // 【核心修复】移除了在手机端会导致问题的 .focus() 调用
+        // 【核心修复】彻底移除在手机端会导致闪屏的自动聚焦
     }
 
 function closeTextEditorModal() {
@@ -3829,7 +3838,7 @@ messageContainer.addEventListener('click', (event) => {
             accountingModal.classList.add('hidden');
         }
 
-        function stageAccountingEntry() {
+                function stageAccountingEntry() {
             const itemInput = document.getElementById('accounting-item-input');
             const amountInput = document.getElementById('accounting-amount-input');
             const description = itemInput.value.trim();
@@ -3846,7 +3855,8 @@ messageContainer.addEventListener('click', (event) => {
             renderStagedEntries();
             itemInput.value = '';
             amountInput.value = '';
-            itemInput.focus();
+            // 【核心修复】在添加一笔账目后，不再自动聚焦，让用户可以连续点击“添加另一笔”
+            // itemInput.focus();
         }
 
         function renderStagedEntries() {
@@ -4317,11 +4327,12 @@ ${chatLog}
     }
     // --- 【全新】自动总结设置的交互与保存 ---
     function setupAutoSummaryInteraction() {
-        // 点击显示文字，切换到输入框
+                // 点击显示文字，切换到输入框
         csAutoSummaryDisplay.addEventListener('click', () => {
             csAutoSummaryDisplay.classList.add('hidden');
             csAutoSummaryInput.classList.remove('hidden');
-            csAutoSummaryInput.focus();
+            // 【核心修复】同样移除这里的自动聚焦
+            // csAutoSummaryInput.focus();
         });
 
         // 输入框失去焦点时，保存并切换回显示文字
@@ -5618,160 +5629,257 @@ ${chatLog}
         document.getElementById('schedule-editor-modal').classList.remove('hidden');
     }
 
-    /**
-     * 【全新】渲染作息项目列表
+        /**
+     * 【全新 V6.0】渲染作息项目列表 (二级弹窗终极版 - By User's Design)
      */
     function renderScheduleItems(type, items) {
         const container = document.getElementById(`schedule-${type}-list`);
-        container.innerHTML = '';
-        items.forEach((item, index) => {
-            const itemCard = document.createElement('div');
-            itemCard.className = 'schedule-item-card';
-            itemCard.innerHTML = `
-                <input type="text" class="form-control item-name" value="${item.name || ''}" placeholder="活动名称">
-                <div class="schedule-time-range">
-                    <input type="time" class="item-startTime" value="${item.startTime || '09:00'}">
-                    <span>至</span>
-                    <input type="time" class="item-endTime" value="${item.endTime || '17:00'}">
-                </div>
-                <div class="schedule-days-selector">
-                    ${[ '日', '一', '二', '三', '四', '五', '六'].map((day, dayIndex) => `
-                        <label><input type="checkbox" class="item-day" value="${dayIndex}" ${item.days && item.days.includes(dayIndex) ? 'checked' : ''}>${day}</label>
-                    `).join('')}
-                </div>
-                <div class="probability-slider-group">
-                    <span>概率:</span>
-                    <input type="range" class="item-probability" min="0" max="1" step="0.05" value="${item.probability || 1}">
-                    <span class="probability-value">${((item.probability || 1) * 100).toFixed(0)}%</span>
-                </div>
-                <button class="delete-schedule-item-btn" data-type="${type}" data-index="${index}">删除此项</button>
-            `;
-            container.appendChild(itemCard);
-        });
-    }
-/**
-     * 【全新】户口普查员：从UI读取作息数据并更新到appData
-     */
-    function updateScheduleFromUI() {
-        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        if (!contact) return;
-
-        const collectItems = (type) => {
-            const items = [];
-            const container = document.getElementById(`schedule-${type}-list`);
-            container.querySelectorAll('.schedule-item-card').forEach(card => {
-                const days = [];
-                card.querySelectorAll('.item-day:checked').forEach(checkbox => days.push(Number(checkbox.value)));
-                items.push({
-                    name: card.querySelector('.item-name').value,
-                    startTime: card.querySelector('.item-startTime').value,
-                    endTime: card.querySelector('.item-endTime').value,
-                    days: days,
-                    probability: parseFloat(card.querySelector('.item-probability').value)
-                });
-            });
-            return items;
-        };
-
-        contact.schedule.work = collectItems('work');
-        contact.schedule.leisure = collectItems('leisure');
-    }
-
-    /**
-     * 【全新】保存生活作息
-     */
-    function saveSchedule() {
-        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        if (!contact) return;
-
-        const newSchedule = {
-            sleep: {
-                type: document.getElementById('schedule-sleep-type').value,
-                bedtime: document.getElementById('schedule-sleep-start').value,
-                wakeupTime: document.getElementById('schedule-sleep-end').value
-            },
-            // 【新增】保存三餐数据
-            meals: {
-                type: document.getElementById('schedule-meals-type').value,
-                breakfast: document.getElementById('schedule-meals-breakfast').value,
-                lunch: document.getElementById('schedule-meals-lunch').value,
-                dinner: document.getElementById('schedule-meals-dinner').value
-            },
-            work: [],
-            leisure: []
-        };
+        container.innerHTML = ''; // 清空旧列表
         
-        const collectItems = (type) => {
-            const items = [];
-            const container = document.getElementById(`schedule-${type}-list`);
-            container.querySelectorAll('.schedule-item-card').forEach(card => {
-                const days = [];
-                card.querySelectorAll('.item-day:checked').forEach(checkbox => days.push(Number(checkbox.value)));
-                items.push({
-                    name: card.querySelector('.item-name').value,
-                    startTime: card.querySelector('.item-startTime').value,
-                    endTime: card.querySelector('.item-endTime').value,
-                    days: days,
-                    probability: parseFloat(card.querySelector('.item-probability').value)
-                });
+        // ▼▼▼ 【【【这就是全新的、只生成按钮的“卡片制造工厂”】】】 ▼▼▼
+        if (items && items.length > 0) {
+            items.forEach((item, index) => {
+                const itemButton = document.createElement('button');
+                itemButton.className = 'schedule-item-button'; // 使用新的样式类
+                itemButton.textContent = item.name || '未命名活动';
+                itemButton.dataset.type = type;
+                itemButton.dataset.index = index;
+                // 点击按钮，打开我们的“编辑车间”
+                itemButton.onclick = () => openScheduleItemEditor(type, index);
+                container.appendChild(itemButton);
             });
-            return items;
+        }
+    }
+
+        // ▼▼▼ 【【【全新 V2.0：“编辑车间”和“数据管理员”终极版】】】 ▼▼▼
+    let currentEditingItem = null; 
+
+    function openScheduleItemEditor(type, index = null) {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+        
+        currentEditingItem = { type, index, tempDays: [] }; // 【新增】为弹窗创建一个临时的“草稿本”
+        
+        const modal = document.getElementById('schedule-item-editor-modal');
+        const title = document.getElementById('schedule-item-editor-title');
+        const deleteBtn = document.getElementById('delete-item-editor-btn'); // 获取删除按钮
+        
+        let itemData;
+        
+        if (index !== null) {
+            title.textContent = '编辑活动';
+            itemData = contact.schedule[type][index];
+            deleteBtn.style.display = 'block'; // 编辑时，显示删除按钮
+        } else {
+            title.textContent = '添加新活动';
+            itemData = { name: '', startTime: '09:00', endTime: '17:00', days: [1,2,3,4,5], probability: 1 };
+            deleteBtn.style.display = 'none'; // 新建时，隐藏删除按钮
+        }
+        
+        // 【核心】把当前项目的星期数据复制到“草稿本”
+        currentEditingItem.tempDays = [...itemData.days];
+
+        document.getElementById('item-editor-name').value = itemData.name;
+        document.getElementById('item-editor-startTime').value = itemData.startTime;
+        document.getElementById('item-editor-endTime').value = itemData.endTime;
+        
+        const formatDays = (days) => {
+            if (!days || days.length === 0) return '未设置';
+            if (days.length === 7) return '每天';
+            const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
+            return '每周 ' + days.sort().map(d => dayNames[d]).join('、');
+        };
+        document.getElementById('item-editor-days-btn').textContent = formatDays(itemData.days);
+        document.getElementById('item-editor-probability-btn').textContent = `${(itemData.probability === undefined ? 1 : itemData.probability) * 100}%`;
+        
+        modal.classList.remove('hidden');
+    }
+
+    function saveScheduleItem() {
+        if (!currentEditingItem) return;
+        
+        const { type, index } = currentEditingItem;
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        
+        const nameValue = document.getElementById('item-editor-name').value.trim();
+        if (!nameValue) {
+            showToast('活动名称不能为空！', 'error');
+            return;
+        }
+
+        const updatedItemData = {
+            name: nameValue,
+            startTime: document.getElementById('item-editor-startTime').value,
+            endTime: document.getElementById('item-editor-endTime').value,
+            days: currentEditingItem.tempDays, // 【核心】从“草稿本”读取最终的星期数据
         };
 
-        newSchedule.work = collectItems('work');
-        newSchedule.leisure = collectItems('leisure');
+        if (index !== null) {
+            Object.assign(contact.schedule[type][index], updatedItemData);
+        } else {
+            if (!Array.isArray(contact.schedule[type])) contact.schedule[type] = [];
+            const probabilityText = document.getElementById('item-editor-probability-btn').textContent;
+            const probability = parseInt(probabilityText, 10) / 100;
+            const newItem = { ...updatedItemData, probability };
+            contact.schedule[type].push(newItem);
+        }
 
-        contact.schedule = newSchedule;
+        document.getElementById('schedule-item-editor-modal').classList.add('hidden');
+        renderScheduleItems(type, contact.schedule[type]);
+        currentEditingItem = null;
+    }
+
+    function deleteScheduleItem() {
+        if (!currentEditingItem) return;
+        const { type, index } = currentEditingItem;
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        
+        if (index !== null && contact && Array.isArray(contact.schedule[type])) {
+            contact.schedule[type].splice(index, 1);
+            renderScheduleItems(type, contact.schedule[type]);
+        }
+        
+        document.getElementById('schedule-item-editor-modal').classList.add('hidden');
+        currentEditingItem = null;
+    }
+
+    // “编辑车间”的星期选择和概率设置逻辑
+    document.getElementById('item-editor-days-btn').addEventListener('click', () => {
+        openDaySelectorModal(currentEditingItem.type, currentEditingItem.index, true); 
+    });
+    document.getElementById('item-editor-probability-btn').addEventListener('click', () => {
+        const { type, index } = currentEditingItem;
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        const item = (index !== null) ? contact.schedule[type][index] : { probability: 1 };
+        const currentProb = (item.probability === undefined ? 1 : item.probability) * 100;
+        
+        showCustomPrompt('设置概率', '请输入一个0到100之间的数字:', currentProb, (newValue) => {
+            let probability = parseInt(newValue, 10);
+            if (isNaN(probability) || probability < 0) probability = 0;
+            if (probability > 100) probability = 100;
+            
+            const itemToUpdate = (index !== null) ? contact.schedule[type][index] : contact.schedule[type][contact.schedule[type].length - 1];
+            if(!itemToUpdate.days) itemToUpdate.days = [];
+            itemToUpdate.probability = probability / 100;
+            document.getElementById('item-editor-probability-btn').textContent = `${probability}%`;
+        }, true);
+    });
+    
+    function openDaySelectorModal(type, index, isNested = false) {
+        currentScheduleItem = { type, index, tempDays: [] }; // 重置草稿本
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        
+        let itemData;
+        if (index !== null) {
+            itemData = contact.schedule[type][index];
+        } else {
+            itemData = { days: [1,2,3,4,5] };
+        }
+        
+        // 【核心】把当前项目的星期数据复制到“草稿本”
+        currentEditingItem.tempDays = [...itemData.days];
+        
+        const daySelectorGrid = document.getElementById('day-selector-grid');
+        daySelectorGrid.innerHTML = '';
+
+        const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
+        dayNames.forEach((name, dayIndex) => {
+            // 【核心】现在我们根据“草稿本”来判断是否选中
+            const isChecked = currentEditingItem.tempDays.includes(dayIndex);
+            const dayButton = document.createElement('button');
+            dayButton.className = `day-btn ${isChecked ? 'active' : ''}`;
+            dayButton.textContent = name;
+            dayButton.dataset.day = dayIndex;
+            // 【核心】点击按钮时，只修改“草稿本”
+            dayButton.onclick = () => {
+                const dayValue = Number(dayButton.dataset.day);
+                const dayIndexInTemp = currentEditingItem.tempDays.indexOf(dayValue);
+                if (dayIndexInTemp > -1) {
+                    currentEditingItem.tempDays.splice(dayIndexInTemp, 1);
+                } else {
+                    currentEditingItem.tempDays.push(dayValue);
+                }
+                dayButton.classList.toggle('active');
+            };
+            daySelectorGrid.appendChild(dayButton);
+        });
+        
+        const modal = document.getElementById('day-selector-modal');
+        if (isNested) modal.classList.add('modal-on-top');
+        modal.classList.remove('hidden');
+    }
+    
+    document.getElementById('cancel-day-select-btn').addEventListener('click', () => {
+        const modal = document.getElementById('day-selector-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('modal-on-top');
+    });
+
+    document.getElementById('save-day-select-btn').addEventListener('click', () => {
+        // 【核心BUG修复】
+        const formatDays = (days) => {
+            if (!days || days.length === 0) return '未设置';
+            if (days.length === 7) return '每天';
+            const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
+            return '每周 ' + days.sort().map(d => dayNames[d]).join('、');
+        };
+        // 确认时，用“草稿本”里的最终数据，去更新“编辑车间”里的显示文本
+        document.getElementById('item-editor-days-btn').textContent = formatDays(currentEditingItem.tempDays);
+
+        const modal = document.getElementById('day-selector-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('modal-on-top');
+    });
+    
+    // 【全新】保存生活作息 (现在变得超级简单)
+    function saveSchedule() {
         saveAppData();
         showToast('生活作息已保存！', 'success');
         document.getElementById('schedule-editor-modal').classList.add('hidden');
     }
 
-    // 【【【全新：为作息编辑器所有按钮绑定动态事件】】】
+        // 【【【全新V2.0：“精装修”后的作息编辑器总控制器】】】
+
+        // 【【【全新V3.0：“精装修”后的作息编辑器总控制器】】】
+
+    // 1. 主弹窗的按钮
     document.getElementById('close-schedule-editor-btn').addEventListener('click', () => {
         document.getElementById('schedule-editor-modal').classList.add('hidden');
     });
     document.getElementById('save-schedule-btn').addEventListener('click', saveSchedule);
-
     document.getElementById('add-work-item-btn').addEventListener('click', () => {
-        updateScheduleFromUI(); // 【核心修复】先搞一次户口普查！
-        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        if(contact) {
-            contact.schedule.work.push({ name: '新工作', days: [1,2,3,4,5], probability: 1, startTime: '09:00', endTime: '17:00' });
-            renderScheduleItems('work', contact.schedule.work);
-        }
+        openScheduleItemEditor('work', null); // "null"代表新建
     });
-     document.getElementById('add-leisure-item-btn').addEventListener('click', () => {
-        updateScheduleFromUI(); // 【核心修复】这里也一样！
-        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        if(contact) {
-            contact.schedule.leisure.push({ name: '新活动', days: [6,0], probability: 1, startTime: '18:00', endTime: '22:00' });
-            renderScheduleItems('leisure', contact.schedule.leisure);
-        }
+    document.getElementById('add-leisure-item-btn').addEventListener('click', () => {
+        openScheduleItemEditor('leisure', null); // "null"代表新建
     });
 
-    // 使用事件委托来处理删除和滑块
+    // 2. 单个活动编辑弹窗（“编辑车间”）的按钮
+    document.getElementById('cancel-item-editor-btn').addEventListener('click', () => {
+        document.getElementById('schedule-item-editor-modal').classList.add('hidden');
+    });
+    document.getElementById('save-item-editor-btn').addEventListener('click', saveScheduleItem);
+    // 【【【BUG修复 1/3：为删除按钮绑定正确的函数】】】
+    document.getElementById('delete-item-editor-btn').addEventListener('click', deleteScheduleItem);
+
+ 
+    // 4. 主界面列表的事件委托（现在只负责删除主列表里的按钮）
     document.getElementById('schedule-editor-modal').addEventListener('click', (e) => {
         if (e.target.classList.contains('delete-schedule-item-btn')) {
             const type = e.target.dataset.type;
-            const index = parseInt(e.target.dataset.index);
-            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-            if (contact && contact.schedule[type]) {
-                contact.schedule[type].splice(index, 1);
-                renderScheduleItems(type, contact.schedule[type]);
-            }
-        }
-    });
-     document.getElementById('schedule-editor-modal').addEventListener('input', (e) => {
-        if (e.target.classList.contains('item-probability')) {
-            const valueSpan = e.target.nextElementSibling;
-            valueSpan.textContent = `${(e.target.value * 100).toFixed(0)}%`;
+            const index = parseInt(e.target.dataset.index, 10);
+            showCustomConfirm('删除确认', '确定要删除这个活动吗？', () => {
+                const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+                if (contact && Array.isArray(contact.schedule[type])) {
+                    contact.schedule[type].splice(index, 1);
+                    renderScheduleItems(type, contact.schedule[type]);
+                }
+            });
         }
     });
     
-    // 【【【终极修复：使用事件委托，为所有动态按钮绑定事件】】】
+    // 5. 从聊天设置页打开作息编辑器的入口
     contactSettingsView.addEventListener('click', (e) => {
-        // 检查被点击的是不是“编辑生活作息”按钮
         if (e.target.closest('#cs-edit-schedule')) {
             openScheduleEditor();
         }
