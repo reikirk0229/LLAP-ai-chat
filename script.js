@@ -1190,7 +1190,7 @@ async function openChat(contactId, messageIdToHighlight = null) {
     contact.userAvatarUrl = userAvatarBlob ? URL.createObjectURL(userAvatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg';
 
     updateChatHeader();
-    chatAiActivityStatus.textContent = contact.activityStatus || '';
+   
     
             switchToView('chat-window-view');
         
@@ -1241,20 +1241,39 @@ if (!contact.hasBeenOpened) {
     saveAppData();
 }
 updateChatHeader();
-    // 【【【全新：打开聊天时，更新AI的作息状态】】】
+    // ▼▼▼ 【【【BUG修复 2/2 - 步骤B：用下面这个代码块替换旧的 if/else】】】 ▼▼▼
+    // ▼▼▼ 【【【终极修复：在这里为“管家”换上全新的智能“工作手册”】】】 ▼▼▼
     if (contact.isScheduleEnabled) {
+        // 第一步：先去查作息表
         const activity = calculateCurrentActivity(contact.schedule);
-        contact.currentActivity = activity.status; // 将状态暂存，方便AI调用
-        chatAiActivityStatus.textContent = activity.status;
+        contact.currentActivity = activity.status; // 暂存计算结果，供AI自己参考
+
+        // 第二步：执行新的“状态优先级”判断
+        if (activity.status !== "空闲") {
+            // 最高优先级：如果作息表有强制安排（如睡觉、工作），则直接使用
+            chatAiActivityStatus.textContent = activity.status;
+            // 【重要】同时，把这个强制状态，也更新为AI的“自身状态”，实现持久化
+            contact.activityStatus = activity.status; 
+        } else {
+            // 次高优先级：如果作息表显示“空闲”，则检查AI自己有没有设置状态
+            if (contact.activityStatus) {
+                // 如果有（比如AI上次说“正在看书”），就维持它！
+                chatAiActivityStatus.textContent = contact.activityStatus;
+            } else {
+                // 最低优先级：如果都没有，才显示“在线”
+                chatAiActivityStatus.textContent = '在线';
+            }
+        }
     } else {
-        contact.currentActivity = null; // 关闭时清空状态
-        chatAiActivityStatus.textContent = contact.activityStatus || '';
+        // 如果作息功能关闭，逻辑不变，还是显示AI自己保存的状态
+        contact.currentActivity = null;
+        chatAiActivityStatus.textContent = contact.activityStatus || '在线';
     }
-    // ▲▲▲▲▲ 作息状态更新结束 ▲▲▲▲▲
+    // ▲▲▲▲▲ ▲▲▲▲▲
     
+    // 确保最后再执行一次视图切换，以防万一
     switchToView('chat-window-view');
 }
-    
 async function createMessageElement(text, role, options = {}) {
     const { isNew = false, isLoading = false, type = 'text', isStaged = false, id = null, timestamp = null, quotedMessage = null } = options;
     const messageId = id || `${Date.now()}-${Math.random()}`;
@@ -3645,6 +3664,17 @@ displayMessage('上下文已刷新，AI将从这里开始一段全新的对话�
             } 
             closeCustomConfirm(true); 
         });
+
+        // ▼▼▼ 【【【BUG修复 1/2：把被误删的“概率确认”按钮逻辑“焊接”回来】】】 ▼▼▼
+        document.getElementById('custom-prompt-ok-btn').addEventListener('click', () => {
+            if (promptCallback) {
+                const inputValue = document.getElementById('custom-prompt-input').value;
+                promptCallback(inputValue);
+            }
+            closeCustomPrompt();
+        });
+        // ▲▲▲▲▲ ▲▲▲▲▲
+
         customAlertOkBtn.addEventListener('click', closeCustomAlert);
         userImageUploadArea.addEventListener('click', () => userImageUploadInput.click());
         userImageUploadInput.addEventListener('change', handleImagePreview);
@@ -5638,12 +5668,12 @@ ${chatLog}
         const workActivity = checkActivity(schedule.work || []);
         if (workActivity) return workActivity;
 
-        // 3. 第三优先级：判断是否在休闲
+                // 3. 第三优先级：判断是否在休闲
         const leisureActivity = checkActivity(schedule.leisure || []);
         if (leisureActivity) return leisureActivity;
         
-        // 4. 默认状态
-        return { status: "在线", isAwake: true };
+        // 4. 【核心改造】默认状态不再是“在线”，而是“空闲”
+        return { status: "空闲", isAwake: true };
     }
 
 /**
@@ -5696,33 +5726,35 @@ ${chatLog}
         }
     }
 
-        // ▼▼▼ 【【【全新 V2.0：“编辑车间”和“数据管理员”终极版】】】 ▼▼▼
+    // ▼▼▼ 【【【全新 V3.0：“编辑车间”和“数据管理员”终极修复版】】】 ▼▼▼
     let currentEditingItem = null; 
 
     function openScheduleItemEditor(type, index = null) {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
         
-        currentEditingItem = { type, index, tempDays: [] }; // 【新增】为弹窗创建一个临时的“草稿本”
+        // 【核心】为弹窗创建一个临时的“草稿本”，用来记录所有未保存的修改
+        currentEditingItem = { type, index, tempDays: [], tempProbability: 1 };
         
         const modal = document.getElementById('schedule-item-editor-modal');
         const title = document.getElementById('schedule-item-editor-title');
-        const deleteBtn = document.getElementById('delete-item-editor-btn'); // 获取删除按钮
+        const deleteBtn = document.getElementById('delete-item-editor-btn');
         
         let itemData;
         
         if (index !== null) {
             title.textContent = '编辑活动';
             itemData = contact.schedule[type][index];
-            deleteBtn.style.display = 'block'; // 编辑时，显示删除按钮
+            deleteBtn.style.display = 'block';
         } else {
             title.textContent = '添加新活动';
             itemData = { name: '', startTime: '09:00', endTime: '17:00', days: [1,2,3,4,5], probability: 1 };
-            deleteBtn.style.display = 'none'; // 新建时，隐藏删除按钮
+            deleteBtn.style.display = 'none';
         }
         
-        // 【核心】把当前项目的星期数据复制到“草稿本”
+        // 【核心】把当前项目的真实数据，完整地复制一份到“草稿本”
         currentEditingItem.tempDays = [...itemData.days];
+        currentEditingItem.tempProbability = itemData.probability === undefined ? 1 : itemData.probability;
 
         document.getElementById('item-editor-name').value = itemData.name;
         document.getElementById('item-editor-startTime').value = itemData.startTime;
@@ -5735,7 +5767,7 @@ ${chatLog}
             return '每周 ' + days.sort().map(d => dayNames[d]).join('、');
         };
         document.getElementById('item-editor-days-btn').textContent = formatDays(itemData.days);
-        document.getElementById('item-editor-probability-btn').textContent = `${(itemData.probability === undefined ? 1 : itemData.probability) * 100}%`;
+        document.getElementById('item-editor-probability-btn').textContent = `${currentEditingItem.tempProbability * 100}%`;
         
         modal.classList.remove('hidden');
     }
@@ -5752,21 +5784,20 @@ ${chatLog}
             return;
         }
 
+        // 【核心】从“草稿本”读取所有最终确认的修改
         const updatedItemData = {
             name: nameValue,
             startTime: document.getElementById('item-editor-startTime').value,
             endTime: document.getElementById('item-editor-endTime').value,
-            days: currentEditingItem.tempDays, // 【核心】从“草稿本”读取最终的星期数据
+            days: currentEditingItem.tempDays,
+            probability: currentEditingItem.tempProbability,
         };
 
         if (index !== null) {
             Object.assign(contact.schedule[type][index], updatedItemData);
         } else {
             if (!Array.isArray(contact.schedule[type])) contact.schedule[type] = [];
-            const probabilityText = document.getElementById('item-editor-probability-btn').textContent;
-            const probability = parseInt(probabilityText, 10) / 100;
-            const newItem = { ...updatedItemData, probability };
-            contact.schedule[type].push(newItem);
+            contact.schedule[type].push(updatedItemData);
         }
 
         document.getElementById('schedule-item-editor-modal').classList.add('hidden');
@@ -5790,52 +5821,33 @@ ${chatLog}
 
     // “编辑车间”的星期选择和概率设置逻辑
     document.getElementById('item-editor-days-btn').addEventListener('click', () => {
-        openDaySelectorModal(currentEditingItem.type, currentEditingItem.index, true); 
+        openDaySelectorModal(true); 
     });
     document.getElementById('item-editor-probability-btn').addEventListener('click', () => {
-        const { type, index } = currentEditingItem;
-        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        const item = (index !== null) ? contact.schedule[type][index] : { probability: 1 };
-        const currentProb = (item.probability === undefined ? 1 : item.probability) * 100;
+        const currentProb = currentEditingItem.tempProbability * 100;
         
         showCustomPrompt('设置概率', '请输入一个0到100之间的数字:', currentProb, (newValue) => {
             let probability = parseInt(newValue, 10);
             if (isNaN(probability) || probability < 0) probability = 0;
             if (probability > 100) probability = 100;
             
-            const itemToUpdate = (index !== null) ? contact.schedule[type][index] : contact.schedule[type][contact.schedule[type].length - 1];
-            if(!itemToUpdate.days) itemToUpdate.days = [];
-            itemToUpdate.probability = probability / 100;
+            // 【核心】只修改“草稿本”上的概率，并更新按钮显示
+            currentEditingItem.tempProbability = probability / 100;
             document.getElementById('item-editor-probability-btn').textContent = `${probability}%`;
         }, true);
     });
     
-    function openDaySelectorModal(type, index, isNested = false) {
-        currentScheduleItem = { type, index, tempDays: [] }; // 重置草稿本
-        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        
-        let itemData;
-        if (index !== null) {
-            itemData = contact.schedule[type][index];
-        } else {
-            itemData = { days: [1,2,3,4,5] };
-        }
-        
-        // 【核心】把当前项目的星期数据复制到“草稿本”
-        currentEditingItem.tempDays = [...itemData.days];
-        
+    function openDaySelectorModal(isNested = false) {
         const daySelectorGrid = document.getElementById('day-selector-grid');
         daySelectorGrid.innerHTML = '';
 
         const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
         dayNames.forEach((name, dayIndex) => {
-            // 【核心】现在我们根据“草稿本”来判断是否选中
             const isChecked = currentEditingItem.tempDays.includes(dayIndex);
             const dayButton = document.createElement('button');
             dayButton.className = `day-btn ${isChecked ? 'active' : ''}`;
             dayButton.textContent = name;
             dayButton.dataset.day = dayIndex;
-            // 【核心】点击按钮时，只修改“草稿本”
             dayButton.onclick = () => {
                 const dayValue = Number(dayButton.dataset.day);
                 const dayIndexInTemp = currentEditingItem.tempDays.indexOf(dayValue);
@@ -5853,6 +5865,27 @@ ${chatLog}
         if (isNested) modal.classList.add('modal-on-top');
         modal.classList.remove('hidden');
     }
+    
+    document.getElementById('cancel-day-select-btn').addEventListener('click', () => {
+        const modal = document.getElementById('day-selector-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('modal-on-top');
+    });
+
+    document.getElementById('save-day-select-btn').addEventListener('click', () => {
+        const formatDays = (days) => {
+            if (!days || days.length === 0) return '未设置';
+            if (days.length === 7) return '每天';
+            const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
+            return '每周 ' + days.sort().map(d => dayNames[d]).join('、');
+        };
+        // 【核心】用“草稿本”里的最终数据，去更新“编辑车间”里的显示文本
+        document.getElementById('item-editor-days-btn').textContent = formatDays(currentEditingItem.tempDays);
+
+        const modal = document.getElementById('day-selector-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('modal-on-top');
+    });
     
     document.getElementById('cancel-day-select-btn').addEventListener('click', () => {
         const modal = document.getElementById('day-selector-modal');
