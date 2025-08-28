@@ -4344,3 +4344,40 @@ input:checked + .slider:before {
     padding: 12px;
     font-size: 15px;
 }
+/*
+============================================================
+ V-OFFLINE-MODE: 线下模式专属样式
+============================================================
+*/
+
+/* 为包含线下模式内容的消息气泡添加一个总开关 */
+.message.offline-message {
+    /* 增加行高，让富文本格式看起来不那么拥挤 */
+    line-height: 1.8; 
+}
+
+/* 1. 高亮样式：双引号内的内容 */
+.offline-message .highlight {
+    background-color: rgba(204, 228, 244, 0.8);
+    padding: 1px 4px;
+    border-radius: 4px;
+    color: #3b69a2; /* 【核心改造】字体颜色改为比背景更深的蓝色 */
+    font-weight: 500;
+}
+/* 用户气泡里的高亮颜色可以深一些 */
+.user-row .offline-message .highlight {
+    background-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+}
+
+
+/* 2. 斜体样式：内心想法 */
+.offline-message .italic {
+    font-style: italic;
+    color: #5097CD; /* 【核心改造】字体颜色改为主题浅蓝色 */
+    opacity: 0.9; 
+}
+/* 3. 粗体样式：重要内容 */
+.offline-message .bold {
+    font-weight: bold;
+}
