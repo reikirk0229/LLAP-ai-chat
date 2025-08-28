@@ -23,6 +23,15 @@
      <link rel="stylesheet" href="style.css">
     <!-- ▼▼▼ 【【【全新：引入flatpickr日历样式】】】 ▼▼▼ -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+        <script>
+var _hmt = _hmt || [];
+(function() {
+  var hm = document.createElement("script");
+  hm.src = "https://hm.baidu.com/hm.js?ba7f37e3381acad0f7ea1fafa4697bb8";
+  var s = document.getElementsByTagName("script")[0]; 
+  s.parentNode.insertBefore(hm, s);
+})();
+</script>
 </head>
 <body>
     <div id="app-wrapper"></div>
@@ -329,7 +338,7 @@
                     </div>
                 </div>
 
-                <!-- ▼▼▼ 【【【全新：真实作息模拟，就放在这里！】】】 ▼▼▼ -->
+                                <!-- ▼▼▼ 【【【全新：真实作息模拟，就放在这里！】】】 ▼▼▼ -->
                 <div class="settings-group">
                     <div class="settings-item">
                         <span>启用真实作息模拟</span>
@@ -344,6 +353,19 @@
                     </div>
                 </div>
                 <!-- ▲▲▲▲▲ 真实作息模拟结束 ▲▲▲▲▲ -->
+
+                <!-- ▼▼▼ 【【【全新：线下模式，就放在这里！】】】 ▼▼▼ -->
+                <div class="settings-group">
+                    <div class="settings-item">
+                        <span>进入线下剧情模式</span>
+                        <label class="switch"><input type="checkbox" id="cs-offline-mode-toggle"><span class="slider"></span></label>
+                    </div>
+                    <div class="settings-item" id="cs-edit-offline-settings">
+                        <span>设置线下模式</span>
+                        <span class="arrow">></span>
+                    </div>
+                </div>
+                <!-- ▲▲▲▲▲ 线下模式结束 ▲▲▲▲▲ -->
 
                 <div class="settings-group">
                     <div class="settings-item"><span>导出/导入聊天记录</span><span class="arrow">&gt;</span></div>
@@ -438,7 +460,8 @@
                     <label for="ai-editor-chat-style">线上风格</label>
                     <textarea id="ai-editor-chat-style" rows="4" placeholder="e.g., 喜欢用短句，偶尔会发可爱的Emoji、颜文字和表情包。不爱发语音，打字很快。说话直接，不喜欢拐弯抹角。"></textarea>
                 </div>
-                <div class="form-group"><label>AI的专属记忆</label><textarea id="ai-editor-memory" rows="8" placeholder="对话总结等长期记忆..."></textarea></div>
+                                <div class="form-group"><label>AI的专属记忆 (线上模式)</label><textarea id="ai-editor-memory" rows="8" placeholder="线上闲聊的总结、长期记忆..."></textarea></div>
+                <div class="form-group"><label>线下模式记忆</label><textarea id="ai-editor-offline-memory" rows="8" placeholder="线下角色扮演的剧情记录..."></textarea></div>
                 <div class="form-group">
                     <label>世界书</label>
                     <div id="ai-editor-worldbook"></div>
@@ -1129,9 +1152,63 @@
                 <button id="cancel-item-editor-btn" class="modal-button secondary">取消</button>
                 <button id="save-item-editor-btn" class="modal-button primary">保存</button>
             </div>
-        </div>
+                </div>
     </div>
     <!-- ▲▲▲▲▲ 单个作息项编辑器弹窗结束 ▲▲▲▲▲ -->
+
+    <!-- ▼▼▼ 【【【全新：线下模式设置弹窗】】】 ▼▼▼ -->
+    <div id="offline-settings-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>设置线下模式</h3>
+                <button id="close-offline-settings-btn" class="close-button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="offline-word-limit">单次回复字数限制</label>
+                    <input type="number" id="offline-word-limit" placeholder="建议200-500，0为不限制">
+                </div>
+                <div class="form-group">
+                    <label for="offline-perspective">叙事视角</label>
+                    <select id="offline-perspective">
+                        <option value="second-person">第二人称 (你...)</option>
+                        <option value="third-person">第三人称 (他/她...)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>AI行为控制</label>
+                    <div class="settings-item" style="padding: 0;">
+                        <span>防止AI操控我的行为 (防抢话)</span>
+                        <label class="switch"><input type="checkbox" id="offline-prevent-control-toggle"><span class="slider"></span></label>
+                    </div>
+                </div>
+                 <div class="form-group">
+                    <label for="offline-start-prompt">开场白提示词 (选填)</label>
+                    <textarea id="offline-start-prompt" rows="3" placeholder="输入你想让AI作为故事开头的引导语..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="save-offline-settings-btn">保存设置</button>
+            </div>
+        </div>
+    </div>
+    <!-- ▲▲▲▲▲ 线下模式设置弹窗结束 ▲▲▲▲▲ -->
+         <!-- ▼▼▼ 【【【全新：通用模式选择弹窗】】】 ▼▼▼ -->
+    <div id="generic-mode-select-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="generic-mode-select-title">请选择操作的模式</h3>
+                <button id="close-generic-mode-select-btn" class="close-button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="mode-select-buttons">
+                    <button id="generic-mode-online-btn" class="modal-button primary">线上模式</button>
+                    <button id="generic-mode-offline-btn" class="modal-button secondary">线下模式</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- ▲▲▲▲▲ 通用模式选择弹窗结束 ▲▲▲▲▲ -->
 
 
     <!-- ▼▼▼ 【【【全新：引入flatpickr日历功能】】】 ▼▼▼ -->
