@@ -334,8 +334,10 @@ async function formatHistoryForApi(history) {
             } else if (msg.type === 'voice') {
                 finalContent = `[我发送了一条语音，内容是：${content}]`;
             } else if (msg.type === 'red-packet') {
-                finalContent = `[我发送了一个红包，祝福语是：${content}]`;
-                        } else if (msg.type === 'relationship_proposal') {
+                // 【核心改造】在这里，我们让翻译官去打开红包的“数据包裹”
+                const amount = msg.redPacketData ? msg.redPacketData.amount : '未知';
+                finalContent = `[我发送了一个金额为 ${amount} 元的红包，祝福语是：${content}]`;
+            } else if (msg.type === 'relationship_proposal') {
                 // ▼▼▼ 【【【终极智能翻译引擎 V2.0】】】 ▼▼▼
                 const data = msg.relationshipData || {};
                 // 规则1：翻译“用户接受”事件
@@ -902,6 +904,8 @@ async function formatHistoryForApi(history) {
         if (appData.appSettings.contextLimit === undefined) { appData.appSettings.contextLimit = 20; }
         if (!appData.aiContacts) { appData.aiContacts = []; }
         appData.aiContacts.forEach(c => {
+    // ★★★【【【终极修复：在这里为所有“老兵”补发“待办文件夹”！】】】★★★
+    if (!c.unsentMessages) c.unsentMessages = [];
     if (!c.remark) c.remark = c.name;
     if (c.isPinned === undefined) c.isPinned = false;
     if (!c.userProfile) { c.userProfile = { name: '你', persona: '我是一个充满好奇心的人。' }; }
@@ -1244,9 +1248,28 @@ async function formatHistoryForApi(history) {
                 chatListContainer.appendChild(item);
             }
         } 
-        // ▼▼▼ 默认模式的渲染逻辑 (V2.0 - 智能识别版) ▼▼▼
+                // ▼▼▼ 默认模式的渲染逻辑 (V2.0 - 智能识别版) ▼▼▼
         else {
-            const sortedContacts = [...itemsToRender].sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
+            // 【核心改造】全新的“智能排序系统”
+            const getLatestTimestamp = (contact) => {
+                // 根据当前模式，选择正确的“档案柜”
+                const history = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
+                // 安全地获取最后一条消息的时间戳，如果没有就返回0
+                if (history && history.length > 0) {
+                    return history[history.length - 1].timestamp || 0;
+                }
+                return 0;
+            };
+
+            const sortedContacts = [...itemsToRender].sort((a, b) => {
+                // 规则1：优先按“是否置顶”排序
+                const pinDifference = (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0);
+                if (pinDifference !== 0) return pinDifference;
+
+                // 规则2：如果置顶状态相同，再按“最后消息时间”排序
+                return getLatestTimestamp(b) - getLatestTimestamp(a);
+            });
+
             for (const contact of sortedContacts) {
                 const avatarBlob = await db.getImage(`${contact.id}_avatar`);
                 const avatarUrl = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
@@ -1444,32 +1467,38 @@ if (!contact.hasBeenOpened) {
 }
 updateChatHeader();
     // ▼▼▼ 【【【BUG修复 2/2 - 步骤B：用下面这个代码块替换旧的 if/else】】】 ▼▼▼
-    // ▼▼▼ 【【【终极修复：在这里为“管家”换上全新的智能“工作手册”】】】 ▼▼▼
-    if (contact.isScheduleEnabled) {
-        // 第一步：先去查作息表
-        const activity = calculateCurrentActivity(contact.schedule);
-        contact.currentActivity = activity.status; // 暂存计算结果，供AI自己参考
-
-        // 第二步：执行新的“状态优先级”判断
-        if (activity.status !== "空闲") {
-            // 最高优先级：如果作息表有强制安排（如睡觉、工作），则直接使用
-            chatAiActivityStatus.textContent = activity.status;
-            // 【重要】同时，把这个强制状态，也更新为AI的“自身状态”，实现持久化
-            contact.activityStatus = activity.status; 
-        } else {
-            // 次高优先级：如果作息表显示“空闲”，则检查AI自己有没有设置状态
-            if (contact.activityStatus) {
-                // 如果有（比如AI上次说“正在看书”），就维持它！
-                chatAiActivityStatus.textContent = contact.activityStatus;
-            } else {
-                // 最低优先级：如果都没有，才显示“在线”
-                chatAiActivityStatus.textContent = '在线';
-            }
-        }
+        // ▼▼▼ 【【【终极修复：模式感知的智能状态切换器】】】 ▼▼▼
+    if (contact.isOfflineMode) {
+        // 如果是线下模式，就直接显示一个固定的、清晰的模式状态
+        chatAiActivityStatus.textContent = '剧情模式进行中';
     } else {
-        // 如果作息功能关闭，逻辑不变，还是显示AI自己保存的状态
-        contact.currentActivity = null;
-        chatAiActivityStatus.textContent = contact.activityStatus || '在线';
+        // 否则（在线上模式时），才执行我们原来那套精密的作息和状态判断逻辑
+        if (contact.isScheduleEnabled) {
+            // 第一步：先去查作息表
+            const activity = calculateCurrentActivity(contact.schedule);
+            contact.currentActivity = activity.status; // 暂存计算结果，供AI自己参考
+
+            // 第二步：执行新的“状态优先级”判断
+            if (activity.status !== "空闲") {
+                // 最高优先级：如果作息表有强制安排（如睡觉、工作），则直接使用
+                chatAiActivityStatus.textContent = activity.status;
+                // 【重要】同时，把这个强制状态，也更新为AI的“自身状态”，实现持久化
+                contact.activityStatus = activity.status;
+            } else {
+                // 次高优先级：如果作息表显示“空闲”，则检查AI自己有没有设置状态
+                if (contact.activityStatus) {
+                    // 如果有（比如AI上次说“正在看书”），就维持它！
+                    chatAiActivityStatus.textContent = contact.activityStatus;
+                } else {
+                    // 最低优先级：如果都没有，才显示“在线”
+                    chatAiActivityStatus.textContent = '在线';
+                }
+            }
+        } else {
+            // 如果作息功能关闭，逻辑不变，还是显示AI自己保存的状态
+            contact.currentActivity = null;
+            chatAiActivityStatus.textContent = contact.activityStatus || '在线';
+        }
     }
     // ▲▲▲▲▲ ▲▲▲▲▲
     
@@ -1698,12 +1727,16 @@ updateChatHeader();
             let messagesToSummarize;
             const range = parseInt(rangeInput.value);
 
+            // 【核心修复】根据当前模式，从正确的档案柜读取记录
+            const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
+
             if (!isNaN(range) && range > 0) {
-                messagesToSummarize = contact.chatHistory.slice(-range);
+                messagesToSummarize = sourceHistory.slice(-range);
             } else {
-                // 如果不填，则总结自上次自动总结以来的所有新消息
                 const lastSummaryCount = contact.lastSummaryAtCount || 0;
-                messagesToSummarize = contact.chatHistory.slice(lastSummaryCount);
+                // 注意：这里的逻辑需要更精确，我们先简单修复读取源
+                const fullHistoryForCount = [...contact.onlineChatHistory, ...contact.offlineChatHistory].sort((a,b)=>a.timestamp-b.timestamp);
+                messagesToSummarize = fullHistoryForCount.slice(lastSummaryCount);
             }
 
             if (messagesToSummarize.length === 0) {
@@ -1928,9 +1961,9 @@ ${chatLog}
         if ((currentTotalCount - lastSummaryCount) >= threshold) {
             console.log(`自动总结触发！当前总数: ${currentTotalCount}, 上次在: ${lastSummaryCount}, 阈值: ${threshold}`);
             
-            // 【重要】我们强制总结的是“上一个模式”的内容，所以逻辑和强制总结一样
-            // 为了避免复杂化，我们让自动总结总是总结“当前模式”累积的内容
-            await forceSummaryOnModeSwitch(contact, summarizingMode);
+            // 【重要】我们现在要明确告诉AI，总结应该存到哪里
+            const saveTarget = contact.isOfflineMode ? 'offlineMemory' : 'memory';
+            await forceSummaryOnModeSwitch(contact, summarizingMode, saveTarget); // <-- 看，第三个指令补上了！
         }
     }
 async function createMessageElement(text, role, options = {}) {
@@ -2196,13 +2229,21 @@ async function displayMessage(text, role, options = {}) {
     function removeLoadingBubble() {
         if (loadingBubbleElement) { loadingBubbleElement.remove(); loadingBubbleElement = null; }
     }
-            async function dispatchAndDisplayUserMessage(messageData) {
+        async function dispatchAndDisplayUserMessage(messageData) {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
 
+        // ★★★【【【终极安全检查：在这里部署“现场检查员”！】】】★★★
+        // 无论什么原因，如果这个AI的“待办文件夹”不存在，
+        // 就在这里，立刻、马上，给他创建一个！
+        if (!contact.unsentMessages) {
+            contact.unsentMessages = [];
+        }
+        // ★★★【【【修复植入完毕】】】★★★
+
         const tempId = `staged-${Date.now()}`;
         
-        const finalMessageData = { 
+        const finalMessageData = {
             id: tempId, 
             role: 'user', 
             ...messageData,
@@ -2364,6 +2405,19 @@ async function displayMessage(text, role, options = {}) {
             const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
             if (!contact) return;
 
+            // ★★★【【【终极修复 V6.0：在一切开始前，就准备好所有历史记录！】】】★★★
+            // 1. 立即确定我们要从哪个“档案柜”取东西
+            const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
+            
+            // 2. 立即根据模式，切出本次API调用真正需要的“上下文”片段
+            const historyToUse = contact.isOfflineMode 
+                ? sourceHistory.slice(-10) // 线下模式只看最近10条
+                : sourceHistory.slice(contact.contextStartIndex || 0).slice(-(appData.appSettings.contextLimit || 50));
+            
+            // 3. 立即获取最后一条用户消息，供后续的“日记助理”等功能使用
+            const lastUserMessage = sourceHistory.length > 0 ? sourceHistory[sourceHistory.length - 1] : null;
+
+
             removeLoadingBubble();
             lastReceivedSuggestions = [];
             aiSuggestionPanel.classList.add('hidden');
@@ -2422,15 +2476,12 @@ ${contact.persona}
 这是你们之前发生过的故事，请在此基础上继续：
 ${contact.offlineMemory || '（暂无剧情记忆，这是故事的开始。）'}
 `;
-            } else {
+        } else {
                 // 这里是“线上模式大脑”，也就是您原来的全部代码
         
 // ▼▼▼ 【【【终极改造 V7.0：多模态日记助理】】】 ▼▼▼
         let diaryParts = []; // 准备一个空的“图文包裹”，它是一个数组
-        // 【核心修复】根据当前模式，从正确的档案柜中读取最后一条消息
-        const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
-        const lastUserMessage = sourceHistory.length > 0 ? sourceHistory[sourceHistory.length - 1] : null;
-
+        // 【核心修复】我们现在直接使用在函数顶部准备好的 lastUserMessage
         const diaryKeywords = ['日记', '手账', '我写了', '记录', '心情'];
 
         if (lastUserMessage && lastUserMessage.role === 'user' && diaryKeywords.some(keyword => lastUserMessage.content.includes(keyword))) {
@@ -2502,10 +2553,16 @@ ${contact.offlineMemory || '（暂无剧情记忆，这是故事的开始。）'
                 availableStickersPrompt += `- [STICKER:${sticker.aiId}] 描述: ${sticker.desc}\n`;
             });
         }
-        const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
+                const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
         const memoryString = contact.memory || '无';
+
+        // ★★★【【【终极修复：在这里教会AI去正确的档案柜拿历史记录！】】】★★★
+        // 1. 先判断当前是线上还是线下模式，找到正确的“档案柜”
+        const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
+        
+        // 2. 从正确的档案柜里，读取需要用到的上下文
         const startIndex = contact.contextStartIndex || 0;
-        const relevantHistory = contact.chatHistory.slice(startIndex);
+        const relevantHistory = sourceHistory.slice(startIndex);
         
         // ★★★【【【终极修复 V2.0：优先使用你的设置！】】】★★★
         // 1. 读取你在设置中定义的上下文条数，如果没设置，则默认50条
@@ -2555,11 +2612,11 @@ ${contact.offlineMemory || '（暂无剧情记忆，这是故事的开始。）'
                 return `- ${new Date(tx.timestamp).toLocaleDateString('zh-CN')} 花费 ${tx.amount} 元用于 ${tx.description}`;
             }).join('\n');
         }
-                // ▼▼▼ 【【【全新：AI记忆刷新闹钟】】】 ▼▼▼
+        // ▼▼▼ 【【【全新：AI记忆刷新闹钟】】】 ▼▼▼
         let periodicReminderPrompt = '';
         // 【【【核心终极修复：使用完整的历史记录来计算消息总数】】】
         // 解释：我们必须把“待发送”的消息也算进去，才能得到最准确的当前消息总数
-        const messageCount = contact.chatHistory.length + stagedUserMessages.length;
+        const messageCount = (contact.onlineChatHistory.length + contact.offlineChatHistory.length) + stagedUserMessages.length;
 
         // 规则1：强力闹钟 (每60条响一次)，提醒核心人设
         if (messageCount > 0 && messageCount % 60 === 0) {
@@ -2845,12 +2902,9 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
             //           【【【全新的、统一的API请求发送部分】】】
             // ==========================================================
             
-            // 【核心改造】根据当前模式，从隔离的“档案柜”中读取上下文
-            const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
 
-            const historyToUse = contact.isOfflineMode 
-                ? sourceHistory.slice(-10) // 线下模式只看最近10条
-                : sourceHistory.slice(contact.contextStartIndex || 0).slice(-(appData.appSettings.contextLimit || 50));
+
+            
             
             // 【【【终极修复：无论是线上还是线下，都必须经过“专业翻译官”！】】】
             const messagesForApi = await formatHistoryForApi(historyToUse);
@@ -3099,7 +3153,9 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
         }
         
         // 1b. 注入短期记忆：提取最近5条聊天记录
-        const recentHistory = contact.chatHistory.slice(-5).map(m => {
+        // 【核心修复】从当前模式的正确历史记录中提取
+        const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
+        const recentHistory = sourceHistory.slice(-5).map(m => {
              const roleName = m.role === 'user' ? (contact.userProfile.name || '用户') : contact.name;
              return `${roleName}: ${m.content}`;
         }).join('\n');
@@ -3266,9 +3322,11 @@ async function insertAndGenerateThoughtBubble() {
     await displayMessage('（思考中...）', 'assistant', { isNew: false, type: 'thought', id: thoughtId });
     scrollToBottom();
 
-    // --- 准备上下文的部分 (V3.0 - 优先使用用户设置) ---
+        // --- 准备上下文的部分 (V3.0 - 优先使用用户设置) ---
     const startIndex = contact.contextStartIndex || 0;
-    const fullHistory = [...contact.chatHistory, ...stagedUserMessages];
+    // 【核心修复】在这里，我们让程序根据当前模式，去正确的档案柜里拿历史记录！
+    const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
+    const fullHistory = [...sourceHistory, ...stagedUserMessages];
     const relevantHistory = fullHistory.slice(startIndex);
     
     // ★★★【【【终极修复 V2.0：在这里也优先使用你的设置！】】】★★★
@@ -3422,9 +3480,17 @@ ${readableHistory}
             role: 'assistant',
             content: thoughtData, // <-- 现在我们存的是整个对象
             type: 'thought',
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            // 【核心修复】为心声也打上模式标签
+            mode: contact.isOfflineMode ? 'offline' : 'online'
         };
-        contact.chatHistory.push(thoughtMessageRecord);
+
+        // 【核心修复】根据当前模式，存入正确的档案柜
+        if (contact.isOfflineMode) {
+            contact.offlineChatHistory.push(thoughtMessageRecord);
+        } else {
+            contact.onlineChatHistory.push(thoughtMessageRecord);
+        }
         saveAppData();
 
     } catch (error) {
@@ -4973,6 +5039,9 @@ function closeTextEditorModal() {
         showToast('生活作息已保存！', 'success');
         document.getElementById('schedule-editor-modal').classList.add('hidden');
     }
+
+
+    
     function bindEventListeners() {
         // ▼▼▼▼▼ 【全新 V2.0】带遮罩层的侧滑菜单交互 ▼▼▼▼▼
         const sidebarOverlay = document.getElementById('sidebar-overlay');
@@ -5146,9 +5215,9 @@ function closeTextEditorModal() {
         bindDiaryEventListeners();
         // --- 【【【修复完毕】】】 ---
 
-        // ▲▲▲ 【【【指令粘贴完毕】】】 ▲▲▲
+       // ▲▲▲ 【【【指令粘贴完毕】】】 ▲▲▲
 
-        backToChatButton.addEventListener('click', () => switchToView('chat-window-view'));
+        backToChatButton.addEventListener('click', () => openChat(activeChatContactId)); // ★★★【【【终极修复：让返回按钮真正地“打开”聊天！】】】★★★
         csEditAiProfile.addEventListener('click', openAiEditor);
 
         // 【【【终极修复 V3.0：在这里为“编辑生活作息”按钮接上电线！】】】
