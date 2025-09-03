@@ -4254,11 +4254,20 @@ ${readableHistory}
 
         const onlineCount = contact.onlineChatHistory.length;
         const offlineCount = contact.offlineChatHistory.length;
-        csMessageCount.textContent = onlineCount + offlineCount;
         
+        // 步骤1：先执行克隆和替换操作，把“舞台”搭好
         const messageCountItem = document.getElementById('cs-message-count-item');
         const messageCountItemClone = messageCountItem.cloneNode(true);
         messageCountItem.parentNode.replaceChild(messageCountItemClone, messageCountItem);
+
+        // 步骤2：在新的“舞台”(messageCountItemClone)上找到演员(span)，再更新它的台词
+        // 【核心修复】我们现在操作的是那个刚刚被添加到页面上的克隆体！
+        const newCsMessageCount = messageCountItemClone.querySelector('#cs-message-count');
+        if (newCsMessageCount) {
+            newCsMessageCount.textContent = onlineCount + offlineCount;
+        }
+        
+        // 步骤3：为新的“舞台”绑定事件
         messageCountItemClone.addEventListener('click', () => {
             showCustomAlert('对话条数详情', `线上模式: ${onlineCount} 条\n线下模式: ${offlineCount} 条`);
         });
@@ -4533,11 +4542,11 @@ ${readableHistory}
         if (selectedMessages.size !== 1) return;
         const messageId = selectedMessages.values().next().value;
         
-        // 【核心】使用我们升级后的“万能查找器”
+                // 【核心】使用我们升级后的“万能查找器”
         const messageData = findMessageById(messageId);
         
-        // 现在，无论是“正式员工”还是“访客”，只要是用户发的，都能被编辑
-        if (!messageData || messageData.role !== 'user') {
+        // 【核心改造】现在，用户和AI的消息都可以被编辑
+        if (!messageData || (messageData.role !== 'user' && messageData.role !== 'assistant')) {
             exitSelectMode();
             return;
         }
@@ -5543,11 +5552,13 @@ csClearHistory.addEventListener('click', () => {
                         // 2. 将此AI的求爱能力也关闭
                         contact.canPropose = false;
 
-                        // 3. 从聊天记录中删除“官宣”消息
+                        // 3. 从【所有】聊天记录中删除“官宣”消息
                         const relationshipStartText = `你和 ${contact.remark} 已正式确立情侣关系！`;
-                        contact.chatHistory = contact.chatHistory.filter(msg => 
-                            !(msg.type === 'system' && msg.content === relationshipStartText)
-                        );
+                        const isOfficialAnnouncement = msg => msg.type === 'system' && msg.content === relationshipStartText;
+                        
+                        // 【核心修复】同时打扫线上和线下两个房间
+                        contact.onlineChatHistory = contact.onlineChatHistory.filter(msg => !isOfficialAnnouncement(msg));
+                        contact.offlineChatHistory = contact.offlineChatHistory.filter(msg => !isOfficialAnnouncement(msg));
 
                         // 4. 保存所有改动，并刷新UI
                         saveAppData();
@@ -5809,11 +5820,17 @@ messageContainer.addEventListener('click', (event) => {
         const messageId = row.dataset.messageId;
         if (!messageId) return;
 
-        // 步骤1：通知“档案管理员”销毁记录
+        // 步骤1：通知“档案管理员”去正确的档案柜里销毁记录
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (contact) {
-            // 使用filter方法，创建一个不包含那条独白的新数组
-            contact.chatHistory = contact.chatHistory.filter(msg => msg.id !== messageId);
+            // 【核心修复】让档案管理员先判断当前模式
+            if (contact.isOfflineMode) {
+                // 如果是线下模式，就去线下档案柜里删除
+                contact.offlineChatHistory = contact.offlineChatHistory.filter(msg => msg.id !== messageId);
+            } else {
+                // 否则，就去线上档案柜里删除
+                contact.onlineChatHistory = contact.onlineChatHistory.filter(msg => msg.id !== messageId);
+            }
             saveAppData(); // 【至关重要】保存档案的修改！
         }
 
@@ -6379,22 +6396,37 @@ messageContainer.addEventListener('click', (event) => {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
         
-        let messageIndex = contact.chatHistory.findIndex(msg => msg.id === messageId);
+        // 【核心修复】让AI同时检查线上和线下两个档案柜
+        let targetHistory = null;
+        let messageIndex = -1;
 
+        // 先在线上档案柜里找
+        messageIndex = contact.onlineChatHistory.findIndex(msg => msg.id === messageId);
         if (messageIndex > -1) {
-            const originalMessage = contact.chatHistory[messageIndex];
-            // 确保AI不能撤回用户的消息
+            targetHistory = contact.onlineChatHistory;
+        } else {
+            // 如果线上没找到，再去线下档案柜里找
+            messageIndex = contact.offlineChatHistory.findIndex(msg => msg.id === messageId);
+            if (messageIndex > -1) {
+                targetHistory = contact.offlineChatHistory;
+            }
+        }
+
+        if (targetHistory && messageIndex > -1) {
+            const originalMessage = targetHistory[messageIndex];
             if (originalMessage.role !== 'assistant') return;
 
             const recalledMessage = {
                 id: originalMessage.id,
                 type: 'recalled',
-                role: 'assistant', // 明确是AI撤回的
-                timestamp: originalMessage.timestamp || Date.now()
+                role: 'assistant',
+                timestamp: originalMessage.timestamp || Date.now(),
+                mode: originalMessage.mode // 保留原始消息的模式
             };
-            contact.chatHistory.splice(messageIndex, 1, recalledMessage);
+            // 在找到消息的那个正确的档案柜里执行替换操作
+            targetHistory.splice(messageIndex, 1, recalledMessage);
             saveAppData();
-            openChat(activeChatContactId); // 刷新界面
+            openChat(activeChatContactId);
         }
     }
 
