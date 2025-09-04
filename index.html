@@ -487,8 +487,7 @@ var _hmt = _hmt || [];
                     <label for="ai-editor-chat-style">线上风格</label>
                     <textarea id="ai-editor-chat-style" rows="4" placeholder="e.g., 喜欢用短句，偶尔会发可爱的Emoji、颜文字和表情包。不爱发语音，打字很快。说话直接，不喜欢拐弯抹角。"></textarea>
                 </div>
-                                <div class="form-group"><label>AI的专属记忆 (线上模式)</label><textarea id="ai-editor-memory" rows="8" placeholder="线上闲聊的总结、长期记忆..."></textarea></div>
-                <div class="form-group"><label>线下模式记忆</label><textarea id="ai-editor-offline-memory" rows="8" placeholder="线下角色扮演的剧情记录..."></textarea></div>
+                <div class="form-group"><label>AI的专属记忆 (线上模式)</label><textarea id="ai-editor-memory" rows="8" placeholder="线上闲聊的总结、长期记忆..."></textarea></div>
                 <div class="form-group">
                     <label>世界书</label>
                     <div id="ai-editor-worldbook"></div>
@@ -1210,7 +1209,7 @@ var _hmt = _hmt || [];
                     </div>
                 </div>
                  <div class="form-group">
-                    <label for="offline-start-prompt">开场白提示词 (选填)</label>
+                    <label for="offline-start-prompt">剧情设定 (选填)</label>
                     <textarea id="offline-start-prompt" rows="3" placeholder="输入你想让AI作为故事开头的引导语..."></textarea>
                 </div>
             </div>
@@ -1243,15 +1242,50 @@ var _hmt = _hmt || [];
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script> <!-- 引入中文语言包 -->
     <script src="script.js"></script>
 
-    <!-- 【【【全新：剧情线选择弹窗】】】 -->
+    <!-- 【【【全新：剧情线选择弹窗 (V3.0 下拉菜单版)】】】 -->
     <div class="modal-overlay hidden" id="storyline-select-modal">
-        <div class="modal-container">
-            <h3 id="storyline-select-title">选择剧情线</h3>
-            <div id="storyline-select-options"></div>
-            <div class="modal-buttons">
-                <button class="button-secondary" id="cancel-storyline-select-btn">取消</button>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="storyline-select-title">选择剧情线</h3>
+            </div>
+            <div class="modal-body">
+                <!-- 核心改造：使用form-group来包裹下拉菜单，自动美化 -->
+                <div class="form-group">
+                    <select id="storyline-select-dropdown"></select>
+                </div>
+            </div>
+            <div class="modal-footer-split">
+                <button id="cancel-storyline-select-btn" class="modal-button secondary">取消</button>
+                <!-- 核心新增：添加一个“确定”按钮 -->
+                <button id="confirm-storyline-select-btn" class="modal-button primary">确定</button>
             </div>
         </div>
     </div>
+    </div>
+</div>
+
+<!-- ▼▼▼ 【【【全新：剧情线编辑器弹窗】】】 ▼▼▼ -->
+<div id="storyline-editor-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="storyline-editor-title">编辑剧情线</h3>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="storyline-editor-name">存档名称</label>
+                <input type="text" id="storyline-editor-name">
+            </div>
+            <div class="form-group">
+                <label for="storyline-editor-memory">剧情记忆</label>
+                <textarea id="storyline-editor-memory" rows="10" placeholder="这条剧情线里发生过的关键故事..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer-split">
+            <button id="cancel-storyline-edit-btn" class="modal-button secondary">取消</button>
+            <button id="save-storyline-edit-btn" class="modal-button primary">保存</button>
+        </div>
+    </div>
+</div>
+<!-- ▲▲▲▲▲ 弹窗添加完毕 ▲▲▲▲▲ -->
 </body>
 </html>
