@@ -364,6 +364,11 @@ var _hmt = _hmt || [];
                         <span>设置线下模式</span>
                         <span class="arrow">></span>
                     </div>
+<!-- 【【【全新：剧情线管理入口】】】 -->
+                <div class="settings-item" id="cs-manage-storylines">
+                    <span>剧情线管理</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="arrow-right"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </div>
                 </div>
                 <!-- ▲▲▲▲▲ 线下模式结束 ▲▲▲▲▲ -->
 
@@ -413,6 +418,29 @@ var _hmt = _hmt || [];
                     </div>
                 </div>
             </div>
+        </div>
+        <!-- 【【【全新：线下剧情线管理页面】】】 -->
+        <div class="view hidden" id="storyline-manager-view">
+            <!-- 1. 页面顶部导航栏 -->
+            <div class="view-header">
+                <button class="header-button" id="back-to-contact-settings-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <h2 class="header-title">剧情线管理</h2>
+            </div>
+
+            <!-- 【核心改造】在这里添加一个 settings-container 把内容包起来 -->
+            <div class="settings-container">
+                <!-- 2. 存档列表的容器 -->
+                <div class="scroll-container" id="storyline-list-container">
+                    <!-- 剧情线列表将由JS动态生成在这里 -->
+                </div>
+            </div>
+
+            <!-- 3. 新增存档的悬浮按钮 (FAB) -->
+            <button class="fab" id="add-storyline-fab" title="新增剧情线">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
         </div>
         
         <!-- 视图6: AI信息编辑页面 -->
@@ -1216,5 +1244,15 @@ var _hmt = _hmt || [];
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script> <!-- 引入中文语言包 -->
     <script src="script.js"></script>
 
+    <!-- 【【【全新：剧情线选择弹窗】】】 -->
+    <div class="modal-overlay hidden" id="storyline-select-modal">
+        <div class="modal-container">
+            <h3 id="storyline-select-title">选择剧情线</h3>
+            <div id="storyline-select-options"></div>
+            <div class="modal-buttons">
+                <button class="button-secondary" id="cancel-storyline-select-btn">取消</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
