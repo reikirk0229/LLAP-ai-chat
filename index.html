@@ -1182,7 +1182,7 @@ var _hmt = _hmt || [];
     </div>
     <!-- ▲▲▲▲▲ 单个作息项编辑器弹窗结束 ▲▲▲▲▲ -->
 
-    <!-- ▼▼▼ 【【【全新：线下模式设置弹窗】】】 ▼▼▼ -->
+    <!-- ▼▼▼ 【【【全新V2.0：剧情线驱动的线下模式设置弹窗】】】 ▼▼▼ -->
     <div id="offline-settings-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -1190,6 +1190,13 @@ var _hmt = _hmt || [];
                 <button id="close-offline-settings-btn" class="close-button">&times;</button>
             </div>
             <div class="modal-body">
+                <!-- 1. 全新增加的剧情线选择器 -->
+                <div class="form-group">
+                    <label for="offline-storyline-select">为哪条剧情线进行设置？</label>
+                    <select id="offline-storyline-select"></select>
+                </div>
+                <hr>
+                <!-- 2. 下面的所有设置都将与上面选择的剧情线绑定 -->
                 <div class="form-group">
                     <label for="offline-word-limit">单次回复字数限制</label>
                     <input type="number" id="offline-word-limit" placeholder="建议200-500，0为不限制">
@@ -1211,6 +1218,11 @@ var _hmt = _hmt || [];
                  <div class="form-group">
                     <label for="offline-start-prompt">剧情设定 (选填)</label>
                     <textarea id="offline-start-prompt" rows="3" placeholder="输入你想让AI作为故事开头的引导语..."></textarea>
+                </div>
+                <!-- 3. 全新增加的AI开场白输入框 -->
+                <div class="form-group">
+                    <label for="offline-opening-remark">AI开场白 (选填)</label>
+                    <textarea id="offline-opening-remark" rows="3" placeholder="AI将自动发送这段内容，作为本剧情线的开场白..."></textarea>
                 </div>
             </div>
             <div class="modal-footer">
