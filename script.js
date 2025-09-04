@@ -85,6 +85,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 transaction.oncomplete = () => resolve();
                 transaction.onerror = (event) => reject("图片删除失败: " + event.target.errorCode);
             });
+        },
+        // ▼▼▼ 【【【全新：一次性读取所有图片的魔法】】】 ▼▼▼
+        getAllImages: function() {
+            return new Promise((resolve, reject) => {
+                if (!this._db) return reject("数据库未初始化");
+                const transaction = this._db.transaction(['images'], 'readonly');
+                const store = transaction.objectStore('images');
+                const request = store.getAll(); // 获取所有图片
+                const keysRequest = store.getAllKeys(); // 获取所有图片的钥匙
+
+                let results = {};
+                let images, keys;
+
+                const checkCompletion = () => {
+                    if (images && keys) {
+                        keys.forEach((key, index) => {
+                            results[key] = images[index];
+                        });
+                        resolve(results);
+                    }
+                };
+                
+                request.onsuccess = (event) => {
+                    images = event.target.result;
+                    checkCompletion();
+                };
+                keysRequest.onsuccess = (event) => {
+                    keys = event.target.result;
+                    checkCompletion();
+                };
+
+                request.onerror = (event) => reject("读取所有图片失败: " + event.target.errorCode);
+                keysRequest.onerror = (event) => reject("读取所有图片钥匙失败: " + event.target.errorCode);
+            });
         }
     };
 
@@ -4835,6 +4869,180 @@ function closeTextEditorModal() {
             renderChatList();
         });
     }
+
+    // ▼▼▼ 【【【全新：数据导出/导入的核心魔法】】】 ▼▼▼
+
+    /**
+     * 将Blob文件对象转换为Base64编码的文本
+     */
+    function blobToBase64(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    }
+
+    /**
+     * 导出全部应用数据 (V2.0 - 文件下载版)
+     */
+    async function exportAllData() {
+        showToast('正在打包数据，请稍候...', 'info', 0);
+
+        try {
+            // 步骤 1-4 保持不变，我们依然需要打包所有数据
+            const appDataToExport = JSON.parse(localStorage.getItem('myAiChatApp_V8_Data'));
+            const allImages = await db.getAllImages();
+            const imageDataBase64 = {};
+            for (const key in allImages) {
+                if (allImages[key] instanceof Blob) {
+                    imageDataBase64[key] = await blobToBase64(allImages[key]);
+                }
+            }
+            const backupData = {
+                appData: appDataToExport,
+                imageData: imageDataBase64
+            };
+
+            // 5. 【核心改造】将“超级包裹”转换成适合阅读的JSON文本
+            const backupString = JSON.stringify(backupData, null, 2); // null, 2 会让导出的json文件有缩进，方便阅读
+
+            // 6. 【核心改造】创建“数字文件包裹”(Blob)
+            const blob = new Blob([backupString], { type: 'application/json' });
+
+            // 7. 【核心改造】创建一个临时的、隐藏的下载链接
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ai_chat_backup_${new Date().toISOString().slice(0,10)}.json`; // 自动生成带日期的文件名
+
+            // 8. 【核心改造】模拟用户点击这个链接来触发下载，然后“阅后即焚”
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url); // 释放内存
+
+            showToast('数据文件已开始下载！', 'success');
+
+        } catch (error) {
+            console.error('导出数据时发生错误:', error);
+            showCustomAlert('导出失败', `发生了一个错误： ${error.message}`);
+        }
+    }
+
+    /**
+     * 将Base64编码的文本“翻译”回Blob文件对象
+     */
+    async function dataURLToBlob(dataurl) {
+        const res = await fetch(dataurl);
+        return await res.blob();
+    }
+
+    /**
+     * 导入全部应用数据 (V2.0 - 文件选择版)
+     */
+    async function importAllData() {
+        // 1. 【核心改造】创建一个隐藏的文件选择输入框
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json'; // 只允许选择json文件
+
+        // 2. 【核心改造】定义当用户选择了文件后，应该做什么
+        input.onchange = (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                showToast('导入已取消', 'info');
+                return;
+            }
+
+            // 3. 【核心改造】使用“文件阅读器”来读取文件内容
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const backupString = e.target.result;
+
+                // 4. 【逻辑迁移】将之前的确认和导入逻辑，完整地搬到这里
+                showCustomConfirm(
+                    '【高风险操作】确认导入',
+                    `确定要从文件 [${file.name}] 导入数据吗？\n\n此操作将完全覆盖当前的所有数据，且无法撤销！`,
+                    async () => {
+                showToast('正在导入数据，请勿关闭页面...', 'info', 0);
+                try {
+                    // 1. 解析备份码
+                    const backupData = JSON.parse(backupString);
+
+                    // 2. 验证备份码
+                    if (!backupData || !backupData.appData || !backupData.imageData) {
+                        throw new Error("备份文件格式不正确或已损坏。");
+                    }
+
+                    // 3. 恢复文本数据
+                    localStorage.setItem('myAiChatApp_V8_Data', JSON.stringify(backupData.appData));
+
+                    // 4. 将所有Base64图片预先转换为Blob对象
+                    showToast('正在解析图片...', 'info', 0);
+                    const imageEntries = [];
+                    const conversionPromises = Object.entries(backupData.imageData).map(([key, dataUrl]) =>
+                        dataURLToBlob(dataUrl).then(blob => {
+                            imageEntries.push([key, blob]);
+                        })
+                    );
+                    await Promise.all(conversionPromises);
+
+                    // 5. 【终极解决方案：分批处理图片】
+                    
+                    // 5a. 第一步：执行一个独立的、短小精悍的“清空”事务
+                    showToast('正在清空旧图库...', 'info', 0);
+                    const clearTransaction = db._db.transaction(['images'], 'readwrite');
+                    clearTransaction.objectStore('images').clear();
+                    await new Promise((resolve, reject) => {
+                        clearTransaction.oncomplete = resolve;
+                        clearTransaction.onerror = reject;
+                    });
+                    
+                    // 5b. 第二步：分批次写入新图片
+                    const BATCH_SIZE = 200; // 每次处理200张图片，这是一个非常安全的大小
+                    for (let i = 0; i < imageEntries.length; i += BATCH_SIZE) {
+                        const batch = imageEntries.slice(i, i + BATCH_SIZE);
+                        showToast(`正在写入图片 (${i + batch.length}/${imageEntries.length})...`, 'info', 0);
+
+                        // 为每一个批次，都开启一个全新的事务
+                        const batchTransaction = db._db.transaction(['images'], 'readwrite');
+                        const store = batchTransaction.objectStore('images');
+                        
+                        for (const [key, blob] of batch) {
+                            store.put(blob, key); // 快速存入
+                        }
+                        
+                        // 等待这个小批次的事务完成
+                        await new Promise((resolve, reject) => {
+                            batchTransaction.oncomplete = resolve;
+                            batchTransaction.onerror = reject;
+                        });
+                    }
+
+                    showToast('数据导入成功！应用即将刷新...', 'success', 2500);
+
+                    // 6. 刷新页面
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2500);
+
+                } catch (error) {
+                    console.error('导入数据时发生错误:', error);
+                    showCustomAlert('导入失败', `发生了一个错误： ${error.message}\n\n请检查您的备份文件是否正确。`);
+                }
+            }
+                );
+            };
+            
+            // 命令“文件阅读器”开始工作
+            reader.readAsText(file);
+        };
+
+        // 5. 【核心改造】用代码模拟点击这个隐藏的文件选择框
+        input.click();
+    }
     
         function addNewContact() {
         const newContactId = Date.now();
@@ -5696,6 +5904,13 @@ if (restartContextSetting) {
 
 
         csDeleteContact.addEventListener('click', deleteActiveContact);
+
+        // ▼▼▼ 【【【全新V2.0：为导出/导入按钮绑定魔法】】】 ▼▼▼
+        document.getElementById('export-data-button').addEventListener('click', exportAllData);
+        document.getElementById('import-data-button').addEventListener('click', importAllData);
+        // (由于弹窗已被移除，此处不再需要为关闭和复制按钮绑定事件)
+        // ▲▲▲▲▲ ▲▲▲▲▲  
+
         csPinToggle.addEventListener('change', togglePinActiveChat);
         
         // 【【【全新V2.0：为通用模式选择弹窗绑定按钮事件】】】
