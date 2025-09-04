@@ -4415,3 +4415,55 @@ input:checked + .slider:before {
     overflow-y: auto; /* 如果内容超长，允许独立滚动 */
     width: 100%;
 }
+/* --- 【【【终极修复V3.0：模仿账本页面的标准布局样式】】】 --- */
+
+/* 1. 为账本页和剧情线管理页的列表容器，应用完全相同的样式 */
+#ledger-container,
+#storyline-list-container {
+    flex-grow: 1; /* 核心：让它自动伸展，填满所有剩余的垂直空间 */
+    background-color: var(--color-background-light); /* 核心：给它刷上白色背景 */
+    overflow-y: auto; /* 核心：如果内容超长，允许滚动 */
+    padding: 15px;    /* 增加一些内边距，让内容更好看 */
+    box-sizing: border-box;
+}
+
+/* 2. 确保页面骨架(.view)是标准的垂直弹性布局 (这是所有布局的基础) */
+.view {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+}
+
+/* 3. 确保标题和悬浮按钮样式正确 (保持不变) */
+.view-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.view-header .header-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0 50px; 
+    box-sizing: border-box;
+    width: 100%;
+    text-align: center;
+}
+.fab {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+/* --- 【全新】剧情线管理页面专属样式微调 --- */
+.ledger-item .delete-storyline-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    color: var(--text-secondary); /* 继承次要文字颜色，变成灰色 */
+}
+
+.ledger-item .delete-storyline-btn:hover {
+    color: #333; /* 鼠标悬停时变黑 */
+}
