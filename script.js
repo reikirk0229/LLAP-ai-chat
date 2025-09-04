@@ -962,16 +962,31 @@ async function formatHistoryForApi(history) {
     if (!c.offlineStorylines) {
         c.offlineStorylines = []; // 创建一个空的“剧情文件夹”
         // 数据迁移：如果存在旧的单线记忆，就把它变成第一个存档
-        if (c.offlineMemory) {
+        if (c.offlineChatHistory && c.offlineChatHistory.length > 0) {
             c.offlineStorylines.push({
                 id: `story-${Date.now()}`,
                 name: '默认剧情线',
-                memory: c.offlineMemory,
+                memory: c.offlineMemory || '',
+                chatHistory: c.offlineChatHistory || [],
+                mergePolicy: 'separate', // 为旧数据迁移过来的存档设置一个默认的“独立”策略
                 lastPlayed: Date.now()
             });
-            delete c.offlineMemory; // 删除旧的属性
+            // 迁移完成后，删除旧的、全局的属性
+            delete c.offlineChatHistory; 
         }
     }
+    // 【【【全新：为旧的全局线下记忆进行最终搬家】】】
+    // 这段代码确保，如果还残留着旧的全局记忆，就把它塞进第一个存档里
+    if (c.offlineMemory && c.offlineStorylines.length > 0) {
+        // 检查第一个存档是否还没有自己的记忆
+        if (!c.offlineStorylines[0].memory) {
+            c.offlineStorylines[0].memory = c.offlineMemory;
+        }
+        delete c.offlineMemory; // 无论如何，搬完家就扔掉旧抽屉
+    }
+    // 【新增】为全新的角色也创建空的剧情文件夹
+    if (!c.offlineStorylines) c.offlineStorylines = [];
+
     if (c.activeOfflineStoryId === undefined) {
         c.activeOfflineStoryId = null; // 添加一个“当前存档ID”的标记
     }
@@ -985,10 +1000,7 @@ async function formatHistoryForApi(history) {
     }
        // ▲▲▲▲▲ 线下模式数据初始化结束 ▲▲▲▲▲
 
-    // 【【【全新：为线下模式总结策略添加“记忆开关”】】】
-    if (c.offlineModeMergePolicy === undefined) {
-        c.offlineModeMergePolicy = 'merge'; // 默认策略是“合并”
-    }
+    
 
     // 【【【核心改造：数据迁移与聊天记录分离】】】
     // 如果还存在旧的、统一的chatHistory，并且新的独立记录不存在，则执行一次性迁移
@@ -1343,12 +1355,23 @@ async function formatHistoryForApi(history) {
         const modelArea = document.getElementById('model-area');
         modelArea.style.display = apiTypeSelect.value === 'gemini_direct' ? 'none' : 'block';
     }
-        async function loadAndDisplayHistory(isInitialLoad = false) {
+    async function loadAndDisplayHistory(isInitialLoad = false) {
     const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
     if (!contact) return;
 
-    // 【核心改造】根据当前模式，选择要显示的“档案柜”
-    const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
+    // --- 【【【终极修复：智能档案检索系统】】】 ---
+    let sourceHistory;
+    if (contact.isOfflineMode) {
+        // 线下模式：先找到当前激活的剧情线
+        const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+        // 然后从这条线里，拿出它专属的聊天记录册
+        sourceHistory = activeStory ? activeStory.chatHistory : [];
+    } else {
+        // 线上模式：逻辑保持不变
+        sourceHistory = contact.onlineChatHistory;
+    }
+    // --- 【【【修复完毕】】】 ---
+
     if (!sourceHistory) return;
 
     const loadMoreBtn = document.getElementById('load-more-btn');
@@ -1622,20 +1645,28 @@ updateChatHeader();
         // 4. 【核心改造】默认状态不再是“在线”，而是“空闲”
         return { status: "空闲", isAwake: true };
     }
-    // “聪明的档案管理员” V3.0 (终极稳健版，可应对状态同步延迟)
+    // “聪明的档案管理员” V4.0 (剧情线感知版)
     function findMessageById(messageId) {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return null;
-
-        // 【【【核心终极修复：使用“安全短路”逻辑，防止读取瞬时不存在的属性】】】
-        // 即使在数据快速变化的瞬间 contact.onlineChatHistory 暂时为 undefined，
-        // (contact.onlineChatHistory || []) 也能确保我们总是在一个（可能是空的）数组上进行 .find() 操作，
-        // 从而避免程序崩溃，并保证搜索链的完整性。
-        const message = 
+    
+        // 步骤1: 先在“线上”和“待发送”这两个常规区域里找
+        let message = 
             (contact.onlineChatHistory || []).find(msg => msg.id === messageId) ||
-            (contact.offlineChatHistory || []).find(msg => msg.id === messageId) ||
             (contact.unsentMessages || []).find(msg => msg.id === messageId);
-
+    
+        // 步骤2: 如果还没找到，就启动“线下剧情线大搜查”
+        if (!message && contact.offlineStorylines && contact.offlineStorylines.length > 0) {
+            for (const story of contact.offlineStorylines) {
+                // 在每一条剧情线的聊天记录册里都找一遍
+                const foundInStory = (story.chatHistory || []).find(msg => msg.id === messageId);
+                if (foundInStory) {
+                    message = foundInStory;
+                    break; // 一旦找到，立刻停止搜查
+                }
+            }
+        }
+    
         return message || null;
     }
     function formatScheduleForAI(schedule) {
@@ -1908,8 +1939,14 @@ ${chatLog}
 
         const lastSummaryCount = contact.lastSummaryAtCount || 0;
         
-        // 1. 【全新数据地图】合并所有历史记录，只为了得到一个最准确的“总消息数”
-        const fullHistoryForCount = [...contact.onlineChatHistory, ...contact.offlineChatHistory]
+        // 1. 【【【终极修复：从所有正确的“文件夹”里收集数据】】】
+        // 首先，把所有线下剧情线里的聊天记录都汇总到一个临时数组里
+        const allOfflineMessages = (contact.offlineStorylines || []).reduce((acc, story) => {
+            return acc.concat(story.chatHistory || []);
+        }, []);
+
+        // 然后，再把线上记录和刚刚汇总好的所有线下记录合并，得到最完整的历史
+        const fullHistoryForCount = [...contact.onlineChatHistory, ...allOfflineMessages]
             .sort((a, b) => a.timestamp - b.timestamp);
         
         // 2. 从这个完整的记录里，切出所有“新”消息
@@ -1927,20 +1964,27 @@ ${chatLog}
             const isOnlineModeForPrompt = summarizingMode === 'online';
             const summary = await generateSummary(isOnlineModeForPrompt, messagesToSummarize);
             
-            // 4. 【听从指挥】根据新指令，将总结存入指定的目标记忆区
-            if (saveTarget === 'offlineMemory') {
-                const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
-                if (activeStory) {
-                    if (activeStory.memory.trim() !== '') {
-                        activeStory.memory += `\n\n---\n# 自动总结 (${new Date().toLocaleString()})\n`;
-                    }
-                    activeStory.memory += summary;
+            // 4. 【【【终极修复：实现“双重存档”的全新智能逻辑】】】
+            const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+
+            // 步骤A (必须执行): 无论如何，都必须为当前剧情线保存一份本地记忆副本。
+            if (activeStory) {
+                if (!activeStory.memory) activeStory.memory = ''; // 安全检查，确保记忆属性存在
+                if (activeStory.memory.trim() !== '') {
+                    activeStory.memory += `\n\n---\n# 自动总结 (${new Date().toLocaleString()})\n`;
                 }
-            } else { // 存入线上记忆
-                if (contact[saveTarget].trim() !== '') {
-                    contact[saveTarget] += `\n\n---\n# 自动总结 (${new Date().toLocaleString()})\n`;
+                activeStory.memory += summary;
+                console.log(`Summary saved to storyline: ${activeStory.name}`);
+            }
+
+            // 步骤B (按需执行): 检查是否需要额外将这份记忆合并到线上主记忆中。
+            // 我们的 saveTarget 在 policy 为 'merge' 时会被设为 'memory'。
+            if (saveTarget === 'memory') {
+                if (contact.memory.trim() !== '') {
+                    contact.memory += `\n\n---\n# 自动总结 (${new Date().toLocaleString()})\n`;
                 }
-                contact[saveTarget] += summary;
+                contact.memory += summary;
+                console.log(`Summary also merged into main online memory.`);
             }
             
             // 5. 【修复记账本】用最准确的总消息数，来更新“小账本”
@@ -2232,12 +2276,20 @@ async function displayMessage(text, role, options = {}) {
                 Object.assign(messageToSave, options);
                 delete messageToSave.isNew;
 
-                // 【【【核心修复：在这里让AI消息也存入正确的档案柜】】】
+                // --- 【【【终极修复：智能消息存储系统】】】 ---
                 if (contact.isOfflineMode) {
-                    contact.offlineChatHistory.push(messageToSave);
+                    // 线下模式：找到当前激活的剧情线
+                    const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+                    if (activeStory) {
+                        // 把消息存入这条线专属的记录册
+                        if (!activeStory.chatHistory) activeStory.chatHistory = []; // 安全检查
+                        activeStory.chatHistory.push(messageToSave);
+                    }
                 } else {
+                    // 线上模式：逻辑保持不变
                     contact.onlineChatHistory.push(messageToSave);
                 }
+                // --- 【【【修复完毕】】】 ---
                 
                 saveAppData();
                 renderChatList();
@@ -2349,15 +2401,20 @@ async function displayMessage(text, role, options = {}) {
                 timestamp: Date.now(), 
                 ...msg,
                 id: msg.id || `${Date.now()}-${Math.random()}`,
-                mode: contact.isOfflineMode ? 'offline' : 'online' // 【核心修复】为用户消息也打上模式标签
+                mode: contact.isOfflineMode ? 'offline' : 'online'
             };
             
-            // 【核心修复】根据当前模式，存入正确的“档案柜”
+            // --- 【【【终极修复：用户消息智能存储】】】 ---
             if (contact.isOfflineMode) {
-                contact.offlineChatHistory.push(messageToSave);
+                const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+                if (activeStory) {
+                    if (!activeStory.chatHistory) activeStory.chatHistory = [];
+                    activeStory.chatHistory.push(messageToSave);
+                }
             } else {
                 contact.onlineChatHistory.push(messageToSave);
             }
+            // --- 【【【修复完毕】】】 ---
         });
         
         let shouldCallAI = true;
@@ -2424,16 +2481,24 @@ async function displayMessage(text, role, options = {}) {
             const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
             if (!contact) return;
 
-            // ★★★【【【终极修复 V6.0：在一切开始前，就准备好所有历史记录！】】】★★★
-            // 1. 立即确定我们要从哪个“档案柜”取东西
-            const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
-            
-            // 2. 立即根据模式，切出本次API调用真正需要的“上下文”片段
+            // ★★★【【【终极修复 V7.0：剧情线感知的上下文检索系统】】】★★★
+            let sourceHistory;
+            if (contact.isOfflineMode) {
+                // 线下模式：1. 找到当前激活的剧情线
+                const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+                // 2. 从这条线里，拿出它专属的聊天记录册
+                sourceHistory = activeStory && activeStory.chatHistory ? activeStory.chatHistory : [];
+            } else {
+                // 线上模式：逻辑保持不变
+                sourceHistory = contact.onlineChatHistory;
+            }
+
+            // 立即根据模式，切出本次API调用真正需要的“上下文”片段
             const historyToUse = contact.isOfflineMode 
                 ? sourceHistory.slice(-10) // 线下模式只看最近10条
                 : sourceHistory.slice(contact.contextStartIndex || 0).slice(-(appData.appSettings.contextLimit || 50));
             
-            // 3. 立即获取最后一条用户消息，供后续的“日记助理”等功能使用
+            // 立即获取最后一条用户消息，供后续的功能使用
             const lastUserMessage = sourceHistory.length > 0 ? sourceHistory[sourceHistory.length - 1] : null;
 
 
@@ -4272,7 +4337,8 @@ ${readableHistory}
         document.getElementById('cs-offline-mode-toggle').checked = contact.isOfflineMode;
 
         const onlineCount = contact.onlineChatHistory.length;
-        const offlineCount = contact.offlineChatHistory.length;
+        // 【核心改造】通过遍历所有剧情线，累加它们的聊天记录数量
+        const offlineCount = (contact.offlineStorylines || []).reduce((total, story) => total + (story.chatHistory ? story.chatHistory.length : 0), 0);
         
         // 步骤1：先执行克隆和替换操作，把“舞台”搭好
         const messageCountItem = document.getElementById('cs-message-count-item');
@@ -4293,13 +4359,23 @@ ${readableHistory}
 
         switchToView('contact-settings-view');
 
-        // 【【【终极修复V3.0：在这里进行“现场绑定”】】】
-        // 这一步确保，每次打开设置页时，我们都为“手动总结”按钮接上最新的、唯一的电源
-        const summarizeChatBtn = document.getElementById('cs-summarize-chat');
-        if (summarizeChatBtn) {
-            const summarizeChatBtnClone = summarizeChatBtn.cloneNode(true);
-            summarizeChatBtn.parentNode.replaceChild(summarizeChatBtnClone, summarizeChatBtn);
-            summarizeChatBtnClone.addEventListener('click', handleManualSummary);
+        // 【【【终极修复：为“清空聊天记录”按钮也进行“现场绑定”】】】
+        const clearHistoryBtn = document.getElementById('cs-clear-history');
+        if (clearHistoryBtn) {
+            const clearHistoryBtnClone = clearHistoryBtn.cloneNode(true);
+            clearHistoryBtn.parentNode.replaceChild(clearHistoryBtnClone, clearHistoryBtn);
+            clearHistoryBtnClone.addEventListener('click', () => {
+                const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+                if (!contact) return;
+                
+                showCustomConfirm(
+                    '清空线上记录',
+                    `确定要删除与 ${contact.remark} 的所有【线上模式】聊天记录吗？\n\n此操作无法撤销！`,
+                    () => {
+                        clearOnlineChatHistory();
+                    }
+                );
+            });
         }
     }
 
@@ -4316,8 +4392,7 @@ ${readableHistory}
         aiEditorPersona.value = contact.persona;
         document.getElementById('ai-editor-public-card').value = contact.publicProfileCard || '';
         document.getElementById('ai-editor-chat-style').value = contact.chatStyle || '';
-                aiEditorMemory.value = contact.memory;
-        document.getElementById('ai-editor-offline-memory').value = contact.offlineMemory || ''; // 【核心新增】加载线下记忆
+        aiEditorMemory.value = contact.memory;
         aiEditorWorldbook.innerHTML = '';
         if (contact.worldBook && contact.worldBook.length > 0) {
             contact.worldBook.forEach(entry => renderWorldbookEntry(entry.key, entry.value));
@@ -4376,7 +4451,6 @@ ${readableHistory}
         contact.publicProfileCard = document.getElementById('ai-editor-public-card').value;
                contact.chatStyle = document.getElementById('ai-editor-chat-style').value;
         contact.memory = aiEditorMemory.value;
-        contact.offlineMemory = document.getElementById('ai-editor-offline-memory').value; // 【核心新增】保存在线下记忆
         
         contact.worldBook = [];
         aiEditorWorldbook.querySelectorAll('.worldbook-entry').forEach(entryDiv => {
@@ -4400,28 +4474,21 @@ ${readableHistory}
     }
     
     /**
-     * 【全新V2.0】一个更听话的“清洁工”，可以按指令清空指定模式的记录
-     * @param {string} modeToClear - 'online' 或 'offline'
+     * 【【【终极修复版：一个只负责清空线上记录的专业清洁工】】】
      */
-    function clearActiveChatHistory(modeToClear) {
+    function clearOnlineChatHistory() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
 
-        const modeText = modeToClear === 'online' ? '线上' : '线下';
-        const targetHistory = modeToClear === 'online' ? 'onlineChatHistory' : 'offlineChatHistory';
-
-        showCustomConfirm(`清空${modeText}记录`, `确定要删除与 ${contact.remark} 的所有【${modeText}模式】聊天记录吗？\n\n此操作无法撤销！`, () => {
-            contact[targetHistory] = [];
-            
-            if (modeToClear === 'online') {
-                contact.contextStartIndex = 0;
-            }
-            
-            saveAppData();
-            openChat(contact.id);
-            renderChatList();
-            showCustomAlert('操作成功', `${modeText}聊天记录已清空。`);
-        });
+        // 直接清空线上历史记录
+        contact.onlineChatHistory = [];
+        // 线上记忆的起始指针也必须归零，否则AI会“失忆”
+        contact.contextStartIndex = 0; 
+        
+        saveAppData();
+        openChat(contact.id); // 重新加载聊天界面
+        renderChatList(); // 刷新列表
+        showCustomAlert('操作成功', '线上聊天记录已清空。');
     }
 
     function togglePinActiveChat() {
@@ -5453,10 +5520,23 @@ function closeTextEditorModal() {
 
                 // 智能判断：根据存档数量决定下一步操作
                 if (contact.offlineStorylines.length === 0) {
-                    // 没有任何存档，自动创建第一个
-                    const newStory = { id: `story-${Date.now()}`, name: '默认剧情线', memory: '', lastPlayed: Date.now() };
-                    contact.offlineStorylines.push(newStory);
-                    enterOfflineMode(newStory.id);
+                    // 没有任何存档，弹出选择框让用户决定第一个存档的模式
+                    showCustomConfirm(
+                        '首次开启剧情模式',
+                        '如何开始你的第一段线下剧情？',
+                        () => { // 用户选择“继承”
+                            const newStory = { id: `story-${Date.now()}`, name: '默认剧情线', memory: contact.memory, mergePolicy: 'merge', chatHistory: [], lastPlayed: Date.now() };
+                            contact.offlineStorylines.push(newStory);
+                            enterOfflineMode(newStory.id);
+                        },
+                        () => { // 用户选择“全新”
+                            const newStory = { id: `story-${Date.now()}`, name: '默认剧情线', memory: '', mergePolicy: 'separate', chatHistory: [], lastPlayed: Date.now() };
+                            contact.offlineStorylines.push(newStory);
+                            enterOfflineMode(newStory.id);
+                        },
+                        '继承线上记忆',
+                        '开启全新记忆'
+                    );
                 } else if (contact.offlineStorylines.length === 1) {
                     // 只有一个存档，直接加载
                     enterOfflineMode(contact.offlineStorylines[0].id);
@@ -5471,9 +5551,15 @@ function closeTextEditorModal() {
                         }
                     });
                 }
-                        } else {
+                } else {
                 // --- 准备返回线上模式 ---
-                const saveTarget = contact.offlineModeMergePolicy === 'separate' ? 'offlineMemory' : 'memory';
+                // 【【【终极修复：让总结机器人去问对应的存档】】】
+                const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+                let saveTarget = 'memory'; // 默认是合并到线上
+                // 如果能找到当前存档，并且它的策略是“独立”
+                if (activeStory && activeStory.mergePolicy === 'separate') {
+                    saveTarget = 'offlineMemory'; // 才把保存目标改为它自己的线下记忆
+                }
                 
                 await forceSummaryOnModeSwitch(contact, 'offline', saveTarget);
                 
@@ -5528,11 +5614,7 @@ if (restartContextSetting) {
         setupAutoSummaryInteraction(); // <--- 激活自动总结UI交互
         // --- 绑定结束 ---
 
-csClearHistory.addEventListener('click', () => {
-            showGenericModeSelectModal((isOnline) => {
-                clearActiveChatHistory(isOnline ? 'online' : 'offline');
-            });
-        });
+
         csDeleteContact.addEventListener('click', deleteActiveContact);
         csPinToggle.addEventListener('change', togglePinActiveChat);
         
@@ -6036,10 +6118,13 @@ function renderOfflineStorylines() {
                     </div>
                 </div>
                 <div class="ledger-item-actions">
-                    <button class="delete-storyline-btn" data-story-id="${story.id}" title="删除存档">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 14H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg>
-                    </button>
-                </div>
+                    <button class="edit-storyline-btn" data-story-id="${story.id}" title="编辑存档">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                </button>
+                <button class="delete-storyline-btn" data-story-id="${story.id}" title="删除存档">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 14H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg>
+                </button>
+            </div>
             `;
             // 点击整个条目来切换存档
             itemDiv.addEventListener('click', (e) => {
@@ -6052,8 +6137,104 @@ function renderOfflineStorylines() {
             });
             container.appendChild(itemDiv);
         });
+     }
+
+    /**
+     * 【【【终极修复版：真正驱动“下拉菜单”的全新控制器】】】
+     * @param {Array} storyOptions - 格式为 [{id: 'story-123', text: '冒险故事'}] 的数组
+     * @param {Function} callback - 用户选择后的回调函数，会返回选择的ID或null
+     */
+    function showStorylineSelectionModal(storyOptions, callback) {
+        const modal = document.getElementById('storyline-select-modal');
+        // 1. 【核心修正】定位到正确的下拉列表元素，而不是不存在的div
+        const dropdown = document.getElementById('storyline-select-dropdown');
+        const cancelBtn = document.getElementById('cancel-storyline-select-btn');
+        const confirmBtn = document.getElementById('confirm-storyline-select-btn');
+
+        // 2. 清空旧的<option>选项
+        dropdown.innerHTML = '';
+
+        // 3. 【核心修正】用 <option> 元素来填充下拉列表
+        storyOptions.forEach(option => {
+            const optionElement = document.createElement('option');
+            optionElement.value = option.id; // 把故事ID作为值
+            optionElement.textContent = option.text; // 把故事名字作为显示的文本
+            dropdown.appendChild(optionElement);
+        });
+
+        // 4. 【全新逻辑】为“确定”按钮绑定【一次性】点击事件
+        const confirmHandler = () => {
+            modal.classList.add('hidden');
+            // 当点击确定时，读取下拉列表当前选中的值，并把它传回去
+            callback(dropdown.value);
+            // 用完就扔，防止重复绑定
+            confirmBtn.removeEventListener('click', confirmHandler);
+            cancelBtn.removeEventListener('click', cancelHandler);
+        };
+
+        // 5. 为“取消”按钮也绑定一次性事件
+        const cancelHandler = () => {
+            modal.classList.add('hidden');
+            callback(null); // 用户取消，返回null
+            // 同样，用完就扔
+            confirmBtn.removeEventListener('click', confirmHandler);
+            cancelBtn.removeEventListener('click', cancelHandler);
+        };
+
+        // 6. 【安全措施】在绑定前，先移除所有旧的监听器，确保万无一失
+        confirmBtn.removeEventListener('click', confirmHandler);
+        cancelBtn.removeEventListener('click', cancelHandler);
+
+        // 7. 正式绑定新的事件
+        confirmBtn.addEventListener('click', confirmHandler);
+        cancelBtn.addEventListener('click', cancelHandler);
+
+        // 8. 最后，显示弹窗
+        modal.classList.remove('hidden');
     }
 
+    // 【【【全新：剧情线编辑器的工作指令集】】】
+    let currentEditingStoryId = null; // 用一个“便利贴”记住正在编辑哪个存档
+
+    function openStorylineEditor(storyId) {
+        currentEditingStoryId = storyId;
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        const story = contact.offlineStorylines.find(s => s.id === storyId);
+        if (!story) return;
+
+        // 1. 把存档的旧数据填进弹窗
+        document.getElementById('storyline-editor-name').value = story.name;
+        document.getElementById('storyline-editor-memory').value = story.memory || '';
+
+        // 2. 显示弹窗
+        document.getElementById('storyline-editor-modal').classList.remove('hidden');
+    }
+
+    function closeStorylineEditor() {
+        document.getElementById('storyline-editor-modal').classList.add('hidden');
+        currentEditingStoryId = null; // 清空便利贴
+    }
+
+    function saveStoryline() {
+        if (!currentEditingStoryId) return;
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        const story = contact.offlineStorylines.find(s => s.id === currentEditingStoryId);
+        if (!story) return;
+
+        // 1. 从弹窗读取新数据
+        const newName = document.getElementById('storyline-editor-name').value.trim();
+        const newMemory = document.getElementById('storyline-editor-memory').value;
+
+        // 2. 更新到数据中
+        if (newName) story.name = newName;
+        story.memory = newMemory;
+
+        // 3. 保存、刷新、关闭
+        saveAppData();
+        renderOfflineStorylines();
+        closeStorylineEditor();
+        showToast('剧情线已保存！', 'success');
+    }
     // --- 导航与事件绑定 ---
     
     // 1. 从主设置页，点击“剧情线管理”进入新页面
@@ -6070,38 +6251,69 @@ function renderOfflineStorylines() {
     // 3. 在新页面里，点击右下角“+”号悬浮按钮，新增存档
     document.getElementById('add-storyline-fab').addEventListener('click', () => {
         showCustomPrompt('新剧情线', '请输入新剧情线的名称（存档名）:', '新冒险', (name) => {
-            if (name && name.trim()) {
-                const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!name || !name.trim()) return;
+
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!contact) return;
+
+            // 这是一个小助手，用来创建和激活存档，避免重复写代码
+            const createAndActivateStory = (memory, policy) => {
                 const newStory = {
                     id: `story-${Date.now()}`,
                     name: name.trim(),
-                    memory: '', // 全新的空白记忆
+                    memory: memory,
+                    mergePolicy: policy, // 记下选择的策略
+                    chatHistory: [], // 新存档一定有空的聊天记录
                     lastPlayed: Date.now()
                 };
                 contact.offlineStorylines.push(newStory);
-                contact.activeOfflineStoryId = newStory.id; // 自动激活新存档
+                contact.activeOfflineStoryId = newStory.id;
                 saveAppData();
-                renderOfflineStorylines(); // 刷新列表
-            }
+                renderOfflineStorylines();
+            };
+
+            showCustomConfirm(
+                '选择记忆模式',
+                `如何为 "${name.trim()}" 初始化剧情记忆？`,
+                () => { // 用户点击“继承”后执行
+                    createAndActivateStory(contact.memory, 'merge');
+                    showToast('已继承线上记忆开启新剧情！', 'success');
+                },
+                () => { // 用户点击“全新”后执行
+                    createAndActivateStory('', 'separate');
+                    showToast('已开启全新剧情线！', 'success');
+                },
+                '继承线上记忆', // "确定"按钮的文字
+                '开启全新记忆'  // "取消"按钮的文字
+            );
         });
     });
 
     // 4. 使用事件委托，统一管理新页面内列表的所有点击事件
     document.getElementById('storyline-manager-view').addEventListener('click', (e) => {
         const deleteBtn = e.target.closest('.delete-storyline-btn');
+        const editBtn = e.target.closest('.edit-storyline-btn'); // 【新增】寻找编辑按钮
+
         if (deleteBtn) {
             const storyId = deleteBtn.dataset.storyId;
             showCustomConfirm('删除确认', '确定要永久删除这条剧情线吗？此操作无法撤销！', () => {
                 const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
                 contact.offlineStorylines = contact.offlineStorylines.filter(s => s.id !== storyId);
                 if (contact.activeOfflineStoryId === storyId) {
-                    contact.activeOfflineStoryId = null;
+                    contact.activeOfflineStoryId = contact.offlineStorylines.length > 0 ? contact.offlineStorylines[0].id : null;
                 }
                 saveAppData();
                 renderOfflineStorylines();
             });
+        } else if (editBtn) { // 【新增】如果点击的是编辑按钮
+            const storyId = editBtn.dataset.storyId;
+            openStorylineEditor(storyId); // 调用我们刚写的打开指令
         }
     });
+
+    // 【【【全新：为新弹窗的按钮接上电线】】】
+    document.getElementById('cancel-storyline-edit-btn').addEventListener('click', closeStorylineEditor);
+    document.getElementById('save-storyline-edit-btn').addEventListener('click', saveStoryline);
         
     }
     
@@ -6942,10 +7154,7 @@ function renderOfflineStorylines() {
                     // 手动触发一次点击事件，这样就能复用我们上面写好的逻辑
                     targetItem.dispatchEvent(new Event('customClick'));
                     break;
-                case 'cs-clear-history':
-                    // 同上
-                    targetItem.dispatchEvent(new Event('customClick'));
-                    break;
+                // case 'cs-clear-history' 已被移除，因为它现在有了自己的专属指令官
                 case 'cs-delete-contact':
                     deleteActiveContact();
                     break;
@@ -6974,11 +7183,7 @@ function renderOfflineStorylines() {
             });
         });
 
-        document.getElementById('cs-clear-history').addEventListener('customClick', () => {
-            showGenericModeSelectModal((isOnline) => {
-                clearActiveChatHistory(isOnline ? 'online' : 'offline');
-            });
-        });
+        
     }
             // --- 【全新】用户表情包设置逻辑 ---
     const manageMyStickersEntry = document.getElementById('manage-my-stickers-entry');
