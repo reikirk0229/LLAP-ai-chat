@@ -6014,8 +6014,8 @@ messageContainer.addEventListener('click', (event) => {
     // 【【【全新：剧情线管理的核心函数们】】】
 function renderOfflineStorylines() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        // 【核心修复】现在 container 的路径因为HTML结构变化而更新
-        const container = document.getElementById('storyline-manager-view').querySelector('.settings-container #storyline-list-container');
+        // 【【【终极核心修复V2.0：直接通过ID寻找正确的容器】】】
+        const container = document.getElementById('storyline-list-container');
         if (!contact || !container) return;
 
         container.innerHTML = '';
@@ -6027,15 +6027,16 @@ function renderOfflineStorylines() {
         contact.offlineStorylines.forEach(story => {
             const isActive = story.id === contact.activeOfflineStoryId;
             const itemDiv = document.createElement('div');
-            // 【UI升级】使用更美观的 settings-item 样式
-            itemDiv.className = `settings-item storyline-item`;
+            // 【UI升级】模仿账本页，换上 ledger-item 这套“高级礼服”
+            itemDiv.className = `ledger-item`; 
             itemDiv.innerHTML = `
-                <div class="item-content">
-                    <span class="storyline-name">${story.name}</span>
-                    ${isActive ? '<span class="active-story-tag">当前</span>' : ''}
+                <div class="ledger-item-details">
+                    <div class="ledger-item-header">
+                        <span class="desc">${story.name} ${isActive ? '<span class="active-story-tag" style="font-size: 12px; color: #3B83A2; margin-left: 8px;">当前</span>' : ''}</span>
+                    </div>
                 </div>
-                <div class="item-actions">
-                    <button class="button-icon delete-storyline-btn" data-story-id="${story.id}" title="删除存档">
+                <div class="ledger-item-actions">
+                    <button class="delete-storyline-btn" data-story-id="${story.id}" title="删除存档">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 14H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg>
                     </button>
                 </div>
