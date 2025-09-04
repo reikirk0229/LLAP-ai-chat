@@ -998,11 +998,21 @@ async function formatHistoryForApi(history) {
                         startPrompt: '' // 默认没有开场白
         };
     }
-       // ▲▲▲▲▲ 线下模式数据初始化结束 ▲▲▲▲▲
-
-    
-
-    // 【【【核心改造：数据迁移与聊天记录分离】】】
+    // 【【【全新V2.0：数据迁移 - 将全局线下设置分配给每个独立剧情线】】】
+        if (c.offlineStorylines && c.offlineStorylines.length > 0) {
+            c.offlineStorylines.forEach(story => {
+                // 如果这个剧情线还没有自己的“设置文件夹”
+                if (story.settings === undefined) {
+                    // 就把角色全局的旧设置，复制一份给它
+                    story.settings = { ...c.offlineSettings };
+                }
+                // 我们顺便把“开场白”也搬进这个整洁的“设置文件夹”里
+                if (story.openingRemark) {
+                    story.settings.openingRemark = story.openingRemark;
+                    delete story.openingRemark;
+                }
+            });
+        }
     // 如果还存在旧的、统一的chatHistory，并且新的独立记录不存在，则执行一次性迁移
     if (c.chatHistory && (!c.onlineChatHistory || !c.offlineChatHistory)) { // 判断条件更严谨
         c.onlineChatHistory = c.chatHistory.filter(m => m.mode !== 'offline'); 
@@ -1537,7 +1547,18 @@ updateChatHeader();
         }
     }
     // ▲▲▲▲▲ ▲▲▲▲▲
-    
+    // 【【【全新：AI开场白自动发送触发器】】】
+    if (contact.isOfflineMode) {
+        const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+        // 检查条件：故事线存在 & 有设置 & 故事线是空的 & 开场白不为空
+        if (activeStory && activeStory.settings && activeStory.chatHistory.length === 0 && activeStory.settings.openingRemark) {
+            // 满足所有条件，立即发送开场白
+            displayMessage(activeStory.settings.openingRemark, 'assistant', { isNew: true, mode: 'offline' });
+            // 【至关重要】发送后立刻“销毁”开场白，防止重复发送
+            activeStory.settings.openingRemark = '';
+            saveAppData();
+        }
+    }
     // 确保最后再执行一次视图切换，以防万一
     switchToView('chat-window-view');
 }
@@ -2517,7 +2538,8 @@ async function displayMessage(text, role, options = {}) {
                 // ----------------------------------------------------------
                 //                   ▼▼▼ 线下模式大脑 ▼▼▼
                 // ----------------------------------------------------------
-                const settings = contact.offlineSettings;
+                const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+                const settings = activeStory ? activeStory.settings : {}; // 从当前剧情线读取设置
                 let controlPrompt = '';
                 if (settings.preventControl) {
                     controlPrompt = `
@@ -5462,44 +5484,104 @@ function closeTextEditorModal() {
         
                 // 【【【代码优化】】】我们已经用下面的事件委托统一管理所有按钮，所以这个旧的循环可以被安全地移除了。
         // --- 【全新】记忆总结相关事件绑定 (最终修正版) ---
-                // --- 【全新】线下模式事件绑定 ---
+        // --- 【全新V2.0：剧情线驱动的线下模式总控制器】 ---
         const offlineToggle = document.getElementById('cs-offline-mode-toggle');
         const offlineSettingsBtn = document.getElementById('cs-edit-offline-settings');
         const offlineModal = document.getElementById('offline-settings-modal');
         const closeOfflineModalBtn = document.getElementById('close-offline-settings-btn');
         const saveOfflineModalBtn = document.getElementById('save-offline-settings-btn');
+        const storylineSelect = document.getElementById('offline-storyline-select');
 
-        // 打开设置弹窗
-        offlineSettingsBtn.addEventListener('click', () => {
+        // “遥控器”：一个专门根据下拉菜单选项，加载对应设置的函数
+        const loadSettingsForSelectedStoryline = () => {
             const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-            if (!contact) return;
-            const settings = contact.offlineSettings;
+            const selectedStoryId = storylineSelect.value;
+            const story = contact.offlineStorylines.find(s => s.id === selectedStoryId);
+            if (!story) return;
+
+            // 【【【终极安全补丁】】】
+            // 如果发现这条剧情线没有“设置文件夹”，就立刻给它创建一个！
+            if (!story.settings) {
+                story.settings = {
+                    wordLimit: 0, perspective: 'second-person', preventControl: true,
+                    startPrompt: '', openingRemark: ''
+                };
+            }
+
+            const settings = story.settings;
             document.getElementById('offline-word-limit').value = settings.wordLimit || '';
             document.getElementById('offline-perspective').value = settings.perspective;
             document.getElementById('offline-prevent-control-toggle').checked = settings.preventControl;
             document.getElementById('offline-start-prompt').value = settings.startPrompt || '';
+            document.getElementById('offline-opening-remark').value = settings.openingRemark || '';
+        };
+
+        // 当下拉菜单选项改变时，自动调用“遥控器”
+        storylineSelect.addEventListener('change', loadSettingsForSelectedStoryline);
+
+        // 打开设置弹窗的全新逻辑
+        offlineSettingsBtn.addEventListener('click', () => {
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!contact) return;
+
+            // 填充下拉菜单
+            storylineSelect.innerHTML = '';
+            if (contact.offlineStorylines.length === 0) {
+                // 如果一条剧情线都没有，就创建一个临时的
+                const option = document.createElement('option');
+                option.textContent = "（将在开启后创建默认剧情线）";
+                option.disabled = true;
+                storylineSelect.appendChild(option);
+            } else {
+                contact.offlineStorylines.forEach(story => {
+                    const option = document.createElement('option');
+                    option.value = story.id;
+                    option.textContent = story.name;
+                    storylineSelect.appendChild(option);
+                });
+                // 默认选中当前激活的剧情线
+                if (contact.activeOfflineStoryId) {
+                    storylineSelect.value = contact.activeOfflineStoryId;
+                }
+            }
+            
+            // 加载初始设置
+            loadSettingsForSelectedStoryline();
             offlineModal.classList.remove('hidden');
         });
 
         // 关闭设置弹窗
-        closeOfflineModalBtn.addEventListener('click', () => {
-            offlineModal.classList.add('hidden');
-        });
+        closeOfflineModalBtn.addEventListener('click', () => offlineModal.classList.add('hidden'));
 
-        // 保存设置
+        // 保存设置的全新逻辑
         saveOfflineModalBtn.addEventListener('click', () => {
             const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-            if (!contact) return;
-            contact.offlineSettings.wordLimit = parseInt(document.getElementById('offline-word-limit').value) || 0;
-            contact.offlineSettings.perspective = document.getElementById('offline-perspective').value;
-            contact.offlineSettings.preventControl = document.getElementById('offline-prevent-control-toggle').checked;
-            contact.offlineSettings.startPrompt = document.getElementById('offline-start-prompt').value.trim();
+            const selectedStoryId = storylineSelect.value;
+            const story = contact.offlineStorylines.find(s => s.id === selectedStoryId);
+            
+            // 【【【终极安全补丁】】】
+            if (!story) {
+                showToast('错误：找不到对应的剧情线', 'error');
+                return;
+            };
+            // 同样，如果发现没有“设置文件夹”，也立刻创建一个
+            if (!story.settings) {
+                story.settings = {};
+            }
+
+            // 将所有设置保存到选中的那条剧情线的.settings对象里
+            story.settings.wordLimit = parseInt(document.getElementById('offline-word-limit').value) || 0;
+            story.settings.perspective = document.getElementById('offline-perspective').value;
+            story.settings.preventControl = document.getElementById('offline-prevent-control-toggle').checked;
+            story.settings.startPrompt = document.getElementById('offline-start-prompt').value.trim();
+            story.settings.openingRemark = document.getElementById('offline-opening-remark').value.trim();
+            
             saveAppData();
-            showToast('线下模式设置已保存！', 'success');
+            showToast(`剧情线 [${story.name}] 的设置已保存！`, 'success');
             offlineModal.classList.add('hidden');
         });
 
-        // 核心：切换线上/线下模式的开关逻辑
+        // 核心：切换线上/线下模式的开关逻辑 (保持不变，它非常完美)
         offlineToggle.addEventListener('change', async () => {
             const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
             if (!contact) return;
@@ -5525,12 +5607,12 @@ function closeTextEditorModal() {
                         '首次开启剧情模式',
                         '如何开始你的第一段线下剧情？',
                         () => { // 用户选择“继承”
-                            const newStory = { id: `story-${Date.now()}`, name: '默认剧情线', memory: contact.memory, mergePolicy: 'merge', chatHistory: [], lastPlayed: Date.now() };
+                            const newStory = { id: `story-${Date.now()}`, name: '默认剧情线', memory: contact.memory, settings: { ...contact.offlineSettings, openingRemark: '' }, mergePolicy: 'merge', chatHistory: [], lastPlayed: Date.now() };
                             contact.offlineStorylines.push(newStory);
                             enterOfflineMode(newStory.id);
                         },
                         () => { // 用户选择“全新”
-                            const newStory = { id: `story-${Date.now()}`, name: '默认剧情线', memory: '', mergePolicy: 'separate', chatHistory: [], lastPlayed: Date.now() };
+                            const newStory = { id: `story-${Date.now()}`, name: '默认剧情线', memory: '', settings: { ...contact.offlineSettings, openingRemark: '' }, mergePolicy: 'separate', chatHistory: [], lastPlayed: Date.now() };
                             contact.offlineStorylines.push(newStory);
                             enterOfflineMode(newStory.id);
                         },
@@ -5553,18 +5635,16 @@ function closeTextEditorModal() {
                 }
                 } else {
                 // --- 准备返回线上模式 ---
-                // 【【【终极修复：让总结机器人去问对应的存档】】】
                 const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
-                let saveTarget = 'memory'; // 默认是合并到线上
-                // 如果能找到当前存档，并且它的策略是“独立”
+                let saveTarget = 'memory'; 
                 if (activeStory && activeStory.mergePolicy === 'separate') {
-                    saveTarget = 'offlineMemory'; // 才把保存目标改为它自己的线下记忆
+                    saveTarget = 'offlineMemory'; 
                 }
                 
                 await forceSummaryOnModeSwitch(contact, 'offline', saveTarget);
                 
                 contact.isOfflineMode = false;
-                contact.justSwitchedToOnline = true; // <-- 在这里插上临时小旗子！
+                contact.justSwitchedToOnline = true; 
                 saveAppData();
                 openChat(contact.id);
                 const toastMessage = saveTarget === 'separate' 
@@ -6202,7 +6282,7 @@ function renderOfflineStorylines() {
         const story = contact.offlineStorylines.find(s => s.id === storyId);
         if (!story) return;
 
-        // 1. 把存档的旧数据填进弹窗
+        // 1. 把存档的旧数据填进弹窗 (只剩名字和记忆)
         document.getElementById('storyline-editor-name').value = story.name;
         document.getElementById('storyline-editor-memory').value = story.memory || '';
 
@@ -6221,7 +6301,7 @@ function renderOfflineStorylines() {
         const story = contact.offlineStorylines.find(s => s.id === currentEditingStoryId);
         if (!story) return;
 
-        // 1. 从弹窗读取新数据
+        // 1. 从弹窗读取新数据 (只剩名字和记忆)
         const newName = document.getElementById('storyline-editor-name').value.trim();
         const newMemory = document.getElementById('storyline-editor-memory').value;
 
@@ -6262,6 +6342,14 @@ function renderOfflineStorylines() {
                     id: `story-${Date.now()}`,
                     name: name.trim(),
                     memory: memory,
+                    // 【核心修复】为新生剧情线“注入灵魂”，创建专属设置文件夹
+                    settings: {
+                        wordLimit: 0,
+                        perspective: 'second-person',
+                        preventControl: true,
+                        startPrompt: '',
+                        openingRemark: ''
+                    },
                     mergePolicy: policy, // 记下选择的策略
                     chatHistory: [], // 新存档一定有空的聊天记录
                     lastPlayed: Date.now()
