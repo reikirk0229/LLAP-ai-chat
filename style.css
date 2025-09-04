@@ -472,7 +472,7 @@ body::before {
     padding: 8px 10px;
     display: flex;
     gap: 10px;
-    align-items: flex-end;
+    align-items: flex-end; /* 核心修改：改回 flex-end (底部对齐) */
     margin: 0 12px; /* 左右外边距从40px减小到12px，与功能栏对齐 */
 }
 .tool-button { 
@@ -505,7 +505,7 @@ body::before {
     border: none; 
     background-color: var(--background-white); 
     border-radius: 12px; 
-    padding: 10px 15px; 
+    padding: 2px 15px; /* 核心修改：大胆地把上下内边距压缩到 5px！ */
     font-size: 16px; 
     resize: none; 
     max-height: 100px; 
@@ -517,7 +517,7 @@ body::before {
     border-radius: 8px; 
     cursor: pointer; 
     font-weight: bold; 
-    padding: 10px 20px; 
+    padding: 10px 20px; /* 核心修改：恢复到原始的 10px 上下内边距！ */
     flex-shrink: 0; 
 }
 
@@ -4466,4 +4466,27 @@ input:checked + .slider:before {
 
 .ledger-item .delete-storyline-btn:hover {
     color: #333; /* 鼠标悬停时变黑 */
+}
+/* --- 【全新】剧情线选择弹窗列表样式 --- */
+#storyline-select-options {
+    display: flex;
+    flex-direction: column; /* 核心：让内部的按钮垂直排列 */
+    gap: 10px; /* 设置每个选项之间的上下间距 */
+}
+
+#storyline-select-options .settings-item {
+    /* 直接复用设置页的列表项样式，省时又美观 */
+    padding: 15px 20px !important;
+    border: 1px solid #f0f0f0;
+    border-radius: 8px;
+    background-color: #f7f8fa;
+    justify-content: center; /* 让文字居中 */
+    text-align: center;
+    font-weight: 600; /* 加粗文字 */
+}
+
+#storyline-select-options .settings-item:hover {
+    border-color: var(--qq-blue);
+    color: var(--qq-blue);
+    background-color: #eef6fc;
 }
