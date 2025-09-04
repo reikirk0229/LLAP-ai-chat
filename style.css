@@ -4381,3 +4381,37 @@ input:checked + .slider:before {
 .offline-message .bold {
     font-weight: bold;
 }
+/* --- 【【【全新：修复标题和悬浮按钮的样式】】】 --- */
+
+/* 1. 让标题栏支持绝对定位 */
+.view-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+/* 2. 让标题脱离文档流，在父容器内绝对居中 */
+.view-header .header-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    /* 为了防止标题过长时与返回按钮重叠 */
+    padding: 0 50px; 
+    box-sizing: border-box;
+    width: 100%;
+    text-align: center;
+}
+
+/* 3. 【魔法】让悬浮按钮(FAB)内部的图标完美居中 */
+.fab {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+/* --- 【【【全新：为设置页面添加通用白色背景容器样式】】】 --- */
+.settings-container {
+    flex-grow: 1; /* 核心！让这个容器自动伸展，填满所有剩余的垂直空间 */
+    background-color: var(--color-background-light); /* 使用你主题里的浅色背景 */
+    overflow-y: auto; /* 如果内容超长，允许独立滚动 */
+    width: 100%;
+}
