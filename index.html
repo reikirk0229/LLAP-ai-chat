@@ -83,6 +83,21 @@ var _hmt = _hmt || [];
 
     <div id="app-container">
 
+        <!-- 视图0: 登录页面 -->
+        <div id="login-view" class="view hidden">
+            <div class="login-container">
+                <img src="https://i.postimg.cc/kXq06mNq/ai-default.png" alt="Logo" class="login-logo">
+                <h1 class="login-title">你的 AI 伙伴</h1>
+                <p class="login-subtitle">即刻登录，继续你们的故事</p>
+                <button id="login-button" class="login-button">登录</button>
+                <a href="#" id="login-to-settings-link" class="login-settings-link">还没有配置？前往设置</a>
+            </div>
+            <div class="login-footer-branding">
+                <p class="branding-title"><strong>I D I C</strong></p>
+                <p class="branding-subtitle">Infinite Diversity in Infinite Combinations.</p>
+            </div>
+        </div>
+
         <!-- 视图1: 消息列表 (默认视图) -->
         <div id="chat-list-view" class="view hidden">
             <div class="main-header">
@@ -409,6 +424,26 @@ var _hmt = _hmt || [];
                     </div>
                 </div>
                 <!-- ▲▲▲▲▲ 主动消息功能区结束 ▲▲▲▲▲ -->
+                 <!-- ▼▼▼ 【【【全新：离线消息功能区】】】 ▼▼▼ -->
+                <div class="settings-group">
+                    <div class="settings-item">
+                        <span>启用离线消息</span>
+                        <label class="switch"><input type="checkbox" id="cs-offline-msg-toggle"><span class="slider"></span></label>
+                    </div>
+                    <div class="settings-item" id="cs-offline-msg-interval-item">
+                        <span>消息频率 (小时/次)</span>
+                        <input type="number" id="cs-offline-msg-interval-input" class="summary-threshold-input" placeholder="例如：1.5 (代表一个半小时)">
+                    </div>
+                    <div class="settings-item" id="cs-offline-msg-sleep-item">
+                        <span>休息时间</span>
+                        <div class="schedule-time-range">
+                           <input type="time" id="cs-offline-msg-sleep-start">
+                           <span>-</span>
+                           <input type="time" id="cs-offline-msg-sleep-end">
+                        </div>
+                    </div>
+                </div>
+                <!-- ▲▲▲▲▲ 离线消息功能区结束 ▲▲▲▲▲ -->
                 <div class="settings-group">
                     <div class="settings-item"><span>设置聊天背景</span><span class="arrow">&gt;</span></div>
                     <div class="settings-item"><span>设置气泡样式</span><span class="arrow">&gt;</span></div>
@@ -1339,6 +1374,11 @@ var _hmt = _hmt || [];
     </div>
 </div>
 <!-- ▲▲▲▲▲ 通知弹窗结束 ▲▲▲▲▲ -->
-
+<!-- ▼▼▼ 【【【全新：全局加载动画遮罩层 (V2.0 带进度条版)】】】 ▼▼▼ -->
+<div id="loading-overlay" class="loading-overlay hidden">
+    <div class="loading-spinner"></div>
+    <p id="loading-text" class="loading-text">正在登录中...</p>
+</div>
+<!-- ▲▲▲▲▲ 加载动画结束 ▲▲▲▲▲ -->
 </body>
 </html>
