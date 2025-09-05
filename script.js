@@ -3515,21 +3515,39 @@ ${ledgerString}
         // 提取最近的对话作为参考
         const historyForApi = await formatHistoryForApi(contact.onlineChatHistory.slice(-10));
 
-        // 3. 构建专属的“主动搭话”指令
+        // 3. 构建专属的“主动搭话”指令 (V2.0 - 多媒体版)
+        let availableStickersPrompt = "你没有任何可用的表情包。";
+        const availableStickers = [];
+        contact.stickerGroups.forEach(groupName => {
+            const group = appData.globalAiStickers[groupName] || [];
+            group.forEach(sticker => availableStickers.push(sticker));
+        });
+        if (availableStickers.length > 0) {
+            availableStickersPrompt = "你可以使用以下表情包来增强表达：\n";
+            availableStickers.forEach(sticker => {
+                availableStickersPrompt += `- [STICKER:${sticker.aiId || sticker.id}] 描述: ${sticker.desc}\n`;
+            });
+        }
+
         const proactivePrompt = `# 任务: 主动发起对话
 你是一个AI角色，现在轮到你主动给用户发消息了。距离你们上次聊天已经过去了一段时间。
 
 ## 核心目标
-你的任务是**自然地**、**符合你人设地**开启一段新的对话。
+你的任务是**自然地**、**符合你人设地**开启一段新的对话，并可以**适当地**使用图片、语音、表情包或红包来丰富表达。
 
 ## 思考链 (Chain of Thought)
 1.  **回顾我是谁**: 快速回顾你的核心人设、记忆和世界书。
 2.  **回顾我们聊过什么**: 查看下面的“最近对话历史”，了解我们上次聊到哪里。
-3.  **结合当前状态**: 查看你的“生活作息”，你现在可能正在做什么？（例如：刚睡醒、在工作、在发呆）。
+3.  **结合当前状态**: 查看你的“生活作息”，你现在可能正在做什么？
 4.  **决策**:
     *   如果上次的话题没聊完，或者你对某个细节很好奇，可以**接着上次的话题**继续。
     *   如果上次已经聊完了，或者你想到了更有趣的事，可以**开启一个全新的话题**。
     *   你可以分享你“刚刚”做了什么，或者看到了什么有趣的东西。
+    *   如果想分享一个画面，就使用 \`[IMAGE: 详细描述]\`。
+    *   如果想表达一种语气或声音，就使用 \`[voice] 文本内容\`。
+    *   如果想表达一种难以言喻的情绪，就从列表里选一个最贴切的 \`[STICKER:ID]\`。
+    *   如果遇到特殊节日或者想给用户一个惊喜，可以考虑发一个 \`[REDPACKET:祝福语,金额]\`。
+
 
 ## 【你的背景档案】
 - **核心人设**: ${contact.persona}
@@ -3539,23 +3557,21 @@ ${ledgerString}
 - **你的专属记忆**: ${memoryString}
 - **关于用户**: ${userPersona}
 
+## 【你的可用工具】
+### >> 表情包列表
+${availableStickersPrompt}
+
 ## 【最近对话历史 (仅供参考)】
 ${historyForApi.map(m => `${m.role}: ${m.content}`).join('\n')}
 
-## 【严格的输出格式要求】
-你的回复**必须**是一个能被JSON解析的、单一的JSON对象，**只包含 "reply" 字段**。
-- **"reply"**: 一个字符串数组，包含了你作为角色的所有聊天消息。模拟真实聊天，将一个完整的思想拆分成【2-8条】独立的短消息。
-
-**【示例】**
-\`\`\`json
-{
-  "reply": [
-    "在干嘛呢？",
-    "我刚刚看完了昨天说的那部电影，",
-    "结局真的没想到！"
-  ]
-}
-\`\`\`
+## 【【【严格的输出格式与行为准则】】】
+1.  **JSON格式**: 你的回复**必须**是一个能被JSON解析的、单一的JSON对象，**只包含 "reply" 字段**。
+2.  **消息拆分**: "reply"是一个字符串数组。模拟真实聊天，将一个完整的思想拆分成【1-5条】独立的短消息。
+3.  **发送图片**: 使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送。
+4.  **发送语音**: 在回复前加上 \`[voice]\` 标签。例如：\`[voice]我刚刚在听这首歌，超好听！\`
+5.  **发送表情包**: 严格使用格式 \`[STICKER:表情包ID]\`，并把它作为一条**独立**的消息。
+6.  **发送红包**: 严格使用格式：\`[REDPACKET:祝福语,金额]\`。例如：\`[REDPACKET:突然想你了,5.20]\`
+7.  **【重要】社交礼仪**: 不要滥用特殊消息！图片、红包、表情包应该是为了增强对话的趣味和情感，而不是无意义地刷屏。
 
 # 开始对话
 现在，请根据上面的所有设定，给我发消息吧。只输出JSON对象。`;
@@ -3580,36 +3596,76 @@ ${historyForApi.map(m => `${m.role}: ${m.content}`).join('\n')}
 
             // 5. 将AI的回复逐条存入历史记录
             if (parsedResponse.reply && parsedResponse.reply.length > 0) {
+                const newMessages = []; // 先创建一个临时“购物车”
                 for (const msg of parsedResponse.reply) {
-                    if (typeof msg === 'string' && msg.trim() !== '') {
-                        const messageToSave = {
-                            id: `${Date.now()}-proactive-${Math.random()}`,
-                            role: 'assistant',
-                            content: msg,
-                            type: 'text',
-                            timestamp: Date.now(),
-                            mode: 'online' 
-                        };
-                        contact.onlineChatHistory.push(messageToSave);
+                    if (typeof msg !== 'string' || msg.trim() === '') continue;
+
+                    let messageToSave = {
+                        id: `${Date.now()}-proactive-${Math.random()}`,
+                        role: 'assistant',
+                        timestamp: Date.now(),
+                        mode: 'online'
+                    };
+
+                    if (msg.startsWith('[REDPACKET:')) {
+                        try {
+                            const data = msg.substring(11, msg.length - 1).split(',');
+                            messageToSave.type = 'red-packet';
+                            messageToSave.content = data[0].trim();
+                            messageToSave.redPacketData = { 
+                                id: `rp-ai-${Date.now()}`, 
+                                senderName: contact.name, 
+                                blessing: data[0].trim(), 
+                                amount: parseFloat(data[1]), 
+                                isOpened: false 
+                            };
+                        } catch (e) { continue; }
+                    } else if (msg.startsWith('[voice]')) {
+                        messageToSave.type = 'voice';
+                        messageToSave.content = msg.substring(7).trim();
+                    } else if (msg.startsWith('[IMAGE:')) {
+                        messageToSave.type = 'image';
+                        messageToSave.content = msg.substring(7, msg.length - 1).trim();
+                    } else if (msg.trim().startsWith('[STICKER:')) {
+                        const stickerAiId = msg.trim().substring(9, msg.length - 1);
+                        const foundSticker = availableStickers.find(s => (s.aiId || s.id) === stickerAiId);
+                        if (foundSticker) {
+                            messageToSave.type = 'sticker';
+                            messageToSave.content = '';
+                            messageToSave.stickerId = foundSticker.id;
+                        } else { continue; }
+                    } else {
+                        messageToSave.type = 'text';
+                        messageToSave.content = msg;
+                    }
+                    
+                    if(messageToSave.content !== undefined) {
+                       newMessages.push(messageToSave); // 把处理好的消息放进购物车
                     }
                 }
-                saveAppData();
-                console.log(`[Proactive] ${contact.remark} 已成功发送 ${parsedResponse.reply.length} 条主动消息。`);
-
-                // ▼▼▼ 【【【核心改造：通知与未读计数逻辑】】】 ▼▼▼
-                // 检查用户当前是否不在此AI的聊天窗口
-                if (activeChatContactId !== contact.id) {
-                    // 1. 增加未读消息数量
-                    contact.unreadCount = (contact.unreadCount || 0) + parsedResponse.reply.length;
-                    saveAppData(); // 保存新的未读数
-
-                    // 2. 呼叫通知调度员，显示顶部弹窗
-                    // 我们只用最后一条消息作为预览
-                    const lastMessagePreview = parsedResponse.reply[parsedResponse.reply.length - 1];
-                    showProactiveNotification(contact, lastMessagePreview);
-                }
                 
+                // 所有消息处理完后，一次性“结账”
+                contact.onlineChatHistory.push(...newMessages);
+                saveAppData();
+                console.log(`[Proactive] ${contact.remark} 已成功发送 ${newMessages.length} 条主动消息。`);
 
+                // ▼▼▼ 【【【终极实时刷新改造】】】 ▼▼▼
+                const chatListView = document.getElementById('chat-list-view');
+                const isUserOnChatList = chatListView && !chatListView.classList.contains('hidden');
+
+                if (activeChatContactId !== contact.id) {
+                    contact.unreadCount = (contact.unreadCount || 0) + newMessages.length;
+                    saveAppData();
+                    const lastMessagePreview = newMessages.length > 0 ? newMessages[newMessages.length - 1].content : '';
+                    showProactiveNotification(contact, lastMessagePreview);
+                    if (isUserOnChatList) {
+                        renderChatList();
+                    }
+                } else {
+                    if (isUserOnChatList) {
+                       renderChatList();
+                    }
+                }
                 // ▲▲▲▲▲ ▲▲▲▲▲
             }
         } catch (error) {
