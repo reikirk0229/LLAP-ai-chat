@@ -904,6 +904,43 @@ async function formatHistoryForApi(history) {
         renderSettingsUI();
         bindEventListeners();
         switchToView('chat-list-view');
+
+        // ▼▼▼ 【【【全新：启动AI主动消息调度中心】】】 ▼▼▼
+setInterval(() => {
+    const now = Date.now();
+    // 遍历所有AI伙伴
+    appData.aiContacts.forEach(contact => {
+        // 如果这个AI没有开启主动消息，或者还没有设置，就跳过
+        if (!contact.proactiveMessaging || !contact.proactiveMessaging.enabled) {
+            return;
+        }
+
+        // 计算需要等待的毫秒数
+        const intervalMillis = contact.proactiveMessaging.interval * 60 * 1000;
+        
+        // 检查是否已经到了该发消息的时间
+        if (now - contact.proactiveMessaging.lastSent > intervalMillis) {
+            
+            // 额外检查：如果AI正在睡觉，就让它再睡会儿
+            if (contact.isScheduleEnabled) {
+                const activity = calculateCurrentActivity(contact.schedule);
+                if (activity.isAwake === false) {
+                    console.log(`[Proactive] ${contact.remark} 正在睡觉，本次跳过。`);
+                    // 即使在睡觉，也更新时间戳，否则它醒来后会立刻“消息轰炸”
+                    contact.proactiveMessaging.lastSent = now;
+                    saveAppData();
+                    return;
+                }
+            }
+            
+            // 确认无误，命令AI发消息
+            sendProactiveMessage(contact);
+        }
+    });
+}, 60000); // 每60秒（1分钟）检查一次
+// ▲▲▲▲▲ ▲▲▲▲▲
+
+
     }
     function loadAppData() {
         const savedData = localStorage.getItem('myAiChatApp_V8_Data');
@@ -1057,7 +1094,19 @@ async function formatHistoryForApi(history) {
     if (!c.onlineChatHistory) c.onlineChatHistory = [];
     if (!c.offlineChatHistory) c.offlineChatHistory = [];
 
-});
+    if (c.proactiveMessaging === undefined) {
+            c.proactiveMessaging = {
+                enabled: false,       
+                interval: 1440,       
+                lastSent: 0           
+            };
+        }
+        // ▼▼▼ 【【【全新：为AI角色补充“未读消息”计数器】】】 ▼▼▼
+        if (c.unreadCount === undefined) {
+            c.unreadCount = 0; // 默认未读数量为0
+        }
+        // ▲▲▲▲▲ ▲▲▲▲▲
+    });
         // ▼▼▼ 请把下面这段全新的代码，粘贴在这里 ▼▼▼
         // 【全新】为全局AI表情包建立仓库，如果不存在的话
         if (!appData.globalAiStickers) {
@@ -1125,10 +1174,17 @@ async function formatHistoryForApi(history) {
         }
         // ▲▲▲ 【【【修复植入完毕】】】 ▲▲▲
 
+        // ▼▼▼ 【【【全新：未读红点核心修复】】】 ▼▼▼
+        // 规则：只要是切换到消息列表，就必须刷新一次，确保红点状态永远是最新！
+        if (viewId === 'chat-list-view') {
+            renderChatList();
+        }
+        // ▲▲▲▲▲ ▲▲▲▲▲
+
         views.forEach(view => view.classList.add('hidden'));
         document.getElementById(viewId).classList.remove('hidden');
         
-        if (viewId === 'chat-list-view') {
+        if (viewId === 'chat-list-view' || viewId === 'moments-view' || viewId === 'settings-view') {
             appNav.classList.remove('hidden');
         } else {
             appNav.classList.add('hidden');
@@ -1309,7 +1365,18 @@ async function formatHistoryForApi(history) {
                 
                 const displayTime = formatMessageTimestamp(message.timestamp || Date.now());
 
-                item.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="avatar"><div class="chat-list-item-info"><div class="chat-list-item-top"><span class="chat-list-item-name">${contact.remark}${partnerIcon}</span><span class="chat-list-item-time">${displayTime}</span></div><div class="chat-list-item-msg">${displayContent}</div></div>`;
+                item.innerHTML = `
+                    <div class="avatar-container">
+                        <img class="avatar" src="${avatarUrl}" alt="avatar">
+                        ${contact.unreadCount > 0 ? `<div class="unread-badge">${contact.unreadCount}</div>` : ''}
+                    </div>
+                    <div class="chat-list-item-info">
+                        <div class="chat-list-item-top">
+                            <span class="chat-list-item-name">${contact.remark}${partnerIcon}</span>
+                            <span class="chat-list-item-time">${displayTime}</span>
+                        </div>
+                        <div class="chat-list-item-msg">${displayContent}</div>
+                    </div>`;
                 
                 item.addEventListener('click', () => {
                     openChat(item.dataset.contactId, item.dataset.foundMessageId);
@@ -1374,7 +1441,18 @@ async function formatHistoryForApi(history) {
                 const partnerIcon = isPartner ? '<span class="partner-icon">💖</span>' : '';
                 
                 // 现在，我们对处理过的、保证是文本的 displayContent 进行截断
-                item.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="avatar"><div class="chat-list-item-info"><div class="chat-list-item-top"><span class="chat-list-item-name">${contact.remark}${partnerIcon}</span><span class="chat-list-item-time">${formatMessageTimestamp(lastMessage.timestamp || Date.now())}</span></div><div class="chat-list-item-msg">${displayContent.substring(0, 25)}</div></div>`;
+                item.innerHTML = `
+                    <div class="avatar-container">
+                        <img class="avatar" src="${avatarUrl}" alt="avatar">
+                        ${contact.unreadCount > 0 ? `<div class="unread-badge">${contact.unreadCount}</div>` : ''}
+                    </div>
+                    <div class="chat-list-item-info">
+                        <div class="chat-list-item-top">
+                            <span class="chat-list-item-name">${contact.remark}${partnerIcon}</span>
+                            <span class="chat-list-item-time">${formatMessageTimestamp(lastMessage.timestamp || Date.now())}</span>
+                        </div>
+                        <div class="chat-list-item-msg">${displayContent.substring(0, 25)}</div>
+                    </div>`;
                 item.addEventListener('click', () => openChat(contact.id));
                 chatListContainer.appendChild(item);
             }
@@ -1479,6 +1557,15 @@ async function openChat(contactId, messageIdToHighlight = null) {
 
     const contact = appData.aiContacts.find(c => c.id === numericContactId);
     if (!contact) return;
+
+    // ▼▼▼ 【【【全新：“已读”销账逻辑】】】 ▼▼▼
+        if (contact.unreadCount && contact.unreadCount > 0) {
+            contact.unreadCount = 0; // 将未读数量清零
+            saveAppData(); // 立刻保存
+            // 在后台悄悄刷新一下聊天列表，让红点消失
+            renderChatList(); 
+        }
+        // ▲▲▲▲▲ ▲▲▲▲▲
 
     // ▼▼▼ 【【【第一处修改：在这里为AI配发“待办文件夹”】】】 ▼▼▼
     // 检查这个AI角色有没有 unsentMessages 这个文件夹，如果没有，就给他创建一个空的
@@ -3377,6 +3464,163 @@ ${ledgerString}
             displayMessage(`(｡•́︿•̀｡) 哎呀,我的想法有点混乱: ${error.message}`, 'assistant', { isNew: true });
         }
     }
+
+// ▼▼▼ 【【【全新：全局通知弹窗调度员】】】 ▼▼▼
+    let notificationTimer;
+    async function showProactiveNotification(contact, message) {
+        clearTimeout(notificationTimer); // 清除上一个通知的自动消失计时器
+
+        const popup = document.getElementById('proactive-notification-popup');
+        const avatarEl = document.getElementById('notification-avatar');
+        const nameEl = document.getElementById('notification-name');
+        const messageEl = document.getElementById('notification-message');
+
+        // 填充内容
+        const avatarBlob = await db.getImage(`${contact.id}_avatar`);
+        avatarEl.src = avatarBlob ? URL.createObjectURL(avatarBlob) : 'https://i.postimg.cc/kXq06mNq/ai-default.png';
+        nameEl.textContent = contact.remark;
+        messageEl.textContent = message.replace(/\[[^\]]+\]/g, ''); // 移除[IMAGE]等标签，只显示纯文本
+
+        // 绑定点击事件
+        popup.onclick = () => {
+            openChat(contact.id);
+            popup.classList.remove('show'); // 点击后立即隐藏
+            clearTimeout(notificationTimer);
+        };
+
+        // 显示弹窗
+        popup.classList.add('show');
+
+        // 5秒后自动消失
+        notificationTimer = setTimeout(() => {
+            popup.classList.remove('show');
+        }, 5000);
+    }
+    // ▲▲▲▲▲ ▲▲▲▲▲
+
+    // ▼▼▼ 【【【全新：AI主动发起对话的核心函数】】】 ▼▼▼
+    async function sendProactiveMessage(contact) {
+        console.log(`[Proactive] 正在为 ${contact.remark} 准备主动消息...`);
+
+        // 1. 更新时间戳，防止在生成期间重复触发
+        contact.proactiveMessaging.lastSent = Date.now();
+        saveAppData();
+
+        // 2. 准备API请求所需的所有上下文信息 (与getAiResponse类似)
+        const userPersona = (contact.userProfile && contact.userProfile.persona) ? contact.userProfile.persona : '我是一个普通人。';
+        const memoryString = contact.memory || '无';
+        const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
+        const scheduleForAI = contact.isScheduleEnabled ? formatScheduleForAI(contact.schedule) : "你没有设定任何作息。";
+        
+        // 提取最近的对话作为参考
+        const historyForApi = await formatHistoryForApi(contact.onlineChatHistory.slice(-10));
+
+        // 3. 构建专属的“主动搭话”指令
+        const proactivePrompt = `# 任务: 主动发起对话
+你是一个AI角色，现在轮到你主动给用户发消息了。距离你们上次聊天已经过去了一段时间。
+
+## 核心目标
+你的任务是**自然地**、**符合你人设地**开启一段新的对话。
+
+## 思考链 (Chain of Thought)
+1.  **回顾我是谁**: 快速回顾你的核心人设、记忆和世界书。
+2.  **回顾我们聊过什么**: 查看下面的“最近对话历史”，了解我们上次聊到哪里。
+3.  **结合当前状态**: 查看你的“生活作息”，你现在可能正在做什么？（例如：刚睡醒、在工作、在发呆）。
+4.  **决策**:
+    *   如果上次的话题没聊完，或者你对某个细节很好奇，可以**接着上次的话题**继续。
+    *   如果上次已经聊完了，或者你想到了更有趣的事，可以**开启一个全新的话题**。
+    *   你可以分享你“刚刚”做了什么，或者看到了什么有趣的东西。
+
+## 【你的背景档案】
+- **核心人设**: ${contact.persona}
+- **沟通风格**: ${contact.chatStyle || '自然发挥即可'}
+- **你的生活作息**: ${scheduleForAI}
+- **附加设定 (世界书)**: ${worldBookString}
+- **你的专属记忆**: ${memoryString}
+- **关于用户**: ${userPersona}
+
+## 【最近对话历史 (仅供参考)】
+${historyForApi.map(m => `${m.role}: ${m.content}`).join('\n')}
+
+## 【严格的输出格式要求】
+你的回复**必须**是一个能被JSON解析的、单一的JSON对象，**只包含 "reply" 字段**。
+- **"reply"**: 一个字符串数组，包含了你作为角色的所有聊天消息。模拟真实聊天，将一个完整的思想拆分成【2-8条】独立的短消息。
+
+**【示例】**
+\`\`\`json
+{
+  "reply": [
+    "在干嘛呢？",
+    "我刚刚看完了昨天说的那部电影，",
+    "结局真的没想到！"
+  ]
+}
+\`\`\`
+
+# 开始对话
+现在，请根据上面的所有设定，给我发消息吧。只输出JSON对象。`;
+
+        try {
+            // 4. 发送API请求
+            let requestUrl = appData.appSettings.apiUrl;
+            if (!requestUrl.endsWith('/chat/completions')) { requestUrl = requestUrl.endsWith('/') ? requestUrl + 'chat/completions' : requestUrl + '/chat/completions'; }
+            
+            const response = await fetch(requestUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
+                body: JSON.stringify({ model: appData.appSettings.apiModel, messages: [{ role: 'user', content: proactivePrompt }], temperature: 0.9 })
+            });
+
+            if (!response.ok) throw new Error(`API 错误 ${response.status}`);
+            
+            const data = await response.json();
+            const responseText = data.choices[0].message.content;
+            const jsonMatch = responseText.match(/{[\s\S]*}/);
+            const parsedResponse = JSON.parse(jsonMatch[0]);
+
+            // 5. 将AI的回复逐条存入历史记录
+            if (parsedResponse.reply && parsedResponse.reply.length > 0) {
+                for (const msg of parsedResponse.reply) {
+                    if (typeof msg === 'string' && msg.trim() !== '') {
+                        const messageToSave = {
+                            id: `${Date.now()}-proactive-${Math.random()}`,
+                            role: 'assistant',
+                            content: msg,
+                            type: 'text',
+                            timestamp: Date.now(),
+                            mode: 'online' 
+                        };
+                        contact.onlineChatHistory.push(messageToSave);
+                    }
+                }
+                saveAppData();
+                console.log(`[Proactive] ${contact.remark} 已成功发送 ${parsedResponse.reply.length} 条主动消息。`);
+
+                // ▼▼▼ 【【【核心改造：通知与未读计数逻辑】】】 ▼▼▼
+                // 检查用户当前是否不在此AI的聊天窗口
+                if (activeChatContactId !== contact.id) {
+                    // 1. 增加未读消息数量
+                    contact.unreadCount = (contact.unreadCount || 0) + parsedResponse.reply.length;
+                    saveAppData(); // 保存新的未读数
+
+                    // 2. 呼叫通知调度员，显示顶部弹窗
+                    // 我们只用最后一条消息作为预览
+                    const lastMessagePreview = parsedResponse.reply[parsedResponse.reply.length - 1];
+                    showProactiveNotification(contact, lastMessagePreview);
+                }
+                
+
+                // ▲▲▲▲▲ ▲▲▲▲▲
+            }
+        } catch (error) {
+            console.error(`[Proactive] 为 ${contact.remark} 生成主动消息失败:`, error);
+            // 失败了，把时间戳重置，让它下次还有机会尝试
+            contact.proactiveMessaging.lastSent = 0;
+            saveAppData();
+        }
+    }
+    // ▲▲▲▲▲ ▲▲▲▲▲
+
     /**
  * 【【【全新核心功能：提示并为AI生成公开名片】】】
  * @param {object} contact - 当前的AI联系人对象
@@ -4413,6 +4657,17 @@ ${readableHistory}
             showCustomAlert('对话条数详情', `线上模式: ${onlineCount} 条\n线下模式: ${offlineCount} 条`);
         });
 
+        // ▼▼▼ 【【【全新：加载并应用“主动消息”的当前设置】】】 ▼▼▼
+    const proactiveToggle = document.getElementById('cs-proactive-toggle');
+    const intervalItem = document.getElementById('cs-proactive-interval-item');
+    const intervalInput = document.getElementById('cs-proactive-interval-input');
+
+    // 根据档案，设置开关和输入框的初始状态
+    proactiveToggle.checked = contact.proactiveMessaging.enabled;
+    intervalInput.value = contact.proactiveMessaging.interval;
+    intervalItem.style.display = contact.proactiveMessaging.enabled ? 'flex' : 'none';
+    // ▲▲▲▲▲ ▲▲▲▲▲
+
         switchToView('contact-settings-view');
 
         // 【【【终极修复：为“清空聊天记录”按钮也进行“现场绑定”】】】
@@ -4963,77 +5218,78 @@ function closeTextEditorModal() {
 
                 // 4. 【逻辑迁移】将之前的确认和导入逻辑，完整地搬到这里
                 showCustomConfirm(
-                    '【高风险操作】确认导入',
-                    `确定要从文件 [${file.name}] 导入数据吗？\n\n此操作将完全覆盖当前的所有数据，且无法撤销！`,
-                    async () => {
-                showToast('正在导入数据，请勿关闭页面...', 'info', 0);
-                try {
-                    // 1. 解析备份码
-                    const backupData = JSON.parse(backupString);
+    '【高风险操作】确认导入',
+    `确定要从文件 [${file.name}] 导入数据吗？\n\n此操作将完全覆盖当前的所有数据，且无法撤销！`,
+    async () => {
+        showToast('正在导入数据，请勿关闭页面...', 'info', 0);
+        try {
+            // 1. 解析备份码 (保持不变)
+            const backupData = JSON.parse(backupString);
 
-                    // 2. 验证备份码
-                    if (!backupData || !backupData.appData || !backupData.imageData) {
-                        throw new Error("备份文件格式不正确或已损坏。");
-                    }
-
-                    // 3. 恢复文本数据
-                    localStorage.setItem('myAiChatApp_V8_Data', JSON.stringify(backupData.appData));
-
-                    // 4. 将所有Base64图片预先转换为Blob对象
-                    showToast('正在解析图片...', 'info', 0);
-                    const imageEntries = [];
-                    const conversionPromises = Object.entries(backupData.imageData).map(([key, dataUrl]) =>
-                        dataURLToBlob(dataUrl).then(blob => {
-                            imageEntries.push([key, blob]);
-                        })
-                    );
-                    await Promise.all(conversionPromises);
-
-                    // 5. 【终极解决方案：分批处理图片】
-                    
-                    // 5a. 第一步：执行一个独立的、短小精悍的“清空”事务
-                    showToast('正在清空旧图库...', 'info', 0);
-                    const clearTransaction = db._db.transaction(['images'], 'readwrite');
-                    clearTransaction.objectStore('images').clear();
-                    await new Promise((resolve, reject) => {
-                        clearTransaction.oncomplete = resolve;
-                        clearTransaction.onerror = reject;
-                    });
-                    
-                    // 5b. 第二步：分批次写入新图片
-                    const BATCH_SIZE = 200; // 每次处理200张图片，这是一个非常安全的大小
-                    for (let i = 0; i < imageEntries.length; i += BATCH_SIZE) {
-                        const batch = imageEntries.slice(i, i + BATCH_SIZE);
-                        showToast(`正在写入图片 (${i + batch.length}/${imageEntries.length})...`, 'info', 0);
-
-                        // 为每一个批次，都开启一个全新的事务
-                        const batchTransaction = db._db.transaction(['images'], 'readwrite');
-                        const store = batchTransaction.objectStore('images');
-                        
-                        for (const [key, blob] of batch) {
-                            store.put(blob, key); // 快速存入
-                        }
-                        
-                        // 等待这个小批次的事务完成
-                        await new Promise((resolve, reject) => {
-                            batchTransaction.oncomplete = resolve;
-                            batchTransaction.onerror = reject;
-                        });
-                    }
-
-                    showToast('数据导入成功！应用即将刷新...', 'success', 2500);
-
-                    // 6. 刷新页面
-                    setTimeout(() => {
-                        location.reload();
-                    }, 2500);
-
-                } catch (error) {
-                    console.error('导入数据时发生错误:', error);
-                    showCustomAlert('导入失败', `发生了一个错误： ${error.message}\n\n请检查您的备份文件是否正确。`);
-                }
+            // 2. 验证备份码 (保持不变)
+            if (!backupData || !backupData.appData || !backupData.imageData) {
+                throw new Error("备份文件格式不正确或已损坏。");
             }
-                );
+
+            // 3. 恢复文本数据 (保持不变)
+            localStorage.setItem('myAiChatApp_V8_Data', JSON.stringify(backupData.appData));
+
+            // 4. 将所有Base64图片预先转换为Blob对象 (保持不变)
+            showToast('正在解析图片...', 'info', 0);
+            const imageEntries = [];
+            const conversionPromises = Object.entries(backupData.imageData).map(([key, dataUrl]) =>
+                dataURLToBlob(dataUrl).then(blob => {
+                    imageEntries.push([key, blob]);
+                })
+            );
+            await Promise.all(conversionPromises);
+
+            // 5. 【【【核心改造：启动“搬家车队”模式】】】
+            
+            // 5a. 第一步：先派一辆“清空车”，快速清空旧仓库
+            showToast('正在清空旧图库...', 'info', 0);
+            const clearTransaction = db._db.transaction(['images'], 'readwrite');
+            clearTransaction.objectStore('images').clear();
+            await new Promise((resolve, reject) => {
+                clearTransaction.oncomplete = resolve;
+                clearTransaction.onerror = reject;
+            });
+            
+            // 5b. 第二步：开始分批次派发“运输车”
+            const BATCH_SIZE = 200; // 每辆小货车一次只运200件家具
+            for (let i = 0; i < imageEntries.length; i += BATCH_SIZE) {
+                const batch = imageEntries.slice(i, i + BATCH_SIZE);
+                // 更新进度提示
+                showToast(`正在写入图片 (${i + batch.length}/${imageEntries.length})...`, 'info', 0);
+
+                // 为当前这辆“小货车”开启一次独立的、快速的运输任务
+                const batchTransaction = db._db.transaction(['images'], 'readwrite');
+                const store = batchTransaction.objectStore('images');
+                
+                for (const [key, blob] of batch) {
+                    store.put(blob, key); // 快速装货
+                }
+                
+                // 等待这辆“小货车”完成任务后，再派发下一辆
+                await new Promise((resolve, reject) => {
+                    batchTransaction.oncomplete = resolve;
+                    batchTransaction.onerror = reject;
+                });
+            }
+
+            showToast('数据导入成功！应用即将刷新...', 'success', 2500);
+
+            // 6. 刷新页面 (保持不变)
+            setTimeout(() => {
+                location.reload();
+            }, 2500);
+
+        } catch (error) {
+            console.error('导入数据时发生错误:', error);
+            showCustomAlert('导入失败', `发生了一个错误： ${error.message}\n\n请检查您的备份文件是否正确。`);
+        }
+    }
+);
             };
             
             // 命令“文件阅读器”开始工作
@@ -6617,7 +6873,40 @@ function renderOfflineStorylines() {
     // 【【【全新：为新弹窗的按钮接上电线】】】
     document.getElementById('cancel-storyline-edit-btn').addEventListener('click', closeStorylineEditor);
     document.getElementById('save-storyline-edit-btn').addEventListener('click', saveStoryline);
-        
+    
+    // ▼▼▼ 【【【全新：为“主动消息”设置项绑定交互事件】】】 ▼▼▼
+    const contactSettingsContainer = document.querySelector('.contact-settings-container');
+    if (contactSettingsContainer) {
+        // 使用事件委托，更高效地处理点击和输入
+        contactSettingsContainer.addEventListener('change', (e) => {
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!contact) return;
+
+            if (e.target.id === 'cs-proactive-toggle') {
+                const isEnabled = e.target.checked;
+                contact.proactiveMessaging.enabled = isEnabled;
+                document.getElementById('cs-proactive-interval-item').style.display = isEnabled ? 'flex' : 'none';
+                saveAppData();
+            }
+        });
+
+        contactSettingsContainer.addEventListener('input', (e) => {
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!contact) return;
+
+            if (e.target.id === 'cs-proactive-interval-input') {
+                let interval = parseInt(e.target.value, 10);
+                // 数据验证：确保频率不低于5分钟
+                if (isNaN(interval) || interval < 5) {
+                    interval = 5;
+                }
+                contact.proactiveMessaging.interval = interval;
+                saveAppData();
+            }
+        });
+    }
+    // ▲▲▲▲▲ ▲▲▲▲▲
+
     }
     
 
