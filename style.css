@@ -4568,7 +4568,7 @@ input:checked + .slider:before {
     height: 20px;
     background-color: #fa5151;
     color: white;
-    border-radius: 50%;
+    border-radius: 50%; /* 终极修复1：使用百分比确保在任何尺寸下都是完美的圆形或胶囊形 */
     font-size: 12px;
     font-weight: bold;
     display: flex;
@@ -4577,8 +4577,122 @@ input:checked + .slider:before {
     padding: 0 4px;
     border: 2px solid white;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    /* ▼▼▼ 【【【全新：对齐魔法】】】 ▼▼▼ */
-    box-sizing: border-box; /* 核心修正1: 命令边框和内边距向内计算，不撑大盒子 */
-    line-height: 1;         /* 核心修正2: 移除字体本身可能带来的多余垂直空隙 */
-    /* ▲▲▲▲▲ ▲▲▲▲▲ */
+    box-sizing: border-box; /* 核心修正：命令边框和内边距向内计算，不撑大盒子 */
+}
+/*
+================================================================
+ V-LOGIN-REDESIGN: 登录页美学重塑终极补丁
+================================================================
+*/
+
+/* 1. 隐藏旧的、不需要的元素 */
+.login-logo,
+.login-title,
+.login-subtitle {
+    display: none !important;
+}
+
+/* 2. 为登录页应用绝美的星空渐变背景 */
+#login-view {
+    background: linear-gradient(135deg, #EFF7FB 0%, #CCE4F4 50%, #5097CD 100%);
+    position: relative; /* 为星空伪元素提供定位基准 */
+    overflow: hidden; /* 防止星空溢出 */
+}
+
+/* 复制星空效果 */
+#login-view::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: 
+        radial-gradient(2px 2px at 20px 30px, #fff, transparent),
+        radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.8), transparent),
+        radial-gradient(1px 1px at 90px 40px, #fff, transparent),
+        radial-gradient(1px 1px at 130px 80px, rgba(255,255,255,0.6), transparent),
+        radial-gradient(2px 2px at 160px 30px, #fff, transparent);
+    background-repeat: repeat;
+    background-size: 200px 100px;
+    animation: twinkle 4s ease-in-out infinite alternate;
+    z-index: 0; /* 确保星空在内容下方 */
+}
+
+/* 3. 重新设计布局，让内容垂直居中 */
+.login-container {
+    position: relative; /* 确保内容在星空上方 */
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* 垂直居中 */
+    align-items: center; /* 水平居中 */
+    height: 100%; /* 占满整个屏幕高度以实现居中 */
+}
+
+/* 4. 【核心】重新设计一个精致、小巧、现代的登录按钮 */
+.login-button {
+    max-width: 220px; /* 大幅缩小最大宽度 */
+    padding: 14px 24px; /* 调整内边距，让它更协调 */
+    border-radius: 50px; /* 【关键】使用超大圆角，变成优雅的胶囊形状 */
+    font-size: 15px;
+    font-weight: 500; /* 使用中等字重，看起来更清爽 */
+    letter-spacing: 1px; /* 增加文字间距 */
+    
+    /* 应用漂亮的“玻璃拟态”效果 */
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #2B3A4C; /* 使用主题中的深蓝色文字，对比更清晰 */
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.login-button:hover {
+    background: rgba(255, 255, 255, 0.4);
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+}
+
+.login-button:active {
+    transform: translateY(0);
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 5. 美化下方的“前往设置”链接 */
+.login-settings-link {
+    margin-top: 24px;
+    color: rgba(43, 58, 76, 0.7); /* 半透明的深蓝色 */
+    font-size: 13px;
+}
+
+.login-settings-link:hover {
+    color: #2B3A4C; /* 悬停时变为不透明 */
+}
+/* --- 【全新】登录页底部品牌标识 --- */
+.login-footer-branding {
+    position: absolute;
+    bottom: calc(15px + env(safe-area-inset-bottom, 0px)); /* 核心修正：从30px大幅缩小到15px，让其更贴近底部 */
+    left: 0;
+    right: 0;
+    text-align: center;
+    z-index: 1; /* 确保在星空背景之上 */
+    pointer-events: none; /* 让这些文字不会干扰下方的点击操作 */
+}
+
+.login-footer-branding .branding-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: bold; /* 确保加粗 */
+    color: rgba(43, 58, 76, 0.7); /* 核心修正：颜色与链接保持一致 */
+    letter-spacing: 5px; /* 增加字母间距，更有设计感 */
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.1); /* 添加微弱的亮色阴影，增加质感 */
+}
+
+.login-footer-branding .branding-subtitle {
+    margin: 4px 0 0 0; /* 只设置顶部外边距 */
+    font-size: 11px;
+    color: rgba(43, 58, 76, 0.7); /* 核心修正：颜色与链接保持一致 */
+    /* 我们不再需要独立的 opacity 属性，因为颜色本身就带透明度 */
 }
