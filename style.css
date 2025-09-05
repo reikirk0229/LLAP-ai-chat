@@ -4490,3 +4490,95 @@ input:checked + .slider:before {
     color: var(--qq-blue);
     background-color: #eef6fc;
 }
+/*
+============================================================
+ V-PROACTIVE-MSG: 主动消息通知 & 未读标记样式
+============================================================
+*/
+
+/* 1. 顶部通知弹窗的核心样式 */
+.notification-popup {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translate(-50%, -120%); /* 默认藏在屏幕正上方 */
+    width: 95%;
+    max-width: 350px; /* 最大宽度，防止在PC上太宽 */
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px; /* 使用更圆润的胶囊形状 */
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+    z-index: 9999;
+    transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); /* 更平滑的动画曲线 */
+    cursor: pointer;
+    padding: 12px 15px; /* 调整内边距 */
+}
+
+/* 当弹窗需要显示时，赋予它 .show 类 */
+.notification-popup.show {
+    /* 从顶部滑入到安全区域内 */
+    transform: translate(-50%, calc(env(safe-area-inset-top, 0px) + 10px));
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.notification-content .avatar {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+}
+
+.notification-text {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* 防止文字过长溢出 */
+}
+
+.notification-text .sender-name {
+    font-weight: bold;
+    font-size: 15px;
+    color: var(--text-dark);
+}
+
+.notification-text .message-preview {
+    font-size: 14px;
+    color: var(--text-secondary);
+    white-space: nowrap; /* 强制不换行 */
+    overflow: hidden;
+    text-overflow: ellipsis; /* 超出部分显示省略号 */
+}
+
+/* 2. 聊天列表头像容器与未读红点 */
+.avatar-container {
+    position: relative; /* 为红点提供定位基准 */
+    flex-shrink: 0;
+}
+
+.unread-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    min-width: 20px;
+    height: 20px;
+    background-color: #fa5151;
+    color: white;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: bold;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0 4px;
+    border: 2px solid white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    /* ▼▼▼ 【【【全新：对齐魔法】】】 ▼▼▼ */
+    box-sizing: border-box; /* 核心修正1: 命令边框和内边距向内计算，不撑大盒子 */
+    line-height: 1;         /* 核心修正2: 移除字体本身可能带来的多余垂直空隙 */
+    /* ▲▲▲▲▲ ▲▲▲▲▲ */
+}
