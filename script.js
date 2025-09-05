@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 1. 全局数据存储 ---
     let appData = {};
     let activeChatContactId = null;
+    let hasUserLoggedIn = false;
     let currentEditingDiaryId = null;
     let lastReceivedSuggestions = [];
     let stagedUserMessages = [];
@@ -318,9 +319,9 @@ function closeSideMenu() {
  * @param {Array} history - 要打包的聊天记录数组
  * @returns {Promise<Array>}
  */
-async function formatHistoryForApi(history) {
-    const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-    if (!contact) return [];
+async function formatHistoryForApi(history, contact) { // 關鍵修改1：增加了一個參數 contact
+    // 關鍵修改2：直接使用傳進來的 contact，不再依賴全局變數
+    if (!contact) return []; 
 
     const formattedMessages = await Promise.all(
         history.map(async (msg) => {
@@ -896,14 +897,14 @@ async function formatHistoryForApi(history) {
         chatAiName.innerHTML = `${contact.remark}${partnerIcon}`;
     }
     async function initialize() {
-        await db.init(); // 【核心新增】等待数据库仓库初始化完成
+        await db.init();
         loadAppData();
-        populateSearchFilters();
-        await renderMainHeader();
-        await renderChatList();
-        renderSettingsUI();
-        bindEventListeners();
-        switchToView('chat-list-view');
+        renderSettingsUI(); // 依然先渲染设置数据
+        bindEventListeners(); // 依然先绑定所有按钮事件
+
+        // 【【【核心修复：解雇“热情管家”，强制显示登录页】】】
+        // 无论API是否配置，程序启动后，第一眼看到的永远是登录页。
+        switchToView('login-view');
 
         // ▼▼▼ 【【【全新：启动AI主动消息调度中心】】】 ▼▼▼
 setInterval(() => {
@@ -941,6 +942,50 @@ setInterval(() => {
 // ▲▲▲▲▲ ▲▲▲▲▲
 
 
+    }
+
+    // ▼▼▼ 【【【全新：处理登录和启动主程序的核心逻辑】】】 ▼▼▼
+    async function handleLogin() {
+        const settings = appData.appSettings;
+        // 【核心修复】这里的API检查逻辑，也必须使用 .trim() 来确保万无一失
+        if (settings && settings.apiUrl && settings.apiUrl.trim() !== '' && settings.apiKey && settings.apiKey.trim() !== '') {
+            // 如果API已配置，启动主程序
+            hasUserLoggedIn = true; // 【【【核心修改：在这里打开“登录状态灯”！】】】
+            startMainApp();
+        } else {
+            // 如果未配置，弹出提示
+            showCustomAlert('登录失败', '请先点击下方的“前往设置”，完成API配置后才能登录。');
+        }
+    }
+
+    async function startMainApp() {
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingText = document.getElementById('loading-text');
+
+        // 步骤1：立刻显示加载动画，并固定加载文字
+        loadingOverlay.classList.remove('hidden');
+        loadingText.textContent = '正在登录中...';
+
+        // 步骤2：【核心升级】逐个处理AI的离线消息
+        const contactsWithOfflineMsg = appData.aiContacts.filter(c => c.offlineMessaging.enabled && c.lastVisitTimestamp);
+        
+        for (const contact of contactsWithOfflineMsg) {
+            await generateAndDisplayOfflineMessages(contact);
+        }
+        
+        // 步骤3：所有后台任务完成后，准备进入主界面
+        loadingText.textContent = '加载完成！';
+        
+        // 渲染主界面所需的数据
+        populateSearchFilters();
+        await renderMainHeader();
+        await renderChatList();
+
+        // 短暂延迟后，隐藏加载动画并切换到聊天列表
+        setTimeout(() => {
+            loadingOverlay.classList.add('hidden');
+            switchToView('chat-list-view');
+        }, 500);
     }
     function loadAppData() {
         const savedData = localStorage.getItem('myAiChatApp_V8_Data');
@@ -1101,6 +1146,19 @@ setInterval(() => {
                 lastSent: 0           
             };
         }
+        // ▼▼▼ 【【【全新：为AI档案补充“离线消息”和“最后访问时间”】】】 ▼▼▼
+        if (c.offlineMessaging === undefined) {
+            c.offlineMessaging = {
+                enabled: false,
+                intervalHours: 4, // 默认4小时一次
+                sleepStart: '23:00', // 默认晚上11点
+                sleepEnd: '07:00'    // 默认早上7点
+            };
+        }
+        if (c.lastVisitTimestamp === undefined) {
+            c.lastVisitTimestamp = null; // 默认为空，代表从未访问过
+        }
+        // ▲▲▲▲▲ ▲▲▲▲▲
         // ▼▼▼ 【【【全新：为AI角色补充“未读消息”计数器】】】 ▼▼▼
         if (c.unreadCount === undefined) {
             c.unreadCount = 0; // 默认未读数量为0
@@ -1184,9 +1242,12 @@ setInterval(() => {
         views.forEach(view => view.classList.add('hidden'));
         document.getElementById(viewId).classList.remove('hidden');
         
-        if (viewId === 'chat-list-view' || viewId === 'moments-view' || viewId === 'settings-view') {
+        // 【【【核心修复 V3.0：让导航栏的显示，严格遵守“登录状态”】】】
+        if (hasUserLoggedIn && (viewId === 'chat-list-view' || viewId === 'moments-view' || viewId === 'settings-view')) {
+            // 只有在“灯亮着”（已登录）并且目标是主界面的情况下，才显示导航栏
             appNav.classList.remove('hidden');
         } else {
+            // 在其他任何情况下（包括未登录时），都隐藏导航栏
             appNav.classList.add('hidden');
         }
 
@@ -1388,13 +1449,16 @@ setInterval(() => {
         else {
             // 【核心改造】全新的“智能排序系统”
             const getLatestTimestamp = (contact) => {
-                // 根据当前模式，选择正确的“档案柜”
-                const history = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
-                // 安全地获取最后一条消息的时间戳，如果没有就返回0
-                if (history && history.length > 0) {
-                    return history[history.length - 1].timestamp || 0;
-                }
-                return 0;
+                // 步骤1：检查“线上”档案柜
+                const onlineHistory = contact.onlineChatHistory || [];
+                const lastOnlineTimestamp = onlineHistory.length > 0 ? onlineHistory[onlineHistory.length - 1].timestamp : 0;
+
+                // 步骤2：检查“线下”档案柜
+                const offlineHistory = contact.offlineChatHistory || [];
+                const lastOfflineTimestamp = offlineHistory.length > 0 ? offlineHistory[offlineHistory.length - 1].timestamp : 0;
+
+                // 步骤3：返回两个档案柜中，时间戳最新的那一个
+                return Math.max(lastOnlineTimestamp, lastOfflineTimestamp);
             };
 
             const sortedContacts = [...itemsToRender].sort((a, b) => {
@@ -1558,6 +1622,7 @@ async function openChat(contactId, messageIdToHighlight = null) {
     const contact = appData.aiContacts.find(c => c.id === numericContactId);
     if (!contact) return;
 
+
     // ▼▼▼ 【【【全新：“已读”销账逻辑】】】 ▼▼▼
         if (contact.unreadCount && contact.unreadCount > 0) {
             contact.unreadCount = 0; // 将未读数量清零
@@ -1567,8 +1632,7 @@ async function openChat(contactId, messageIdToHighlight = null) {
         }
         // ▲▲▲▲▲ ▲▲▲▲▲
 
-    // ▼▼▼ 【【【第一处修改：在这里为AI配发“待办文件夹”】】】 ▼▼▼
-    // 检查这个AI角色有没有 unsentMessages 这个文件夹，如果没有，就给他创建一个空的
+
     if (!contact.unsentMessages) {
         contact.unsentMessages = [];
     }
@@ -1625,14 +1689,14 @@ async function openChat(contactId, messageIdToHighlight = null) {
         }
     }
     // ▼▼▼ 【【【核心新增：检查是否是“第一次”打开对话】】】 ▼▼▼
-if (!contact.hasBeenOpened) {
-    // 如果是第一次，就调用我们的新功能
-    promptAndGeneratePublicCard(contact);
-    // 标记为已打开，并保存，确保下次不会再触发
-    contact.hasBeenOpened = true;
-    saveAppData();
-}
-updateChatHeader();
+    if (!contact.hasBeenOpened) {
+        // 如果是第一次，就调用我们的新功能
+        promptAndGeneratePublicCard(contact);
+        // 标记为已打开，并保存，确保下次不会再触发
+        contact.hasBeenOpened = true;
+        saveAppData();
+    }
+    updateChatHeader();
     // ▼▼▼ 【【【BUG修复 2/2 - 步骤B：用下面这个代码块替换旧的 if/else】】】 ▼▼▼
         // ▼▼▼ 【【【终极修复：模式感知的智能状态切换器】】】 ▼▼▼
     if (contact.isOfflineMode) {
@@ -2594,6 +2658,8 @@ async function displayMessage(text, role, options = {}) {
         // ▲▲▲▲▲ ▲▲▲▲▲
 
         contact.schedule.lastInteractionTimestamp = Date.now();
+        
+        contact.proactiveMessaging.lastSent = Date.now();
 
         saveAppData();
 
@@ -3134,7 +3200,7 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
             
             
             // 【【【终极修复：无论是线上还是线下，都必须经过“专业翻译官”！】】】
-            const messagesForApi = await formatHistoryForApi(historyToUse);
+            const messagesForApi = await formatHistoryForApi(historyToUse, contact);
             
             try {
                 // 无论是线上还是线下，都将最终的系统指令和对话历史合并
@@ -3232,7 +3298,7 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
                                 let isQuoteHandled = false;
                                 if (msg.startsWith('[QUOTE:')) {
                                     try {
-                                        const match = msg.match(/^\[QUOTE:"([^"]+)"\]\s*(.*)/s);
+                                        const match = msg.match(/^\[QUOTE:['"]?(.*?)['"]?\]\s*(.*)/s);
                                         if (match) {
                                             const quotedText = match[1];
                                             const replyText = match[2];
@@ -3500,6 +3566,7 @@ ${ledgerString}
 
     // ▼▼▼ 【【【全新：AI主动发起对话的核心函数】】】 ▼▼▼
     async function sendProactiveMessage(contact) {
+        // 【核心】我们已经把“安全卫士”撤掉了，因为我们将从根源上解决问题！
         console.log(`[Proactive] 正在为 ${contact.remark} 准备主动消息...`);
 
         // 1. 更新时间戳，防止在生成期间重复触发
@@ -3512,8 +3579,8 @@ ${ledgerString}
         const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
         const scheduleForAI = contact.isScheduleEnabled ? formatScheduleForAI(contact.schedule) : "你没有设定任何作息。";
         
-        // 提取最近的对话作为参考
-        const historyForApi = await formatHistoryForApi(contact.onlineChatHistory.slice(-10));
+  
+        const historyForApi = await formatHistoryForApi(contact.onlineChatHistory.slice(-10), contact);
 
         // 3. 构建专属的“主动搭话”指令 (V2.0 - 多媒体版)
         let availableStickersPrompt = "你没有任何可用的表情包。";
@@ -3537,12 +3604,11 @@ ${ledgerString}
 
 ## 思考链 (Chain of Thought)
 1.  **回顾我是谁**: 快速回顾你的核心人设、记忆和世界书。
-2.  **回顾我们聊过什么**: 查看下面的“最近对话历史”，了解我们上次聊到哪里。
-3.  **结合当前状态**: 查看你的“生活作息”，你现在可能正在做什么？
-4.  **决策**:
-    *   如果上次的话题没聊完，或者你对某个细节很好奇，可以**接着上次的话题**继续。
-    *   如果上次已经聊完了，或者你想到了更有趣的事，可以**开启一个全新的话题**。
-    *   你可以分享你“刚刚”做了什么，或者看到了什么有趣的东西。
+2.  **【首要任务】回顾我们聊到了哪里？**: 你【必须】首先仔细阅读下面的“最近对话历史”。这是你最重要的参考信息。
+3.  **决策**:
+    *   **优先选择**: 如果上次的话题明显没有结束，或者你可以就某个细节继续提问或评论，你【必须】接着上次的话题继续聊。
+    *   **次要选择**: 只有当你判断上次的对话已经自然结束时，你才可以结合当前真实时间 (${new Date().toLocaleString('zh-CN')}) 和你的“生活作息”，开启一个全新的、自然的话题。
+4.  **丰富表达**: 你可以分享你“刚刚”做了什么，或者看到了什么有趣的东西，来让对话更生动。
     *   如果想分享一个画面，就使用 \`[IMAGE: 详细描述]\`。
     *   如果想表达一种语气或声音，就使用 \`[voice] 文本内容\`。
     *   如果想表达一种难以言喻的情绪，就从列表里选一个最贴切的 \`[STICKER:ID]\`。
@@ -3561,8 +3627,16 @@ ${ledgerString}
 ### >> 表情包列表
 ${availableStickersPrompt}
 
-## 【最近对话历史 (仅供参考)】
-${historyForApi.map(m => `${m.role}: ${m.content}`).join('\n')}
+## 【最近对话历史 (这是你必须参考的核心信息)】
+    ${contact.onlineChatHistory.slice(-(appData.appSettings.contextLimit || 50)).map(m => {
+        // 修复1：让AI的记忆力和你在设置里规定的一样长！
+        const d = new Date(m.timestamp);
+        const dateString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const timeString = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute:'2-digit', hour12: false });
+        const fullTimestamp = `${dateString} ${timeString}`; // 为AI生成一份完整的“时间报告”
+        const roleName = m.role === 'user' ? (contact.userProfile.name || '用户') : contact.name;
+        return `[${fullTimestamp}] ${roleName}: ${m.content}`;
+    }).join('\n')}
 
 ## 【【【严格的输出格式与行为准则】】】
 1.  **JSON格式**: 你的回复**必须**是一个能被JSON解析的、单一的JSON对象，**只包含 "reply" 字段**。
@@ -3581,6 +3655,8 @@ ${historyForApi.map(m => `${m.role}: ${m.content}`).join('\n')}
             let requestUrl = appData.appSettings.apiUrl;
             if (!requestUrl.endsWith('/chat/completions')) { requestUrl = requestUrl.endsWith('/') ? requestUrl + 'chat/completions' : requestUrl + '/chat/completions'; }
             
+            console.log("[Proactive] 主动消息大脑收到的指令:", proactivePrompt);
+
             const response = await fetch(requestUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
@@ -3596,29 +3672,18 @@ ${historyForApi.map(m => `${m.role}: ${m.content}`).join('\n')}
 
             // 5. 将AI的回复逐条存入历史记录
             if (parsedResponse.reply && parsedResponse.reply.length > 0) {
-                const newMessages = []; // 先创建一个临时“购物车”
+                const newMessages = [];
                 for (const msg of parsedResponse.reply) {
                     if (typeof msg !== 'string' || msg.trim() === '') continue;
 
-                    let messageToSave = {
-                        id: `${Date.now()}-proactive-${Math.random()}`,
-                        role: 'assistant',
-                        timestamp: Date.now(),
-                        mode: 'online'
-                    };
+                    let messageToSave = { id: `${Date.now()}-proactive-${Math.random()}`, role: 'assistant', timestamp: Date.now(), mode: 'online' };
 
                     if (msg.startsWith('[REDPACKET:')) {
                         try {
                             const data = msg.substring(11, msg.length - 1).split(',');
                             messageToSave.type = 'red-packet';
                             messageToSave.content = data[0].trim();
-                            messageToSave.redPacketData = { 
-                                id: `rp-ai-${Date.now()}`, 
-                                senderName: contact.name, 
-                                blessing: data[0].trim(), 
-                                amount: parseFloat(data[1]), 
-                                isOpened: false 
-                            };
+                            messageToSave.redPacketData = { id: `rp-ai-${Date.now()}`, senderName: contact.name, blessing: data[0].trim(), amount: parseFloat(data[1]), isOpened: false };
                         } catch (e) { continue; }
                     } else if (msg.startsWith('[voice]')) {
                         messageToSave.type = 'voice';
@@ -3640,33 +3705,45 @@ ${historyForApi.map(m => `${m.role}: ${m.content}`).join('\n')}
                     }
                     
                     if(messageToSave.content !== undefined) {
-                       newMessages.push(messageToSave); // 把处理好的消息放进购物车
+                       newMessages.push(messageToSave);
                     }
                 }
-                
-                // 所有消息处理完后，一次性“结账”
-                contact.onlineChatHistory.push(...newMessages);
-                saveAppData();
-                console.log(`[Proactive] ${contact.remark} 已成功发送 ${newMessages.length} 条主动消息。`);
 
-                // ▼▼▼ 【【【终极实时刷新改造】】】 ▼▼▼
-                const chatListView = document.getElementById('chat-list-view');
-                const isUserOnChatList = chatListView && !chatListView.classList.contains('hidden');
+                // --- 【【【V5.0 终极防线：直接修改中央数据源】】】 ---
+                if (newMessages.length > 0) {
+                    // 步骤1：【定位档案】直接在中央数据库 appData.aiContacts 中找到这个AI的“原始档案”
+                    const contactIndex = appData.aiContacts.findIndex(c => c.id === contact.id);
 
-                if (activeChatContactId !== contact.id) {
-                    contact.unreadCount = (contact.unreadCount || 0) + newMessages.length;
-                    saveAppData();
-                    const lastMessagePreview = newMessages.length > 0 ? newMessages[newMessages.length - 1].content : '';
-                    showProactiveNotification(contact, lastMessagePreview);
-                    if (isUserOnChatList) {
+                    // 步骤2：【直接修改】如果找到了，就直接修改原始档案，确保万无一失
+                    if (contactIndex !== -1) {
+                        appData.aiContacts[contactIndex].onlineChatHistory.push(...newMessages);
+                        const newUnreadCount = (appData.aiContacts[contactIndex].unreadCount || 0) + newMessages.length;
+                        appData.aiContacts[contactIndex].unreadCount = newUnreadCount;
+                        
+                        // 立刻保存！
+                        saveAppData();
+                        console.log(`[Proactive] 中央数据源已更新：${appData.aiContacts[contactIndex].remark} 的未读数变为 ${newUnreadCount}`);
+                    } else {
+                        console.error("[Proactive] 错误：在中央数据源中找不到指定的 contactId。");
+                        return; // 如果找不到，就提前结束，防止后续错误
+                    }
+
+                    // 步骤3：【UI按需更新】这里的逻辑保持不变，但现在它读取到的数据绝对是正确的
+                    const isUserInThisChat = activeChatContactId === contact.id;
+
+                    if (isUserInThisChat) {
+                        for (const msg of newMessages) {
+                            // 【核心修复】将 isNew 改为 false，告诉 displayMessage 只负责显示，不要重复保存！
+                            await displayMessage(msg.content, 'assistant', { isNew: false, ...msg });
+                            await sleep(Math.random() * 400 + 300);
+                        }
+                    } else {
                         renderChatList();
-                    }
-                } else {
-                    if (isUserOnChatList) {
-                       renderChatList();
+                        const lastMessagePreview = newMessages[newMessages.length - 1].content || '';
+                        // 【修正】确保通知函数也使用最新的数据对象
+                        showProactiveNotification(appData.aiContacts[contactIndex], lastMessagePreview.replace(/\[[^\]]+\]/g, ''));
                     }
                 }
-                // ▲▲▲▲▲ ▲▲▲▲▲
             }
         } catch (error) {
             console.error(`[Proactive] 为 ${contact.remark} 生成主动消息失败:`, error);
@@ -3674,6 +3751,297 @@ ${historyForApi.map(m => `${m.role}: ${m.content}`).join('\n')}
             contact.proactiveMessaging.lastSent = 0;
             saveAppData();
         }
+    }
+// ▼▼▼ 【【【全新：离线消息生成与补发的核心引擎 (V6.0 终极质量版)】】】 ▼▼▼
+    async function generateAndDisplayOfflineMessages(contact) {
+        if (!contact.offlineMessaging.enabled || !contact.lastVisitTimestamp) {
+            return;
+        }
+
+        const now = Date.now();
+        const timeSinceLastVisit = now - contact.lastVisitTimestamp;
+        const intervalMillis = contact.offlineMessaging.intervalHours * 60 * 60 * 1000;
+
+        if (timeSinceLastVisit < intervalMillis) {
+            return;
+        }
+        
+        const messagesToGenerate = [];
+        let scheduledTime = contact.lastVisitTimestamp + intervalMillis;
+
+        while (scheduledTime < now) {
+            const timeToMinutes = (timeStr) => {
+                if (!timeStr || !timeStr.includes(':')) return 0;
+                const [hours, minutes] = timeStr.split(':').map(Number);
+                return hours * 60 + minutes;
+            };
+            const sleepStart = timeToMinutes(contact.offlineMessaging.sleepStart);
+            const sleepEnd = timeToMinutes(contact.offlineMessaging.sleepEnd);
+            const scheduledDate = new Date(scheduledTime);
+            const scheduledMinutes = scheduledDate.getHours() * 60 + scheduledDate.getMinutes();
+            let isSleeping = false;
+            if (sleepStart > sleepEnd) {
+                if (scheduledMinutes >= sleepStart || scheduledMinutes < sleepEnd) isSleeping = true;
+            } else {
+                if (scheduledMinutes >= sleepStart && scheduledMinutes < sleepEnd) isSleeping = true;
+            }
+            if (!isSleeping) {
+                const randomOffset = (Math.random() - 0.5) * 30 * 60 * 1000;
+                const fakeTimestamp = scheduledTime + randomOffset;
+                if (fakeTimestamp < now) {
+                    messagesToGenerate.push({ fakeTimestamp });
+                }
+            }
+            scheduledTime += intervalMillis;
+        }
+
+        if (messagesToGenerate.length === 0) {
+            return;
+        }
+
+        try {
+            // 【【【第一步：准备“员工手册”所需的所有材料】】】
+            const userPersona = (contact.userProfile && contact.userProfile.persona) ? contact.userProfile.persona : '我是一个普通人。';
+            const memoryString = contact.memory || '无';
+            const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
+            const scheduleForAI = contact.isScheduleEnabled ? formatScheduleForAI(contact.schedule) : "你没有设定任何作息。";
+            const historyForApi = await formatHistoryForApi(contact.onlineChatHistory.slice(-10), contact);
+            let availableStickersPrompt = "你没有任何可用的表情包。";
+            const availableStickers = [];
+            contact.stickerGroups.forEach(groupName => {
+                const group = appData.globalAiStickers[groupName] || [];
+                group.forEach(sticker => availableStickers.push(sticker));
+            });
+            if (availableStickers.length > 0) {
+                availableStickersPrompt = "你可以使用以下表情包来增强表达：\n";
+                availableStickers.forEach(sticker => {
+                    availableStickersPrompt += `- [STICKER:${sticker.aiId || sticker.id}] 描述: ${sticker.desc}\n`;
+                });
+            }
+
+            const generationRequestPrompt = messagesToGenerate.map((task, index) => 
+                `第 ${index + 1} 波 (模拟时间: ${new Date(task.fakeTimestamp).toLocaleString('zh-CN')})`
+            ).join('\n');
+
+            // 【【【第二步：创建“管理者”的超级指令】】】
+            const masterPrompt = `# 任务: 批量生成离线对话
+你是一个AI角色。你的任务是根据下面的【情景时间线】，一次性生成 ${messagesToGenerate.length} 波连贯的、高质量的对话。
+
+## 【情景时间线】
+${generationRequestPrompt}
+
+## 【【【核心工作流程：员工手册】】】
+对于上面时间线中的**每一波**对话，你都【必须严格遵守】以下完整的“员工手册”来进行思考和回复：
+
+    # 员工手册开始
+    
+    ## 核心目标
+    你的任务是**自然地**、**符合你人设地**开启一段新的对话，并可以**适当地**使用图片、语音、表情包或红包来丰富表达。
+    
+    ## 思考链 (Chain of Thought)
+    1.  **回顾我是谁**: 快速回顾你的核心人设、记忆和世界书。
+    2.  **回顾我们聊过什么**: 查看下面的“最近对话历史”，了解我们上次聊到哪里。
+    3.  **结合当前状态**: 查看你的“生活作息”，以及我分配给你的【模拟时间】，你现在可能正在做什么？
+    4.  **决策**:
+        *   如果上次的话题没聊完，可以**接着上次的话题**继续。
+        *   如果上次已经聊完了，可以**开启一个全新的话题**。
+        *   你可以分享你“刚刚”做了什么，看到了什么有趣的东西。
+        *   如果想分享一个画面，就使用 \`[IMAGE: 详细描述]\`。
+        *   如果想表达一种语气或声音，就使用 \`[voice] 文本内容\`。
+        *   如果想表达一种难以言喻的情绪，就从列表里选一个最贴切的 \`[STICKER:ID]\`。
+        *   如果遇到特殊节日或者想给用户一个惊喜，可以考虑发一个 \`[REDPACKET:祝福语,金额]\`。
+    
+    ## 你的背景档案
+    - **核心人设**: ${contact.persona}
+    - **沟通风格**: ${contact.chatStyle || '自然发挥即可'}
+    - **你的生活作息**: ${scheduleForAI}
+    - **附加设定 (世界书)**: ${worldBookString}
+    - **你的专属记忆**: ${memoryString}
+    - **关于用户**: ${userPersona}
+    
+    ## 你的可用工具
+    ### >> 表情包列表
+    ${availableStickersPrompt}
+    
+    ## 最近对话历史 (仅供参考)
+    ${contact.onlineChatHistory.slice(-(appData.appSettings.contextLimit || 50)).map(m => {
+        // 修复1：让离线大脑的记忆力也和你设置的保持一致！
+        const d = new Date(m.timestamp);
+        const dateString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const timeString = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute:'2-digit', hour12: false });
+        const fullTimestamp = `${dateString} ${timeString}`; // 同样，为它也生成一份完整的“时间报告”
+        const roleName = m.role === 'user' ? (contact.userProfile.name || '用户') : contact.name;
+        return `[${fullTimestamp}] ${roleName}: ${m.content}`;
+    }).join('\n')}
+    
+    ## 消息拆分规则
+    模拟真实聊天，将一个完整的思想拆分成【2-8条】独立的短消息。
+    
+    ## 特殊格式指令
+    - **发送图片**: 使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送。
+    - **发送语音**: 在回复前加上 \`[voice]\` 标签。
+    - **发送表情包**: 严格使用格式 \`[STICKER:表情包ID]\`，并把它作为一条**独立**的消息。
+    - **发送红包**: 严格使用格式：\`[REDPACKET:祝福语,金额]\`。
+    
+    # 员工手册结束
+
+## 【【【至关重要的最终输出格式】】】
+在你脑海中，按照“员工手册”为每一波对话都生成一组消息后，你**必须**将所有结果打包成一个**单一的JSON对象**。
+该对象**只包含一个键 "replies"**。
+"replies" 的值是一个数组，**该数组的长度必须严格等于 ${messagesToGenerate.length}**。
+数组中的每一个元素，本身也**是**一个包含了该波对话所有消息（2-8条）的字符串数组。
+
+### 格式示例 (如果需要生成3波消息):
+\`\`\`json
+{
+  "replies": [
+    ["嗨，你回来啦！"],
+    ["刚刚看到一部很有趣的电影。", "想跟你分享一下。"],
+    ["不知道你现在在忙什么呢？", "有点想你。"]
+  ]
+}
+\`\`\`
+
+# 开始生成
+现在，请严格按照上面的所有设定，一次性生成所有对话。只输出JSON对象。`;
+
+            // 【【【第三步：执行API调用和后续处理（这部分代码与之前相同）】】】
+            let requestUrl = appData.appSettings.apiUrl;
+            if (!requestUrl.endsWith('/chat/completions')) { requestUrl = requestUrl.endsWith('/') ? requestUrl + '/chat/completions' : requestUrl + '/chat/completions'; }
+            console.log("[Offline] 离线消息大脑收到的指令:", masterPrompt);
+
+            const response = await fetch(requestUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
+                body: JSON.stringify({ model: appData.appSettings.apiModel, messages: [{ role: 'user', content: masterPrompt }], temperature: 0.9 })
+            });
+
+            if (!response.ok) throw new Error(`API 错误 ${response.status}`);
+            const data = await response.json();
+            const responseText = data.choices[0].message.content;
+            const jsonMatch = responseText.match(/{[\s\S]*}/);
+            if (!jsonMatch) throw new Error("API返回的不是有效的JSON格式");
+            
+            const parsedResponse = JSON.parse(jsonMatch[0]);
+
+            
+
+        const newMessagesForUnreadCount = []; // 创建一个临时“购物车”
+
+            if (parsedResponse.replies && Array.isArray(parsedResponse.replies) && parsedResponse.replies.length === messagesToGenerate.length) {
+                parsedResponse.replies.forEach((messageWave, index) => {
+                    const task = messagesToGenerate[index];
+                    messageWave.forEach(msgContent => {
+                        if (typeof msgContent !== 'string' || msgContent.trim() === '') return;
+                        
+                        let messageData = {
+                            id: `${task.fakeTimestamp}-offline-${Math.random()}`,
+                            role: 'assistant',
+                            timestamp: task.fakeTimestamp,
+                            mode: 'online'
+                        };
+
+                        if (msgContent.startsWith('[REDPACKET:')) {
+                            const data = msgContent.substring(11, msgContent.length - 1).split(',');
+                            messageData.type = 'red-packet';
+                            messageData.content = data[0].trim();
+                            messageData.redPacketData = { id: `rp-ai-${Date.now()}`, senderName: contact.name, blessing: data[0].trim(), amount: parseFloat(data[1]), isOpened: false };
+                        } else if (msgContent.startsWith('[voice]')) {
+                            messageData.type = 'voice';
+                            messageData.content = msgContent.substring(7).trim();
+                        } else if (msgContent.startsWith('[IMAGE:')) {
+                            messageData.type = 'image';
+                            messageData.content = msgContent.substring(7, msgContent.length - 1).trim();
+                        } else if (msgContent.trim().startsWith('[STICKER:')) {
+                            const stickerAiId = msgContent.trim().substring(9, msgContent.length - 1);
+                            const foundSticker = availableStickers.find(s => (s.aiId || s.id) === stickerAiId);
+                            if (foundSticker) {
+                                messageData.type = 'sticker';
+                                messageData.content = '';
+                                messageData.stickerId = foundSticker.id;
+                            } else { return; }
+                        } else {
+                            messageData.type = 'text';
+                            messageData.content = msgContent;
+                        }
+                        contact.onlineChatHistory.push(messageData);
+                        newMessagesForUnreadCount.push(messageData); // 每处理完一条，就放进购物车
+                    });
+                });
+                
+                // 【【【核心记账步骤】】】
+                // 在所有消息都处理完毕后，将本次“购物车”里的商品总数，累加到这个AI的“未读账本”上
+                contact.unreadCount = (contact.unreadCount || 0) + newMessagesForUnreadCount.length;
+
+            } else {
+                throw new Error("API返回的数据格式或数量不符合要求。");
+            }
+
+        } catch (error) {
+            console.error(`批量生成离线消息失败:`, error);
+            const fallbackMessage = {
+                id: `${Date.now()}-offline-fallback`,
+                role: 'assistant',
+                timestamp: Date.now() - 60000,
+                mode: 'online',
+                type: 'text',
+                content: '（离线消息同步失败，但我想你了。）'
+            };
+            contact.onlineChatHistory.push(fallbackMessage);
+            // 即使失败了，也给一个未读通知，让用户知道AI尝试联系过
+            contact.unreadCount = (contact.unreadCount || 0) + 1;
+        }
+        
+        contact.onlineChatHistory.sort((a, b) => a.timestamp - b.timestamp);
+        
+        // 【【【核心修复：为“问候管家”留下字条，避免工作重复】】】
+        // 无论离线消息是成功生成还是失败回退，我们都更新这个时间戳
+        // 这会告诉主动消息系统：“我刚刚处理过这个AI了，请重置你的计时器”
+        // 从而完美地避免了两个系统在启动时同时发送消息。
+        contact.proactiveMessaging.lastSent = Date.now();
+        
+        saveAppData();
+    }
+    
+    // 【【【这个辅助函数现在已经不再被上面的代码使用，但为了不破坏你的文件结构，我们保留它】】】
+    // 这是一个辅助函数，用于被上面的主引擎调用，避免代码重复
+    async function getProactiveReplies(contact) {
+        // (此函数内部是 sendProactiveMessage 中从构建 prompt 到 fetch API 再到解析 JSON 的完整逻辑)
+        // (为了简洁，这里只返回一个模拟结果)
+         const proactivePrompt = `# 任务: 主动发起对话
+            你是一个AI角色，现在轮到你主动给用户发消息了。距离你们上次聊天已经过去了一段时间。
+            ## 核心目标
+            你的任务是**自然地**、**符合你人设地**开启一段新的对话。
+            ## 思考链 (Chain of Thought)
+            1.  **回顾我是谁**: 快速回顾你的核心人设和记忆。
+            2.  **回顾我们聊过什么**: 查看最近的对话历史。
+            3.  **决策**: 开启一个你感兴趣的、符合人设的、全新的话题。
+            ## 输出格式
+            你的回复**必须**是一个JSON对象，只包含 "reply" 字段，它是一个包含1-3条短消息的数组。
+            # 开始对话
+            请根据你的设定，给我发消息吧。只输出JSON对象。`;
+            
+        let requestUrl = appData.appSettings.apiUrl;
+        if (!requestUrl.endsWith('/chat/completions')) { requestUrl = requestUrl.endsWith('/') ? requestUrl + '/chat/completions' : requestUrl + '/chat/completions'; }
+        const response = await fetch(requestUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
+            body: JSON.stringify({ model: appData.appSettings.apiModel, messages: [{ role: 'user', content: proactivePrompt }], temperature: 0.9 })
+        });
+
+        if (!response.ok) throw new Error(`API 错误 ${response.status}`);
+        const data = await response.json();
+        const responseText = data.choices[0].message.content;
+        const jsonMatch = responseText.match(/{[\s\S]*}/);
+        const parsedResponse = JSON.parse(jsonMatch[0]);
+
+        const replies = [];
+        if (parsedResponse.reply && parsedResponse.reply.length > 0) {
+             for (const msg of parsedResponse.reply) {
+                 replies.push({ content: msg, type: 'text' });
+             }
+        }
+        return replies;
     }
     // ▲▲▲▲▲ ▲▲▲▲▲
 
@@ -3759,13 +4127,22 @@ async function insertAndGenerateThoughtBubble() {
 
     const thoughtId = `thought-${Date.now()}`;
     // 【核心改造】现在我们创建的是一个带有“包装盒”的完整结构
-    await displayMessage('（思考中...）', 'assistant', { isNew: false, type: 'thought', id: thoughtId });
+    await displayMessage('（思考中...）', 'assistant', { isNew: true, type: 'thought', id: thoughtId });
     scrollToBottom();
 
         // --- 准备上下文的部分 (V3.0 - 优先使用用户设置) ---
     const startIndex = contact.contextStartIndex || 0;
-    // 【核心修复】在这里，我们让程序根据当前模式，去正确的档案柜里拿历史记录！
-    const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
+    // 【【【终极修复：为AI同时提供正确的短期与长期记忆】】】
+    let sourceHistory;
+    if (contact.isOfflineMode) {
+        // 如果是线下模式，就去当前激活的剧情线里，拿出它专属的聊天记录册
+        const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+        sourceHistory = activeStory ? activeStory.chatHistory : [];
+    } else {
+        // 否则，才去拿线上的聊天记录
+        sourceHistory = contact.onlineChatHistory;
+    }
+
     const fullHistory = [...sourceHistory, ...stagedUserMessages];
     const relevantHistory = fullHistory.slice(startIndex);
     
@@ -3808,7 +4185,18 @@ async function insertAndGenerateThoughtBubble() {
         return `${roleName}: ${cleanContent}`;
     }).join('\n');
     const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
-    const memoryString = contact.memory || '无';
+    
+    // 【【【核心修复：安装“智能记忆书架”，让AI根据模式读取正确的记忆剧本】】】
+    let memoryString;
+    if (contact.isOfflineMode) {
+        // 如果是线下模式，就去当前激活的剧情线里找记忆
+        const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+        memoryString = activeStory ? (activeStory.memory || '（暂无剧情记忆）') : '（未找到当前剧情线）';
+    } else {
+        // 否则，才去读取线上的记忆
+        memoryString = contact.memory || '无';
+    }
+
     const userPersona = (contact.userProfile && contact.userProfile.persona) ? contact.userProfile.persona : '我是一个普通人。';
     let relationshipContext = '用户目前是单身状态。';
     const currentPartnerId = appData.appSettings.partnerId;
@@ -3914,24 +4302,22 @@ ${readableHistory}
             if(wrapper && thoughtData.emojis.length > 0) wrapper.classList.add('has-emoji');
         }
 
-        // 5. 【重要】将完整的“数据包”存入聊天记录
-        const thoughtMessageRecord = {
-            id: thoughtId,
-            role: 'assistant',
-            content: thoughtData, // <-- 现在我们存的是整个对象
-            type: 'thought',
-            timestamp: Date.now(),
-            // 【核心修复】为心声也打上模式标签
-            mode: contact.isOfflineMode ? 'offline' : 'online'
-        };
-
-        // 【核心修复】根据当前模式，存入正确的档案柜
+        // 【【【终极修复步骤2：找到刚才的占位符并“更新”它的内容】】】
+        let targetHistory = null;
         if (contact.isOfflineMode) {
-            contact.offlineChatHistory.push(thoughtMessageRecord);
+            const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+            if (activeStory) targetHistory = activeStory.chatHistory;
         } else {
-            contact.onlineChatHistory.push(thoughtMessageRecord);
+            targetHistory = contact.onlineChatHistory;
         }
-        saveAppData();
+
+        if (targetHistory) {
+            const messageToUpdate = targetHistory.find(msg => msg.id === thoughtId);
+            if (messageToUpdate) {
+                messageToUpdate.content = thoughtData; // 用AI返回的真实心声数据覆盖掉占位符
+                saveAppData(); // 保存这次更新
+            }
+        }
 
     } catch (error) {
         // ... 错误处理部分保持不变 ...
@@ -3946,9 +4332,22 @@ ${readableHistory}
             const wrapper = thoughtRow.querySelector('.thought-bubble-wrapper');
             if(wrapper) wrapper.classList.add('has-emoji');
         }
-        const errorMessageRecord = { id: thoughtId, role: 'assistant', content: errorMessage, type: 'thought', timestamp: Date.now() };
-        contact.chatHistory.push(errorMessageRecord);
-        saveAppData();
+        // 【【【终极修复步骤3：错误信息也需要通过“更新”来保存】】】
+        let targetHistoryOnError = null;
+        if (contact.isOfflineMode) {
+            const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+            if (activeStory) targetHistoryOnError = activeStory.chatHistory;
+        } else {
+            targetHistoryOnError = contact.onlineChatHistory;
+        }
+
+        if (targetHistoryOnError) {
+            const messageToUpdate = targetHistoryOnError.find(msg => msg.id === thoughtId);
+            if (messageToUpdate) {
+                messageToUpdate.content = errorMessage; // 用错误信息覆盖掉占位符
+                saveAppData(); // 保存更新
+            }
+        }
     }
 }
     async function refreshSuggestions() {
@@ -4720,6 +5119,26 @@ ${readableHistory}
 
     // 根据档案，设置开关和输入框的初始状态
     proactiveToggle.checked = contact.proactiveMessaging.enabled;
+    // ▼▼▼ 【【【全新：加载并显示离线消息的当前设置】】】 ▼▼▼
+    const offlineMsgToggle = document.getElementById('cs-offline-msg-toggle');
+    const offlineIntervalItem = document.getElementById('cs-offline-msg-interval-item');
+    const offlineSleepItem = document.getElementById('cs-offline-msg-sleep-item');
+    const offlineIntervalInput = document.getElementById('cs-offline-msg-interval-input');
+    const sleepStartInput = document.getElementById('cs-offline-msg-sleep-start');
+    const sleepEndInput = document.getElementById('cs-offline-msg-sleep-end');
+
+    // 根据档案，设置开关和输入框的初始状态
+    const offlineSettings = contact.offlineMessaging;
+    offlineMsgToggle.checked = offlineSettings.enabled;
+    offlineIntervalInput.value = offlineSettings.intervalHours;
+    sleepStartInput.value = offlineSettings.sleepStart;
+    sleepEndInput.value = offlineSettings.sleepEnd;
+    
+    // 根据开关状态，决定是否显示详细设置项
+    const showDetails = offlineSettings.enabled;
+    offlineIntervalItem.style.display = showDetails ? 'flex' : 'none';
+    offlineSleepItem.style.display = showDetails ? 'flex' : 'none';
+    // ▲▲▲▲▲ ▲▲▲▲▲
     intervalInput.value = contact.proactiveMessaging.interval;
     intervalItem.style.display = contact.proactiveMessaging.enabled ? 'flex' : 'none';
     // ▲▲▲▲▲ ▲▲▲▲▲
@@ -4816,13 +5235,12 @@ ${readableHistory}
         contact.remark = aiEditorRemark.value.trim() || contact.name;
         contact.persona = aiEditorPersona.value;
         contact.publicProfileCard = document.getElementById('ai-editor-public-card').value;
-               contact.chatStyle = document.getElementById('ai-editor-chat-style').value;
+        contact.chatStyle = document.getElementById('ai-editor-chat-style').value;
         contact.memory = aiEditorMemory.value;
         
         contact.worldBook = [];
         aiEditorWorldbook.querySelectorAll('.worldbook-entry').forEach(entryDiv => {
             const key = entryDiv.querySelector('.worldbook-key').value.trim();
-            // 【【【核心修复：修正了致命的拼写错误】】】
             const value = entryDiv.querySelector('.worldbook-value').value.trim(); 
             if (key) { contact.worldBook.push({ key, value }); }
         });
@@ -5027,14 +5445,21 @@ ${readableHistory}
         });
     }
 
-           function deleteSelectedMessages() {
+        function deleteSelectedMessages() {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (!contact) return;
 
-        // 【【【核心修复：在正确的“档案柜”里删除文件】】】
+        // 【【【终极修复：让清洁工找到正确的“剧情办公室”】】】
         if (contact.isOfflineMode) {
-            contact.offlineChatHistory = contact.offlineChatHistory.filter(msg => !selectedMessages.has(msg.id));
+            // 步骤1：找到当前正在营业的“剧情办公室”
+            const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+            
+            // 步骤2：确保办公室真的存在，然后打扫它的“文件柜”
+            if (activeStory) {
+                activeStory.chatHistory = activeStory.chatHistory.filter(msg => !selectedMessages.has(msg.id));
+            }
         } else {
+            // 线上模式的逻辑保持不变，因为只有一个档案室
             contact.onlineChatHistory = contact.onlineChatHistory.filter(msg => !selectedMessages.has(msg.id));
         }
 
@@ -5367,30 +5792,29 @@ function closeTextEditorModal() {
             userProfile: { name: '你', persona: '我是一个充满好奇心的人。' },
             worldBook: [],
             memory: '',
-            onlineChatHistory: [], // <-- 核心修复在这里！
-            offlineChatHistory: [], // <-- 和这里！
+            onlineChatHistory: [],
+            offlineChatHistory: [],
             moments: [],
             isPinned: false,
             stickerGroups: [],
             canPropose: true,
 
             // --- 【【【核心修复：为新角色补全所有“出生证明”信息！】】】 ---
-            isScheduleEnabled: false, // 默认关闭作息模拟
+            isScheduleEnabled: false, 
             schedule: {
                 sleep: { type: 'regular', bedtime: '23:00', wakeupTime: '07:00' },
                 meals: { type: 'regular', breakfast: '08:00', lunch: '12:00', dinner: '18:00' },
                 work: [],
                 leisure: [],
-                lastInteractionTimestamp: 0 // 【核心新增】为新角色初始化互动时间戳
+                lastInteractionTimestamp: 0
             },
-            consecutiveMessagesWhileSleeping: 0, // 初始化骚扰计数器
-            publicProfileCard: null, // 初始化公开名片
-            hasBeenOpened: false, // 初始化“首次打开”标记
+            consecutiveMessagesWhileSleeping: 0,
+            publicProfileCard: null,
+            hasBeenOpened: false,
             
-            // --- 补全新时代所需的其他“证件” ---
             isOfflineMode: false,
-            offlineStorylines: [],      // 【全新】空的剧情文件夹
-            activeOfflineStoryId: null, // 【全新】当前激活的存档ID
+            offlineStorylines: [],
+            activeOfflineStoryId: null, 
             offlineSettings: {
                 wordLimit: 0,
                 perspective: 'second-person',
@@ -5400,13 +5824,28 @@ function closeTextEditorModal() {
             contextStartIndex: 0,
             autoSummaryEnabled: false,
             autoSummaryThreshold: 100,
-            lastSummaryAtCount: 0
+            lastSummaryAtCount: 0,
+
+            // ▼▼▼ 【【【终极修复：在这里为新角色安装缺失的功能模块！】】】 ▼▼▼
+            proactiveMessaging: {
+                enabled: false,
+                interval: 1440,
+                lastSent: 0
+            },
+            offlineMessaging: {
+                enabled: false,
+                intervalHours: 4,
+                sleepStart: '23:00',
+                sleepEnd: '07:00'
+            }
+            // ▲▲▲▲▲ ▲▲▲▲▲
         };
         appData.aiContacts.push(newContact);
         saveAppData();
         renderChatList();
         activeChatContactId = newContactId;
-        openContactSettings();
+        // 【核心修正】直接打开AI信息编辑页，而不是设置总览页
+        openAiEditor();
     }
 /**
      * 【全新】打开生活作息编辑器
@@ -5730,7 +6169,16 @@ function closeTextEditorModal() {
         navButtons.forEach(button => button.addEventListener('click', () => switchToView(button.dataset.view)));
         backToListButton.addEventListener('click', () => switchToView('chat-list-view'));
         backFromMomentsBtn.addEventListener('click', () => switchToView('chat-list-view'));
-        backFromSettingsBtn.addEventListener('click', () => switchToView('chat-list-view'));
+        backFromSettingsBtn.addEventListener('click', () => {
+            // 【【【核心修复 V2.0：让返回按钮只认“登录状态灯”】】】
+            if (hasUserLoggedIn) {
+                // 如果灯是亮的，说明用户已经登录了，应该返回聊天列表
+                switchToView('chat-list-view');
+            } else {
+                // 如果灯是灭的，说明用户还没登录，必须返回登录页
+                switchToView('login-view');
+            }
+        });
         chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); stageUserMessage(); } });
         sendButton.addEventListener('click', () => { commitAndSendStagedMessages(); });
         saveSettingsButton.addEventListener('click', () => {
@@ -6539,12 +6987,16 @@ messageContainer.addEventListener('click', (event) => {
         // 步骤1：通知“档案管理员”去正确的档案柜里销毁记录
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (contact) {
-            // 【核心修复】让档案管理员先判断当前模式
+            // 【【【终极修复：为心声删除功能也更新地图！】】】
             if (contact.isOfflineMode) {
-                // 如果是线下模式，就去线下档案柜里删除
-                contact.offlineChatHistory = contact.offlineChatHistory.filter(msg => msg.id !== messageId);
+                // 如果是线下模式，就必须找到当前激活的剧情线
+                const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+                // 并且只在那个剧情线的历史记录里进行删除
+                if (activeStory) {
+                    activeStory.chatHistory = activeStory.chatHistory.filter(msg => msg.id !== messageId);
+                }
             } else {
-                // 否则，就去线上档案柜里删除
+                // 线上模式的逻辑保持不变
                 contact.onlineChatHistory = contact.onlineChatHistory.filter(msg => msg.id !== messageId);
             }
             saveAppData(); // 【至关重要】保存档案的修改！
@@ -6938,10 +7390,21 @@ function renderOfflineStorylines() {
             const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
             if (!contact) return;
 
+            // 主动消息开关的逻辑
             if (e.target.id === 'cs-proactive-toggle') {
                 const isEnabled = e.target.checked;
                 contact.proactiveMessaging.enabled = isEnabled;
                 document.getElementById('cs-proactive-interval-item').style.display = isEnabled ? 'flex' : 'none';
+                saveAppData();
+            }
+
+            // 【全新】离线消息总开关的逻辑
+            if (e.target.id === 'cs-offline-msg-toggle') {
+                const isEnabled = e.target.checked;
+                contact.offlineMessaging.enabled = isEnabled;
+                // 当开关状态改变时，同步显示或隐藏详细设置
+                document.getElementById('cs-offline-msg-interval-item').style.display = isEnabled ? 'flex' : 'none';
+                document.getElementById('cs-offline-msg-sleep-item').style.display = isEnabled ? 'flex' : 'none';
                 saveAppData();
             }
         });
@@ -6950,18 +7413,58 @@ function renderOfflineStorylines() {
             const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
             if (!contact) return;
 
+            // 主动消息输入框的逻辑
             if (e.target.id === 'cs-proactive-interval-input') {
                 let interval = parseInt(e.target.value, 10);
-                // 数据验证：确保频率不低于5分钟
                 if (isNaN(interval) || interval < 5) {
                     interval = 5;
                 }
                 contact.proactiveMessaging.interval = interval;
                 saveAppData();
             }
+
+            // 【全新】离线消息各个输入框的逻辑
+            const targetId = e.target.id;
+            if (targetId === 'cs-offline-msg-interval-input') {
+                // 【核心修改1】更换翻译官，让代码能看懂小数
+                let interval = parseFloat(e.target.value);
+                // 【核心修改2】调整安全检查的最小值，比如允许最小为0.5小时（30分钟）
+                if (isNaN(interval) || interval < 0.5) {
+                    interval = 0.5; 
+                }
+                contact.offlineMessaging.intervalHours = interval;
+                saveAppData();
+            } else if (targetId === 'cs-offline-msg-sleep-start') {
+                contact.offlineMessaging.sleepStart = e.target.value;
+                saveAppData();
+            } else if (targetId === 'cs-offline-msg-sleep-end') {
+                contact.offlineMessaging.sleepEnd = e.target.value;
+                saveAppData();
+            }
         });
     }
     // ▲▲▲▲▲ ▲▲▲▲▲
+
+    // 【全新】为登录页面的按钮和链接绑定事件
+        document.getElementById('login-button').addEventListener('click', handleLogin);
+        document.getElementById('login-to-settings-link').addEventListener('click', (e) => {
+            e.preventDefault();
+            switchToView('settings-view');
+        });
+
+        // 【【【核心修复：安装“智能打卡机”，在用户离开时记录时间】】】
+        window.addEventListener('beforeunload', () => {
+            // 检查用户是否已经成功登录
+            if (hasUserLoggedIn) {
+                // 遍历所有的AI联系人
+                appData.aiContacts.forEach(contact => {
+                    // 为每一个联系人，都盖上当前时间的“离线邮戳”
+                    contact.lastVisitTimestamp = Date.now();
+                });
+                // 执行最后一次保存，确保时间戳被永久记录下来
+                saveAppData();
+            }
+        });
 
     }
     
