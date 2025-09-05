@@ -395,8 +395,20 @@ var _hmt = _hmt || [];
                 </div>
                 <div class="settings-group">
                     <div class="settings-item"><span>设置AI动态频率</span><span class="arrow">&gt;</span></div>
-                    <div class="settings-item"><span>设置AI主动消息频率</span><span class="arrow">&gt;</span></div>
                 </div>
+
+                <!-- ▼▼▼ 【【【全新：主动消息功能区】】】 ▼▼▼ -->
+                <div class="settings-group">
+                    <div class="settings-item">
+                        <span>启用主动消息</span>
+                        <label class="switch"><input type="checkbox" id="cs-proactive-toggle"><span class="slider"></span></label>
+                    </div>
+                    <div class="settings-item" id="cs-proactive-interval-item">
+                        <span>消息频率 (分钟/次)</span>
+                        <input type="number" id="cs-proactive-interval-input" class="summary-threshold-input" placeholder="最低5分钟">
+                    </div>
+                </div>
+                <!-- ▲▲▲▲▲ 主动消息功能区结束 ▲▲▲▲▲ -->
                 <div class="settings-group">
                     <div class="settings-item"><span>设置聊天背景</span><span class="arrow">&gt;</span></div>
                     <div class="settings-item"><span>设置气泡样式</span><span class="arrow">&gt;</span></div>
@@ -1315,6 +1327,18 @@ var _hmt = _hmt || [];
 <!-- ▲▲▲▲▲ 弹窗添加完毕 ▲▲▲▲▲ -->
 
 
+
+<!-- ▼▼▼ 【【【全新：AI主动消息顶部通知弹窗】】】 ▼▼▼ -->
+<div id="proactive-notification-popup" class="notification-popup">
+    <div class="notification-content">
+        <img id="notification-avatar" class="avatar" src="">
+        <div class="notification-text">
+            <span id="notification-name" class="sender-name"></span>
+            <span id="notification-message" class="message-preview"></span>
+        </div>
+    </div>
+</div>
+<!-- ▲▲▲▲▲ 通知弹窗结束 ▲▲▲▲▲ -->
 
 </body>
 </html>
