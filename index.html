@@ -61,9 +61,27 @@ var _hmt = _hmt || [];
             </div>
         </div>
         <div class="side-menu-footer">
-            <span>设置</span>
-            <span>夜间</span>
-            <span>--_--</span>
+            <!-- 设置按钮 -->
+            <div id="side-menu-settings" class="side-menu-weather-item">
+                <div class="weather-icon-container">
+                    <?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M36.686 15.171C37.9364 16.9643 38.8163 19.0352 39.2147 21.2727H44V26.7273H39.2147C38.8163 28.9648 37.9364 31.0357 36.686 32.829L40.0706 36.2137L36.2137 40.0706L32.829 36.686C31.0357 37.9364 28.9648 38.8163 26.7273 39.2147V44H21.2727V39.2147C19.0352 38.8163 16.9643 37.9364 15.171 36.686L11.7863 40.0706L7.92939 36.2137L11.314 32.829C10.0636 31.0357 9.18372 28.9648 8.78533 26.7273H4V21.2727H8.78533C9.18372 19.0352 10.0636 16.9643 11.314 15.171L7.92939 11.7863L11.7863 7.92939L15.171 11.314C16.9643 10.0636 19.0352 9.18372 21.2727 8.78533V4H26.7273V8.78533C28.9648 9.18372 31.0357 10.0636 32.829 11.314L36.2137 7.92939L40.0706 11.7863L36.686 15.171Z" fill="currentColor" stroke="none"/><path d="M24 29C26.7614 29 29 26.7614 29 24C29 21.2386 26.7614 19 24 19C21.2386 19 19 21.2386 19 24C19 26.7614 21.2386 29 24 29Z" fill="#FFF" stroke="none"/></svg>
+                </div>
+                <span>设置</span>
+            </div>
+            <!-- 夜间模式按钮 -->
+            <div id="side-menu-darkmode" class="side-menu-weather-item">
+                <div class="weather-icon-container">
+                    <?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M24.0033 4L29.2737 9.27038H38.7296V18.7263L44 23.9967L38.7296 29.2737V38.7296H29.2737L24.0033 44L18.7264 38.7296H9.27036V29.2737L4 23.9967L9.27036 18.7263V9.27038H18.7264L24.0033 4Z" fill="currentColor" stroke="none"/><path d="M27 17C27 25 22 26 17 26C17 30 23.5 34 29 30C34.5 26 31 17 27 17Z" fill="#FFF" stroke="none"/></svg>
+                </div>
+                <span>夜间</span>
+            </div>
+            <!-- 天气展示区 -->
+            <div id="side-menu-weather" class="side-menu-weather-item">
+                <div id="weather-icon" class="weather-icon-container">
+                    <!-- SVG图标将由JS动态填充在这里 -->
+                </div>
+                <span id="weather-temp">--°</span>
+            </div>
         </div>
     </div>
     <!-- ▲▲▲▲▲ 侧滑菜单结束 ▲▲▲▲▲ -->
@@ -396,7 +414,7 @@ var _hmt = _hmt || [];
 <!-- 【【【全新：剧情线管理入口】】】 -->
                 <div class="settings-item" id="cs-manage-storylines">
                     <span>剧情线管理</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="arrow-right"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <span class="arrow">&gt;</span>
                 </div>
                 </div>
                 <!-- ▲▲▲▲▲ 线下模式结束 ▲▲▲▲▲ -->
