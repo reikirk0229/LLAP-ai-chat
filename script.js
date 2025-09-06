@@ -144,6 +144,218 @@ document.addEventListener('DOMContentLoaded', () => {
     let stagedQuoteData = null; // 暂存准备要引用的消息数据
     let stagedAccountingEntries = []; // 【全新】暂存记账条目
 
+    // --- 【【【全新：天气感知系统 V1.0】】】 ---
+    let formattedWeatherData = "（天气信息暂未获取）"; // 用来存储给AI看的天气报告
+    // 【核心改造1】这里是给UI用的“公告板”，存放最简洁的天气信息
+    let simpleWeatherData = {
+        temp: '--',
+        iconCode: '01d' // 默认给一个晴天的图标代码
+    };
+    const weatherApiKey = "76c1b63aa70608f6e24a3f981de4c868"; // 把你的Key存放在这里
+
+    /**
+     * 主控制器：获取用户位置，然后触发天气查询
+     */
+    async function initializeWeatherSystem() {
+        console.log("天气系统：正在检查位置权限...");
+
+        // 首先检查浏览器是否支持权限API
+        if (!navigator.permissions) {
+            console.error("天气系统：您的浏览器不支持权限查询API，将使用旧版询问方式。");
+            // 如果不支持，就执行我们之前的旧代码（这里省略，因为现代浏览器都支持）
+            return;
+        }
+
+        // 【核心改造1】使用权限API，先悄悄地查询状态
+        const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+
+        // 【核心改造2】根据不同的状态，执行不同的操作
+        if (permissionStatus.state === 'granted') {
+            // 状态一：用户已经授权过
+            console.log("天气系统：权限已授予，将直接获取位置。");
+            showToast('正在同步天气信息...', 'info');
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                await fetchAndFormatWeather(lat, lon);
+            });
+
+        } else if (permissionStatus.state === 'prompt') {
+            // 状态二：用户还未决定，需要我们去询问
+            console.log("天气系统：权限状态为prompt，需要询问用户。");
+            showCustomConfirm(
+                '获取天气信息?',
+                '允许获取您的位置，可以让AI了解您当地的实时天气，从而更贴心地关心您哦~',
+                () => { // 用户点击“好的”
+                    console.log("天气系统：用户已同意，正在请求浏览器授权...");
+                    showToast('正在获取天气信息...', 'info');
+                    navigator.geolocation.getCurrentPosition(async (position) => {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        await fetchAndFormatWeather(lat, lon);
+                    }, () => {
+                        console.error("天气系统：用户在浏览器弹窗中拒绝了授权。");
+                        showToast('获取位置失败', 'error');
+                    });
+                },
+                () => { // 用户点击“不用了”
+                    console.log("天气系统：用户在我们的弹窗中拒绝了。");
+                },
+                '好的',
+                '不用了'
+            );
+
+        } else if (permissionStatus.state === 'denied') {
+            // 状态三：用户已经明确拒绝
+            console.log("天气系统：权限已被用户明确拒绝。");
+            showToast('天气功能已禁用，您可以在浏览器设置中重新开启位置权限', 'info', 5000);
+        }
+
+        // 【核心改造3】监听权限状态的变化
+        // 比如用户在另一个标签页里修改了设置，我们这边也能知道
+        permissionStatus.onchange = () => {
+            console.log(`天气系统：位置权限状态已变更为: ${permissionStatus.state}`);
+            // 如果用户从“拒绝”改为了“允许”，我们可以自动刷新一次天气
+            if (permissionStatus.state === 'granted') {
+                initializeWeatherSystem();
+            }
+        };
+    }
+
+    /**
+     * 【全新】UI装修工：更新侧边栏的天气显示
+     */
+    function updateWeatherDisplay() {
+        const iconContainer = document.getElementById('weather-icon');
+        const tempSpan = document.getElementById('weather-temp');
+
+        if (iconContainer && tempSpan) {
+            iconContainer.innerHTML = getWeatherIconSvg(simpleWeatherData.iconCode);
+            tempSpan.textContent = `${simpleWeatherData.temp}°`;
+        }
+    }
+
+    /**
+     * 【全新】图标翻译官：根据OpenWeatherMap的图标代码，返回对应的SVG图标
+     */
+    function getWeatherIconSvg(iconCode) {
+        // 【核心】OpenWeatherMap的图标代码最后一位是d(白天)或n(夜晚)，我们只取前面的数字来判断天气类型
+        const code = iconCode.substring(0, 2); 
+        const isDay = iconCode.endsWith('d');
+
+        switch (code) {
+            case '01': // 晴天
+                return isDay ? `<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M24 37C31.1797 37 37 31.1797 37 24C37 16.8203 31.1797 11 24 11C16.8203 11 11 16.8203 11 24C11 31.1797 16.8203 37 24 37Z" fill="currentColor" stroke="none"/><path d="M24 6C25.3807 6 26.5 4.88071 26.5 3.5C26.5 2.11929 25.3807 1 24 1C22.6193 1 21.5 2.11929 21.5 3.5C21.5 4.88071 22.6193 6 24 6Z" fill="currentColor"/><path d="M38.5 12C39.8807 12 41 10.8807 41 9.5C41 8.11929 39.8807 7 38.5 7C37.1193 7 36 8.11929 36 9.5C36 10.8807 37.1193 12 38.5 12Z" fill="currentColor"/><path d="M44.5 26.5C45.8807 26.5 47 25.3807 47 24C47 22.6193 45.8807 21.5 44.5 21.5C43.1193 21.5 42 22.6193 42 24C42 25.3807 43.1193 26.5 44.5 26.5Z" fill="currentColor"/><path d="M38.5 41C39.8807 41 41 39.8807 41 38.5C41 37.1193 39.8807 36 38.5 36C37.1193 36 36 37.1193 36 38.5C36 39.8807 37.1193 41 38.5 41Z" fill="currentColor"/><path d="M24 47C25.3807 47 26.5 45.8807 26.5 44.5C26.5 43.1193 25.3807 42 24 42C22.6193 42 21.5 43.1193 21.5 44.5C21.5 45.8807 22.6193 47 24 47Z" fill="currentColor"/><path d="M9.5 41C10.8807 41 12 39.8807 12 38.5C12 37.1193 10.8807 36 9.5 36C8.11929 36 7 37.1193 7 38.5C7 39.8807 8.11929 41 9.5 41Z" fill="currentColor"/><path d="M3.5 26.5C4.88071 26.5 6 25.3807 6 24C6 22.6193 4.88071 21.5 3.5 21.5C2.11929 21.5 1 22.6193 1 24C1 25.3807 2.11929 26.5 3.5 26.5Z" fill="currentColor"/><path d="M9.5 12C10.8807 12 12 10.8807 12 9.5C12 8.11929 10.8807 7 9.5 7C8.11929 7 7 8.11929 7 9.5C7 10.8807 8.11929 12 9.5 12Z" fill="currentColor"/></svg>`
+                : `<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M28.0527 4.41085C22.5828 5.83695 18.5455 10.8106 18.5455 16.7273C18.5455 23.7564 24.2436 29.4545 31.2727 29.4545C37.1894 29.4545 42.1631 25.4172 43.5891 19.9473C43.8585 21.256 44 22.6115 44 24C44 35.0457 35.0457 44 24 44C12.9543 44 4 35.0457 4 24C4 12.9543 12.9543 4 24 4C25.3885 4 26.744 4.14149 28.0527 4.41085Z" fill="currentColor" stroke="none"/></svg>`;
+
+            case '02': // 少云
+            case '03': // 多云
+            case '04': // 阴天
+                return isDay ? `<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M30.7826 24.5652C34.5285 24.5652 37.5652 21.5285 37.5652 17.7826C37.5652 14.0367 34.5285 11 30.7826 11C27.4338 11 24.6518 13.427 24.0996 16.618" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M33 7C34.1046 7 35 6.10457 35 5C35 3.89543 34.1046 3 33 3C31.8954 3 31 3.89543 31 5C31 6.10457 31.8954 7 33 7Z" fill="currentColor"/><path d="M42 12C43.1046 12 44 11.1046 44 10C44 8.89543 43.1046 8 42 8C40.8954 8 40 8.89543 40 10C40 11.1046 40.8954 12 42 12Z" fill="currentColor"/><path d="M44 21C45.1046 21 46 20.1046 46 19C46 17.8954 45.1046 17 44 17C42.8954 17 42 17.8954 42 19C42 20.1046 42.8954 21 44 21Z" fill="currentColor"/><path d="M22 10C23.1046 10 24 9.10457 24 8C24 6.89543 23.1046 6 22 6C20.8954 6 20 6.89543 20 8C20 9.10457 20.8954 10 22 10Z" fill="currentColor"/><path d="M9.45455 39.9942C6.14242 37.461 4 33.4278 4 28.8851C4 21.2166 10.1052 15 17.6364 15C23.9334 15 29.2336 19.3462 30.8015 25.2533C32.0353 24.6159 33.431 24.2567 34.9091 24.2567C39.9299 24.2567 44 28.4011 44 33.5135C44 37.3094 41.7562 40.5716 38.5455 42" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M22.2426 24.7574C21.1569 23.6716 19.6569 23 18 23C14.6863 23 12 25.6863 12 29C12 30.6569 12.6716 32.1569 13.7574 33.2426" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+                : `<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.45455 30.9942C6.14242 28.461 4 24.4278 4 19.8851C4 12.2166 10.1052 6 17.6364 6C23.9334 6 29.2336 10.3462 30.8015 16.2533C32.0353 15.6159 33.431 15.2567 34.9091 15.2567C39.9299 15.2567 44 19.4011 44 24.5135C44 28.3094 41.7562 31.5716 38.5455 33" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M27.2158 30.1233C25.5748 30.5511 24.3637 32.0432 24.3637 33.8182C24.3637 35.9269 26.0731 37.6364 28.1818 37.6364C29.9568 37.6364 31.4489 36.4252 31.8767 34.7842C31.9576 35.1768 32 35.5835 32 36C32 39.3137 29.3137 42 26 42C22.6863 42 20 39.3137 20 36C20 32.6863 22.6863 30 26 30C26.4166 30 26.8232 30.0424 27.2158 30.1233Z" fill="currentColor" stroke="none"/><path d="M22.2426 15.7574C21.1569 14.6716 19.6569 14 18 14C14.6863 14 12 16.6863 12 20C12 21.6569 12.6716 23.1569 13.7574 24.2426" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+            case '09': // 阵雨
+                return `<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.45455 30.9942C6.14242 28.461 4 24.4278 4 19.8851C4 12.2166 10.1052 6 17.6364 6C23.9334 6 29.2336 10.3462 30.8015 16.2533C32.0353 15.6159 33.431 15.2567 34.9091 15.2567C39.9299 15.2567 44 19.4011 44 24.5135C44 28.3094 41.7562 31.5716 38.5455 33" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 23V27" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 27V31" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 23V27" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 34V38" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 38V42" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 34V38" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+            case '10': // 雨
+                return `<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.45455 30.9942C6.14242 28.461 4 24.4278 4 19.8851C4 12.2166 10.1052 6 17.6364 6C23.9334 6 29.2336 10.3462 30.8015 16.2533C32.0353 15.6159 33.431 15.2567 34.9091 15.2567C39.9299 15.2567 44 19.4011 44 24.5135C44 28.3094 41.7562 31.5716 38.5455 33" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 28V38" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 32V42" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 28V38" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+            case '11': // 雷暴
+                return `<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.5294 20L17 31.5L23.1765 32.3846L20.5294 43L32 29.7308L24.9412 27.9615L30.2353 20H20.5294Z" fill="currentColor" stroke="none"/><path d="M9.45455 29.9942C6.14242 27.461 4 23.4278 4 18.8851C4 11.2166 10.1052 5 17.6364 5C23.9334 5 29.2336 9.34618 30.8015 15.2533C32.0353 14.6159 33.431 14.2567 34.9091 14.2567C39.9299 14.2567 44 18.4011 44 23.5135C44 27.3094 41.7562 30.5716 38.5455 32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+            case '13': // 雪
+                return `<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.45455 30.9942C6.14242 28.461 4 24.4278 4 19.8851C4 12.2166 10.1052 6 17.6364 6C23.9334 6 29.2336 10.3462 30.8015 16.2533C32.0353 15.6159 33.431 15.2567 34.9091 15.2567C39.9299 15.2567 44 19.4011 44 24.5135C44 28.3094 41.7562 31.5716 38.5455 33" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 23V29" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 26H21" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M31 26V32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M28 29H34" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 36V42" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 39H27" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+            
+            case '50': // 雾、沙尘暴等
+                return `<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 17H10C7.79086 17 6 18.7909 6 21V21C6 23.2091 7.79086 25 10 25H12" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 33H19C16.7909 33 15 34.7909 15 37V37C15 39.2091 16.7909 41 19 41H22" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 7H24C21.7909 7 20 8.79086 20 11V11C20 13.2091 21.7909 15 24 15H27" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 15H40" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 25H42" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 33H34" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+            default: // 默认图标
+                return `<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.45455 30.9942C6.14242 28.461 4 24.4278 4 19.8851C4 12.2166 10.1052 6 17.6364 6C23.9334 6 29.2336 10.3462 30.8015 16.2533C32.0353 15.6159 33.431 15.2567 34.9091 15.2567C39.9299 15.2567 44 19.4011 44 24.5135C44 28.3094 41.7562 31.5716 38.5455 33" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M22.2426 15.7574C21.1569 14.6716 19.6569 14 18 14C14.6863 14 12 16.6863 12 20C12 21.6569 12.6716 23.1569 13.7574 24.2426" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+        }
+    }
+
+    /**
+     * 核心功能：获取并格式化天气数据，生成给AI看的“天气简报”
+     */
+    async function fetchAndFormatWeather(lat, lon) {
+        // 【核心修改1】API URL 和参数完全改变，以适应 OpenWeatherMap
+        const nowUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${weatherApiKey}&units=metric&lang=zh_cn`;
+        const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${weatherApiKey}&units=metric&lang=zh_cn`;
+
+        try {
+            console.log("天气系统：正在获取实时天气 (from OpenWeatherMap)...");
+            const nowResponse = await fetch(nowUrl);
+            const nowData = await nowResponse.json();
+
+            // 【核心修改2】OpenWeatherMap 通过 "cod" 字段判断成功与否
+            if (nowData.cod !== 200) {
+                throw new Error(`实时天气API错误: ${nowData.message}`);
+            }
+
+            console.log("天气系统：正在获取未来5天预报 (from OpenWeatherMap)...");
+            const forecastResponse = await fetch(forecastUrl);
+            const forecastData = await forecastResponse.json();
+
+            if (forecastData.cod !== "200") { // 预报API的cod是字符串"200"
+                throw new Error(`天气预报API错误: ${forecastData.message}`);
+            }
+
+            // --- 【核心改造】在写报告前，先更新给UI用的“公告板” ---
+            simpleWeatherData = {
+                temp: nowData.main.temp.toFixed(0), // 温度取整
+                iconCode: nowData.weather[0].icon   // 获取图标代码
+            };
+            // 立刻命令“装修工”刷新UI！
+            updateWeatherDisplay();
+
+            // --- 开始撰写全新的“天气简报” ---
+            let report = "## 用户的实时天气与环境报告\n";
+            
+            // 1. 当前实况天气部分 (数据结构完全不同)
+            const now = nowData;
+            report += `### 当前实况: \n- **天气**: ${now.weather[0].description}\n- **体感温度**: ${now.main.feels_like.toFixed(1)}°C (实际${now.main.temp.toFixed(1)}°C)\n- **风速**: ${now.wind.speed} 米/秒\n`;
+
+            // 2. 未来天气预报部分 (逻辑重写)
+            report += "### 未来天气预报:\n";
+            const dailyForecasts = {}; // 用一个临时对象来处理每天的数据
+
+            forecastData.list.forEach(item => {
+                const date = item.dt_txt.split(' ')[0]; // 只取日期部分，如 "2025-09-06"
+                if (!dailyForecasts[date]) {
+                    dailyForecasts[date] = {
+                        temps: [],
+                        weathers: {}
+                    };
+                }
+                dailyForecasts[date].temps.push(item.main.temp);
+                // 统计每种天气出现的次数
+                const weatherDesc = item.weather[0].description;
+                dailyForecasts[date].weathers[weatherDesc] = (dailyForecasts[date].weathers[weatherDesc] || 0) + 1;
+            });
+
+            // 循环处理每天的预报
+            for (const date in dailyForecasts) {
+                const dayData = dailyForecasts[date];
+                const minTemp = Math.min(...dayData.temps).toFixed(0);
+                const maxTemp = Math.max(...dayData.temps).toFixed(0);
+                // 找出当天出现次数最多的天气作为代表
+                const mainWeather = Object.keys(dayData.weathers).reduce((a, b) => dayData.weathers[a] > dayData.weathers[b] ? a : b);
+                
+                report += `- **${date}**: 主要天气“${mainWeather}”，气温 ${minTemp}°C 到 ${maxTemp}°C。\n`;
+            }
+            
+            formattedWeatherData = report;
+            console.log("天气系统：天气简报生成完毕！", formattedWeatherData);
+            showToast('天气信息已同步！', 'success');
+
+        } catch (error) {
+            console.error("天气系统：获取天气数据时发生错误:", error);
+            showToast(`天气同步失败: ${error.message}`, 'error');
+            formattedWeatherData = "（天气信息获取失败，请检查网络或API密钥配置）";
+        }
+    }
+    // --- 天气感知系统结束 ---
+
     // --- 2. 元素获取 ---
     const appContainer = document.getElementById('app-container');
     const appNav = document.getElementById('app-nav');
@@ -897,6 +1109,12 @@ async function formatHistoryForApi(history, contact) { // 關鍵修改1：增加
         chatAiName.innerHTML = `${contact.remark}${partnerIcon}`;
     }
     async function initialize() {
+        // 【全新】开机自动应用上次保存的主题
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+            document.body.classList.add('dark-theme');
+        }
+
         await db.init();
         loadAppData();
         renderSettingsUI(); // 依然先渲染设置数据
@@ -985,6 +1203,8 @@ setInterval(() => {
         setTimeout(() => {
             loadingOverlay.classList.add('hidden');
             switchToView('chat-list-view');
+            // 【【【核心新增：在进入主界面后，立即启动天气系统！】】】
+            initializeWeatherSystem(); 
         }, 500);
     }
     function loadAppData() {
@@ -1242,8 +1462,7 @@ setInterval(() => {
         views.forEach(view => view.classList.add('hidden'));
         document.getElementById(viewId).classList.remove('hidden');
         
-        // 【【【核心修复 V3.0：让导航栏的显示，严格遵守“登录状态”】】】
-        if (hasUserLoggedIn && (viewId === 'chat-list-view' || viewId === 'moments-view' || viewId === 'settings-view')) {
+        if (hasUserLoggedIn && (viewId === 'chat-list-view')) {
             // 只有在“灯亮着”（已登录）并且目标是主界面的情况下，才显示导航栏
             appNav.classList.remove('hidden');
         } else {
@@ -2970,6 +3189,17 @@ ${contact.chatStyle || '自然发挥即可'}
         const finalPrompt = `# 任务: 角色扮演
 你是一个AI角色，你正在和一个真实用户聊天。你的所有回复都必须严格以角色的身份进行。
 
+## 【重要情景：用户的真实环境】
+这是你正在聊天的**用户所在地**的实时天气报告，以及过去几日的回顾和未来几日的预报。
+
+### 你的任务 (如何使用这份报告):
+- **主动关心:** 根据天气变化，自然地关心用户。例如，看到预报要下雨，就提醒用户带伞；看到气温骤降，就提醒用户多穿衣服。
+- **情景联想:** 将天气与生活联系起来。例如，如果是晴天，可以联想到“适合出门散步”；如果是持续阴雨，可以联想到“在家看电影也不错”。
+- **避免复读:** **绝对不要**像播报天气预报一样，直接复述报告中的数字和文字。你要把这些信息内化为你自己的观察。
+- **自然融合:** 将关心的话语巧妙地穿插在对话中，而不是突兀地提出来。
+
+${formattedWeatherData}
+
 ## 【你的完整背景档案】
 
 ### >> 关于你自己 (AI角色)
@@ -3599,6 +3829,11 @@ ${ledgerString}
         const proactivePrompt = `# 任务: 主动发起对话
 你是一个AI角色，现在轮到你主动给用户发消息了。距离你们上次聊天已经过去了一段时间。
 
+## 【重要情景：用户的真实环境】
+这是你准备联系的**用户所在地**的实时天气报告，以及过去和未来的天气情况。
+
+${formattedWeatherData}
+
 ## 核心目标
 你的任务是**自然地**、**符合你人设地**开启一段新的对话，并可以**适当地**使用图片、语音、表情包或红包来丰富表达。
 
@@ -3641,11 +3876,12 @@ ${availableStickersPrompt}
 ## 【【【严格的输出格式与行为准则】】】
 1.  **JSON格式**: 你的回复**必须**是一个能被JSON解析的、单一的JSON对象，**只包含 "reply" 字段**。
 2.  **消息拆分**: "reply"是一个字符串数组。模拟真实聊天，将一个完整的思想拆分成【1-5条】独立的短消息。
-3.  **发送图片**: 使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送。
-4.  **发送语音**: 在回复前加上 \`[voice]\` 标签。例如：\`[voice]我刚刚在听这首歌，超好听！\`
-5.  **发送表情包**: 严格使用格式 \`[STICKER:表情包ID]\`，并把它作为一条**独立**的消息。
-6.  **发送红包**: 严格使用格式：\`[REDPACKET:祝福语,金额]\`。例如：\`[REDPACKET:突然想你了,5.20]\`
-7.  **【重要】社交礼仪**: 不要滥用特殊消息！图片、红包、表情包应该是为了增强对话的趣味和情感，而不是无意义地刷屏。
+3.  **发送图片**: **【强化指令】** 当你想分享一个画面时，**必须**严格使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送它。
+4.  **精确引用**: **【全新指令】** 如果你想接着用户之前说过的话题聊，**必须**严格使用格式：\`[QUOTE:"原文片段"] 你的回复...\`
+5.  **发送语音**: 在回复前加上 \`[voice]\` 标签。例如：\`[voice]我刚刚在听这首歌，超好听！\`
+6.  **发送表情包**: 严格使用格式 \`[STICKER:表情包ID]\`，并把它作为一条**独立**的消息。
+7.  **发送红包**: 严格使用格式：\`[REDPACKET:祝福语,金额]\`。例如：\`[REDPACKET:突然想你了,5.20]\`
+8.  **【重要】社交礼仪**: 不要滥用特殊消息！图片、红包、表情包应该是为了增强对话的趣味和情感，而不是无意义地刷屏。
 
 # 开始对话
 现在，请根据上面的所有设定，给我发消息吧。只输出JSON对象。`;
@@ -3699,6 +3935,34 @@ ${availableStickersPrompt}
                             messageToSave.content = '';
                             messageToSave.stickerId = foundSticker.id;
                         } else { continue; }
+                    } else if (msg.startsWith('[QUOTE:')) { // 【【【核心新增！！！】】】
+                        // 在这里教会“主动消息处理器”如何看懂引用格式
+                        try {
+                            const match = msg.match(/^\[QUOTE:['"]?(.*?)['"]?\]\s*(.*)/s);
+                            if (match) {
+                                const quotedText = match[1];
+                                const replyText = match[2];
+                                
+                                // AI在主动消息中引用时，需要从历史记录里找到原文
+                                const originalMessage = [...contact.onlineChatHistory].reverse().find(m => m.content && m.content.includes(quotedText));
+                                
+                                if (originalMessage) {
+                                    const senderName = originalMessage.role === 'user' ? (contact.userProfile.name || '你') : contact.name;
+                                    messageToSave.quotedMessage = {
+                                        messageId: originalMessage.id,
+                                        sender: senderName,
+                                        content: originalMessage.content.length > 20 ? originalMessage.content.substring(0, 20) + '...' : originalMessage.content
+                                    };
+                                }
+                                messageToSave.type = 'text';
+                                messageToSave.content = replyText;
+                            }
+                        } catch(e) { 
+                             console.error("解析主动消息中的引用指令失败", e);
+                             // 如果解析失败，就当作普通文本处理，防止程序崩溃
+                             messageToSave.type = 'text';
+                             messageToSave.content = msg;
+                        }
                     } else {
                         messageToSave.type = 'text';
                         messageToSave.content = msg;
@@ -6121,6 +6385,48 @@ function closeTextEditorModal() {
     
     function bindEventListeners() {
         // ▼▼▼▼▼ 【全新 V2.0】带遮罩层的侧滑菜单交互 ▼▼▼▼▼
+
+        // --- 【【【全新：侧边栏底部按钮总控制器】】】 ---
+        const settingsBtn = document.getElementById('side-menu-settings');
+        const darkModeBtn = document.getElementById('side-menu-darkmode');
+        const weatherBtn = document.getElementById('side-menu-weather');
+
+        // 1. 设置按钮：点击后跳转到设置页面
+        if (settingsBtn) {
+            settingsBtn.addEventListener('click', () => {
+                switchToView('settings-view');
+                closeSideMenu();
+            });
+        }
+
+        // 2. 夜间模式按钮：点击后切换主题
+        if (darkModeBtn) {
+            darkModeBtn.addEventListener('click', () => {
+                document.body.classList.toggle('dark-theme');
+                // (可选) 你可以把用户选择的主题保存起来，下次打开时自动应用
+                if (document.body.classList.contains('dark-theme')) {
+                    localStorage.setItem('theme', 'dark');
+                } else {
+                    localStorage.setItem('theme', 'light');
+                }
+            });
+        }
+        
+        // 3. 天气按钮：点击后重新获取天气
+        if (weatherBtn) {
+            weatherBtn.addEventListener('click', () => {
+                // 【核心改造】第一步：立刻命令侧边栏关闭
+                closeSideMenu(); 
+
+                // 【核心改造】第二步：稍微等待一下（300毫秒），让侧边栏的关闭动画播放完毕
+                setTimeout(() => {
+                    // 第三步：现在才显示提示并触发天气系统（和弹窗）
+                    showToast('正在刷新天气...', 'info');
+                    initializeWeatherSystem();
+                }, 300); // 这个时间与你CSS中侧边栏的动画时间 0.3s 保持一致
+            });
+        }
+
         const sidebarOverlay = document.getElementById('sidebar-overlay');
 
 
