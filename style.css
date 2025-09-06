@@ -630,9 +630,10 @@ hr {
 
 /* --- 视图5: 聊天设置页面 --- */
 .contact-settings-container { 
-    flex-grow: 1; 
-    overflow-y: auto; 
-    padding: 20px 0; 
+    flex-grow: 1; /* 【核心修复1】让这个主容器能自动伸展，填满屏幕 */
+    overflow-y: auto; /* 【核心修复2】如果内容超长，允许它自己滚动 */
+    padding: 20px 0; /* 【核心修复3】恢复上下内边距 */
+    /* 【核心修复4】恢复最重要的毛玻璃背景效果！ */
     background: var(--glass-bg);
     backdrop-filter: blur(15px);
     -webkit-backdrop-filter: blur(15px);
@@ -656,6 +657,12 @@ hr {
     cursor: pointer; 
     transition: all 0.3s ease;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+/* 【【【全新：设置项标签防挤压补丁】】】 */
+.settings-item > span:first-child {
+    flex-shrink: 0;      /* 指令1：禁止收缩！这是防止被挤压的核心。 */
+    white-space: nowrap; /* 指令2：禁止文字内部换行，作为双重保险。 */
+    margin-right: 15px;  /* (推荐) 同时增加一个右边距，确保和输入框有安全距离。 */
 }
 .settings-item:not(:last-child) { 
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -1030,6 +1037,14 @@ input:checked + .slider:before {
     color: var(--text-dark);
 }
 .close-button { 
+    /* 步骤2：让关闭按钮“自由悬浮”，脱离父容器的束缚 */
+    position: absolute; 
+
+    /* 【【【这就是您要的遥控器！！！】】】 */
+    top: 5px;    /* 这是按钮距离【弹窗顶部】的距离 */
+    right: 15px;  /* 这是按钮距离【弹窗右侧】的距离 */
+
+    /* --- 以下是按钮本身的美化样式，保持不变 --- */
     background: none; 
     border: none; 
     font-size: 24px; 
@@ -1042,6 +1057,7 @@ input:checked + .slider:before {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding-bottom: 2px; /* 这一行是我额外加的，为了让叉号在圆圈里更居中一点 */
 }
 
 .close-button:hover {
@@ -2436,8 +2452,9 @@ input:checked + .slider:before {
 .more-functions-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr); 
-    gap: 20px; 
-    padding: 20px 20px 10px; /* 【关键修改】内边距被移动到了这里 */
+    gap: 15px; /* 修改：缩小图标之间的间距 */
+    row-gap: 20px; /* 稍微拉开上下行的距离 */
+    padding: 20px; /* 修改：统一内边距，让布局更匀称 */
 }
 
 .function-item {
@@ -2449,8 +2466,8 @@ input:checked + .slider:before {
 }
 
 .function-icon {
-    width: 56px;
-    height: 56px;
+    width: 48px;  /* 修改：将方框宽度从56px缩小到48px */
+    height: 48px; /* 修改：将方框高度从56px缩小到48px */
     background: var(--glass-bg);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -2460,7 +2477,7 @@ input:checked + .slider:before {
     justify-content: center;
     align-items: center;
     box-shadow: 0 4px 15px rgba(80, 151, 205, 0.1);
-    margin-bottom: 8px;
+    margin-bottom: 6px; /* 修改：缩小与下方文字的距离 */
     transition: all 0.3s ease;
 }
 
@@ -2471,8 +2488,8 @@ input:checked + .slider:before {
 }
 
 .function-icon svg {
-    width: 28px;
-    height: 28px;
+    width: 24px;  /* 修改：将图标宽度从28px缩小到24px */
+    height: 24px; /* 修改：将图标高度从28px缩小到24px */
     stroke: var(--text-dark);
     transition: all 0.3s ease;
 }
@@ -2483,7 +2500,7 @@ input:checked + .slider:before {
 }
 
 .function-label {
-    font-size: 13px;
+    font-size: 12px; /* 修改：文字也稍微缩小一点，更协调 */
     color: var(--text-secondary);
     transition: all 0.3s ease;
 }
@@ -4183,40 +4200,38 @@ input:checked + .slider:before {
     cursor: pointer;
     margin-top: 10px;
 }
-/* --- 【全新 V3.1】作息编辑器UI终极修复补丁 (垂直布局增强版) --- */
-
-/* 1. 改造主容器，让它垂直堆叠内部的每一行 */
+/* 1. 垂直容器的布局 */
 .schedule-time-range.vertical {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    margin-top: 15px; /* 增加和上方下拉框的间距，让布局更清晰 */
+    margin-top: 15px;
 }
 
 /* 2. 定义每一行（标签+输入框）的样式 */
 .time-input-row {
     display: flex;
-    justify-content: space-between; /* 保持两端对齐，这是最直观的方式 */
-    align-items: center;
+    justify-content: space-between; /* 两端对齐保持不变 */
+    align-items: baseline; /* 【【【终极修复】】】使用基线对齐，完美解决文字错位！ */
 }
 
-/* 3. 设置标签的样式 */
+/* 3. 标签的样式 */
 .time-input-row label {
     font-size: 14px;
     color: #555;
     font-weight: 600;
-    flex-shrink: 0; /* 禁止标签文字被压缩换行 */
-    padding-right: 15px; /* 与输入框保持安全距离 */
+    padding-right: 15px; /* 【核心修复】为标签增加右内边距，强制创造出呼吸空间 */
+    flex-shrink: 0;      /* (推荐) 防止标签文字在极端狭窄的情况下被压缩换行 */
 }
 
-/* 4. 设置输入框的样式，让它更稳定 */
+/* 4. 【核心】让时间输入框恢复到最基础、最原始的带边框样式 */
+.settings-item input[type="time"],
 #schedule-editor-modal .time-input-row input[type="time"] {
-    width: 120px; /* 固定宽度，防止被挤压 */
-    padding: 8px;
+    /* 我们不再修改它的外观，只规定一下尺寸和对齐 */
+    padding: 5px 8px;
     border-radius: 6px;
     border: 1px solid #ddd;
     text-align: center;
-    flex-shrink: 0; /* 禁止输入框被压缩 */
 }
 /* --- 【全新 V4.0】作息编辑器易用性UI样式 --- */
 .schedule-days-selector {
@@ -4835,4 +4850,185 @@ body.dark-theme .tool-button svg,
 body.dark-theme .side-menu-item .menu-icon svg,
 body.dark-theme .weather-icon-container svg {
     stroke: var(--text-secondary);
+}
+/* --- 【全新V4.0：AI天气预报弹窗精装修终极版】 --- */
+
+
+
+
+/* 3. (保持不变) 8天预报列表的样式 */
+#ai-weather-forecast-list {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+/* 4. (保持不变) 8天预报中每一行的样式 */
+.forecast-day-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+}
+.forecast-day-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+.forecast-day-info .weather-icon-container {
+    flex-shrink: 0;
+}
+.forecast-date-details .date-label {
+    font-weight: bold;
+    font-size: 15px;
+}
+.forecast-date-details .weather-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.forecast-temp {
+    font-size: 16px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* 5. (保持不变) “今日详情”网格布局的样式 */
+#ai-weather-today-details {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr); 
+    gap: 20px; 
+    row-gap: 25px;
+}
+.detail-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+.detail-icon {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 8px;
+}
+.detail-icon svg {
+    width: 100%;
+    height: 100%;
+}
+.detail-value {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-dark);
+}
+.detail-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+.forecast-day-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--glass-border);
+}
+.forecast-day-item:last-child {
+    border-bottom: none;
+}
+.forecast-day-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+.forecast-day-info .weather-icon-container {
+    flex-shrink: 0;
+}
+.forecast-date-details .date-label {
+    font-weight: bold;
+    font-size: 15px;
+}
+.forecast-date-details .weather-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.forecast-temp {
+    font-size: 16px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+/* --- 【【【全新：设置子面板间距优化补丁】】】 --- */
+.settings-sub-panel {
+    margin-top: 20px; /* 为整个天气设置面板增加一个上外边距 */
+    padding-top: 20px; /* 在面板内部顶部也增加一点内边距 */
+    border-top: 1px solid var(--glass-border); /* 增加一条漂亮的分割线 */
+}
+/*
+============================================================
+ V-FINAL-FIX: 天气弹窗按钮终极对齐 & 布局重塑
+============================================================
+*/
+
+/* 步骤1: 将标题栏升级为“智能指挥官”(Flexbox) */
+#ai-weather-modal .modal-header {
+    display: flex;                 /* 开启Flexbox布局 */
+    justify-content: space-between; /* 命令子元素：一组靠左，一组靠右 */
+    align-items: center;           /* 命令所有子元素在垂直方向上居中对齐 */
+}
+
+/* 步骤2: 让“标题和刷新按钮”这个小组内部也对齐 */
+#ai-weather-modal .header-title-group {
+    display: flex;
+    align-items: center; /* 组内垂直居中 */
+    gap: 8px;            /* 在标题和刷新按钮之间增加一点间距 */
+}
+
+/* 步骤3: 解除刷新按钮的“绝对定位”束缚，让它回归队伍 */
+#ai-weather-modal #refresh-ai-weather-btn {
+    /* 我们不再需要 position: absolute 和 top/right/transform */
+    padding: 4px; 
+    background: none; 
+    border: none; 
+    cursor: pointer; 
+    display: flex;
+    align-items: center; 
+    justify-content: center; 
+    border-radius: 50%;
+    transition: all 0.2s;
+}
+
+#ai-weather-modal #refresh-ai-weather-btn {
+    transform: translateY(1.5px); /* 新增：向下微调1.5像素，让它和文字更对齐 */
+}
+
+#ai-weather-modal #refresh-ai-weather-btn:hover {
+    background-color: rgba(0,0,0,0.05);
+    transform: translateY(1.5px) rotate(90deg); /* 修正：在微调的基础上再进行旋转 */
+}
+
+#ai-weather-modal #refresh-ai-weather-btn svg {
+    width: 18px; 
+    height: 18px; 
+    stroke-width: 2.5; 
+    stroke: #AAAAAA;
+}
+
+/* 步骤4: 解除关闭按钮的束缚，并对其进行【终极】向上微调 */
+#ai-weather-modal #close-ai-weather-modal {
+    transform: translateY(-5px); /* 终极修正：向上移动4个像素！ */
+}
+
+/* 【【【同步修正：确保鼠标悬停时，按钮不会“掉”下来】】】 */
+#ai-weather-modal #close-ai-weather-modal:hover {
+    /* 核心！在执行放大效果的同时，保持我们最终确定的向上移动指令 */
+    transform: translateY(-5px) scale(1.1);
+}
+
+
+#ai-weather-modal .close-button:hover {
+    /* 核心！同时执行“垂直居中”和“放大”两个指令，就不会打架了！*/
+    transform: translateY(-50%) scale(1.1);
+    background: rgba(80, 151, 205, 0.1);
+    color: var(--qq-blue);
 }
