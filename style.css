@@ -4696,3 +4696,143 @@ input:checked + .slider:before {
     color: rgba(43, 58, 76, 0.7); /* 核心修正：颜色与链接保持一致 */
     /* 我们不再需要独立的 opacity 属性，因为颜色本身就带透明度 */
 }
+/* --- 【全新】侧边栏天气展示区样式 --- */
+/* 【核心改造1】升级“大管家”，让它强制所有孩子底部对齐 */
+.side-menu-footer {
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-end; /* 魔法！所有项目都会以底部为基准对齐 */
+    padding: 15px; /* 调整内边距，让布局更舒展 */
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.side-menu-weather-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: var(--radius-sm);
+    transition: all 0.3s ease;
+    min-width: 50px; 
+}
+
+.side-menu-weather-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.weather-icon-container {
+    width: 24px;
+    height: 24px;
+    margin-bottom: 4px; /* 【核心改造2】稍微增大图标和文字的间距 */
+}
+
+.weather-icon-container svg {
+    width: 100%;
+    height: 100%;
+    /* 【核心改造1】默认情况下，所有图标都是“空心描边”风格 */
+    stroke: var(--text-secondary);
+    fill: none;
+    stroke-width: 4; /* 你提供的图标描边宽度是4，我们在这里统一 */
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* 【核心改造2】我们专门为“设置”和“夜间”这两个按钮的图标，单独下达“填充”指令！ */
+#side-menu-settings .weather-icon-container svg,
+#side-menu-darkmode .weather-icon-container svg {
+    fill: var(--text-secondary); /* 命令它们填充颜色 */
+    stroke: none; /* 同时禁用描边，确保是纯实体图标 */
+}
+
+/* 【核心改造3】我们还可以为那两个图标内部的白色部分单独设置颜色 */
+#side-menu-settings svg path:last-child,
+#side-menu-darkmode svg path:last-child {
+    fill: #FFF; /* 无论在日间还是夜间模式，都保持白色 */
+    stroke: #FFF;
+}
+
+/* 【核心改造4】为所有文字创建一个统一的“制服” */
+.side-menu-footer span {
+    font-size: 13px; /* 统一字号 */
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+/*
+============================================================
+ V-DARK-THEME: 夜间模式专属样式
+============================================================
+*/
+
+/* 当body拥有.dark-theme这个类时，下面的所有样式就会生效 */
+body.dark-theme {
+    --background-light: #121212; /* 主背景变深黑 */
+    --background-white: #1E1E1E; /* 卡片背景变深灰 */
+    --text-dark: #E0E0E0;      /* 主要文字变浅灰 */
+    --text-secondary: #8A8A8A;   /* 次要文字变暗灰 */
+    --border-color: #333333;     /* 边框变深 */
+
+    /* 毛玻璃效果在暗色模式下也需要调整 */
+    --glass-bg: rgba(40, 40, 40, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+/* --- 覆盖各个组件的颜色 --- */
+
+body.dark-theme,
+body.dark-theme #app-container {
+    background-color: #121212; /* 确保最外层背景是深色 */
+}
+
+/* 聊天列表和设置页的背景 */
+body.dark-theme #chat-list-container,
+body.dark-theme .settings-container {
+    background-color: #1E1E1E;
+}
+
+/* 聊天气泡 */
+body.dark-theme .assistant-row .message {
+    background: #2C2C2C; /* AI气泡背景 */
+}
+
+/* 聊天输入框区域 */
+body.dark-theme .chat-input-area,
+body.dark-theme #chat-input {
+    background-color: #252525;
+    color: var(--text-dark);
+}
+body.dark-theme #chat-input {
+    border: 1px solid var(--border-color);
+}
+
+/* 顶部栏和底部导航 */
+body.dark-theme .header,
+body.dark-theme #app-nav,
+body.dark-theme .main-header {
+    background: var(--glass-bg);
+    border-color: var(--glass-border);
+}
+body.dark-theme .header *,
+body.dark-theme #app-nav *,
+body.dark-theme .main-header * {
+    color: var(--text-dark); /* 修正：让所有头部文字都变亮 */
+}
+body.dark-theme .nav-button.active {
+    color: var(--qq-blue);
+    background-color: rgba(90, 90, 90, 0.3);
+}
+
+/* 侧边栏 */
+body.dark-theme #side-menu {
+    background: var(--glass-bg);
+    border-right-color: var(--glass-border);
+}
+
+/* SVG图标颜色 */
+body.dark-theme .tool-button svg,
+body.dark-theme .side-menu-item .menu-icon svg,
+body.dark-theme .weather-icon-container svg {
+    stroke: var(--text-secondary);
+}
