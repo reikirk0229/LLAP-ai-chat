@@ -32,6 +32,27 @@ var _hmt = _hmt || [];
   s.parentNode.insertBefore(hm, s);
 })();
 </script>
+<style>
+        /* 【【【全新：关闭按钮居中校准补丁】】】 */
+        .close-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            padding-bottom: 2px;
+        }
+
+        /* 【【【全新：沿海影响滑块布局修复补丁】】】 */
+        .slider-container {
+            display: flex;         /* 1. 开启Flexbox布局，让内部元素横向排列 */
+            align-items: center;     /* 2. 让所有元素在垂直方向上居中对齐 */
+            gap: 10px;             /* 3. 在文字和滑块之间增加一点间距 */
+        }
+        /* 【【【全新：内陆/沿海文字强制不换行补丁】】】 */
+.slider-container span {
+    white-space: nowrap; /* 魔法！命令文字不允许内部换行 */
+}
+    </style>
 </head>
 <body>
     <div id="app-wrapper"></div>
@@ -215,32 +236,37 @@ var _hmt = _hmt || [];
                     <div class="more-functions-grid">
                         <!-- 视频通话 -->
                         <div class="function-item" id="fn-video-call">
-                            <div class="function-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.6 11.6L22 7v10l-6.4-4.6v-1zM4 6h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"></path></svg></div>
+                            <div class="function-icon"><?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14.3756 9.7941C15.1022 9.7941 15.7716 10.1881 16.1242 10.8234L18.5706 15.2302C18.891 15.8072 18.906 16.5051 18.6109 17.0954L16.254 21.809C16.254 21.809 16.937 25.3204 19.7955 28.1789C22.6539 31.0373 26.1535 31.7085 26.1535 31.7085L30.8665 29.3521C31.4572 29.0567 32.1555 29.072 32.7327 29.3929L37.1521 31.8499C37.7867 32.2027 38.1802 32.8718 38.1802 33.5979L38.1802 38.6714C38.1802 41.2551 35.7803 43.1211 33.3323 42.2951C28.3043 40.5986 20.4997 37.3684 15.5528 32.4215C10.606 27.4747 7.37576 19.67 5.67922 14.6421C4.8532 12.194 6.71929 9.7941 9.30293 9.7941L14.3756 9.7941Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M39 15H27V5H39V8L44 6V14L39 12V15Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
                             <span class="function-label">视频通话</span>
+                        </div>
+                        <!-- 【全新】TA的天气 -->
+                        <div class="function-item" id="fn-ai-weather">
+                            <div class="function-icon"><?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.45455 30.9942C6.14242 28.461 4 24.4278 4 19.8851C4 12.2166 10.1052 6 17.6364 6C23.9334 6 29.2336 10.3462 30.8015 16.2533C32.0353 15.6159 33.431 15.2567 34.9091 15.2567C39.9299 15.2567 44 19.4011 44 24.5135C44 28.3094 41.7562 31.5716 38.5455 33" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M27.2158 30.1233C25.5748 30.5511 24.3637 32.0432 24.3637 33.8182C24.3637 35.9269 26.0731 37.6364 28.1818 37.6364C29.9568 37.6364 31.4489 36.4252 31.8767 34.7842C31.9576 35.1768 32 35.5835 32 36C32 39.3137 29.3137 42 26 42C22.6863 42 20 39.3137 20 36C20 32.6863 22.6863 30 26 30C26.4166 30 26.8232 30.0424 27.2158 30.1233Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M22.2426 15.7574C21.1569 14.6716 19.6569 14 18 14C14.6863 14 12 16.6863 12 20C12 21.6569 12.6716 23.1569 13.7574 24.2426" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                            <span class="function-label">天气</span>
                         </div>
                         <!-- 记账 -->
                         <div class="function-item" id="fn-accounting">
-                            <div class="function-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 22H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2z"></path><path d="M12 6v12M17 7l-5 5-5-5"></path></svg></div>
+                            <div class="function-icon"><?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M24 44C35.0457 44 44 35.0457 44 24C44 12.9543 35.0457 4 24 4C12.9543 4 4 12.9543 4 24C4 35.0457 12.9543 44 24 44Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M18 22H30" stroke="#FFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 28H30" stroke="#FFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.0083 22V34" stroke="#FFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M30 15L24 21L18 15" stroke="#FFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
                             <span class="function-label">记账</span>
                         </div>
                         <!-- 亲密关系 -->
                         <div class="function-item" id="fn-relationship">
-                            <div class="function-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div>
+                            <div class="function-icon"><?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15 8C8.92487 8 4 12.9249 4 19C4 30 17 40 24 42.3262C31 40 44 30 44 19C44 12.9249 39.0751 8 33 8C29.2797 8 25.9907 9.8469 24 12.6738C22.0093 9.8469 18.7203 8 15 8Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
                             <span class="function-label">亲密关系</span>
                         </div>
                         <!-- 一起听歌 -->
                         <div class="function-item" id="fn-listen-together">
-                            <div class="function-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>
+                            <div class="function-icon"><?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M30 34.5C30 32.567 31.567 31 33.5 31H41V34.4C41 36.3882 39.3882 38 37.4 38H33.5C31.567 38 30 36.433 30 34.5Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M6 38.5C6 36.567 7.567 35 9.5 35H16V38.4C16 40.3882 14.3882 42 12.4 42H9.5C7.567 42 6 40.433 6 38.5Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M16 18.044V18.044L41 12.125" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 38V10L41 4V33.6924" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
                             <span class="function-label">一起听歌</span>
                         </div>
                         <!-- 礼物 -->
                         <div class="function-item" id="fn-gift">
-                            <div class="function-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></svg></div>
+                            <div class="function-icon"><?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M41 44V20H7V44H41Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 44V20" stroke="#FFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M41 44H7" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="4" y="12" width="40" height="8" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M16 4L24 12L32 4" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
                             <span class="function-label">礼物</span>
                         </div>
                         <!-- 日记本 -->
                         <div class="function-item" id="fn-diary">
-                            <div class="function-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></div>
+                            <div class="function-icon"><?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 6C10 4.89543 10.8954 4 12 4H40C41.1046 4 42 4.89543 42 6V42C42 43.1046 41.1046 44 40 44H12C10.8954 44 10 43.1046 10 42V6Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M34 6V42" stroke="#FFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 14H14" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 24H14" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 34H14" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 4H39" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 44H39" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
                             <span class="function-label">日记本</span>
                         </div>
                     </div>
@@ -452,6 +478,7 @@ var _hmt = _hmt || [];
                         <span>消息频率 (小时/次)</span>
                         <input type="number" id="cs-offline-msg-interval-input" class="summary-threshold-input" placeholder="例如：1.5 (代表一个半小时)">
                     </div>
+                   
                     <div class="settings-item" id="cs-offline-msg-sleep-item">
                         <span>休息时间</span>
                         <div class="schedule-time-range">
@@ -578,6 +605,63 @@ var _hmt = _hmt || [];
                         <p class="placeholder-text">请先在 全局设置 -> AI表情包管理 中添加分组</p>
                     </div>
                 </div>
+
+                <!-- 【【【全新：AI天气系统设置区】】】 -->
+                <hr>
+                <div class="settings-group" style="background: none; box-shadow: none; margin: 0; padding: 0;">
+                    <div class="settings-item">
+                        <span>启用AI专属天气模拟</span>
+                        <label class="switch"><input type="checkbox" id="ai-weather-toggle"><span class="slider"></span></label>
+                    </div>
+                </div>
+
+                <div id="ai-weather-settings-panel" class="settings-sub-panel">
+                    <div class="form-group">
+                        <label for="ai-editor-city">所在城市名称</label>
+                        <input type="text" id="ai-editor-city" placeholder="例如：凛冬港、夏恒市...">
+                    </div>
+                    <!-- 【核心改造1】新增纬度输入 -->
+                    <div class="form-group">
+                        <label for="ai-editor-latitude">大致纬度 (-90 ~ 90)</label>
+                        <input type="number" id="ai-editor-latitude" placeholder="例如：北京约40，上海约31，赤道为0" min="-90" max="90" step="0.1">
+                    </div>
+                    <!-- 【【【就是在这里，添加下面这个全新的代码块！】】】 -->
+                    <div class="form-group">
+                        <label for="ai-editor-base-temp">基础年均温 (°C)</label>
+                        <input type="number" id="ai-editor-base-temp" placeholder="例如：上海约17, 广州约22" step="0.1">
+                    </div>
+                    <!-- 【【【在这里，添加下面这个全新的代码块！】】】 -->
+                    <div class="form-group">
+                        <label>地理位置 (影响年温差)</label>
+                        <div class="slider-container">
+                            <span>内陆</span>
+                            <input type="range" id="ai-editor-coastal-influence" min="0" max="1" step="0.01">
+                            <span>沿海</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="ai-editor-hemisphere">所在半球</label>
+                        <select id="ai-editor-hemisphere">
+                            <option value="north">北半球</option>
+                            <option value="south">南半球</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="ai-editor-climate">主要气候类型</label>
+                        <!-- 【核心改造2】丰富气候选项 -->
+                        <select id="ai-editor-climate">
+                            <option value="subtropical_monsoon">亚热带季风 (夏热多雨冬温和)</option>
+                            <option value="temperate_monsoon">温带季风 (四季分明，夏雨冬干)</option>
+                            <option value="temperate_continental">温带大陆性 (冬冷夏热，温差大，降水少)</option>
+                            <option value="mediterranean">地中海气候 (冬雨夏干)</option>
+                            <option value="temperate_maritime">温带海洋性 (全年温和湿润)</option>
+                            <option value="tropical_rainforest">热带雨林 (全年高温多雨)</option>
+                            <option value="tropical_grassland">热带草原 (全年高温，分干湿季)</option>
+                            <option value="arid_desert">干旱沙漠 (全年炎热干燥)</option>
+                        </select>
+                    </div>
+                </div>
+
                 <button id="save-ai-profile-button">保存</button>
             </div>
         </div>
@@ -660,6 +744,33 @@ var _hmt = _hmt || [];
     <!-- ############################################################### -->
     <!-- #####          所有的弹窗(Modal)都应该放在这里            ##### -->
     <!-- ############################################################### -->
+
+    <!-- 【【【全新：AI天气预报弹窗】】】 -->
+     <div id="ai-weather-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+    <!-- 核心：我们恢复了您最初的设想，让标题和刷新按钮成为一个整体 -->
+    <div class="header-title-group">
+        <h3 id="ai-weather-city-name"></h3>
+        <button id="refresh-ai-weather-btn" class="header-button-inline">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+        </button>
+    </div>
+    <!-- 关闭按钮保持独立，等待我们用CSS来“遥控”它 -->
+    <button id="close-ai-weather-modal" class="close-button">×</button>
+</div>
+            <div class="modal-body">
+                <!-- 【【【核心布局调整：先显示8天预报】】】 -->
+                <div id="ai-weather-forecast-list">
+                    <!-- 天气预报将由JS动态生成在这里 -->
+                </div>
+                <!-- 【【【核心布局调整：再显示今日详情】】】 -->
+                <div id="ai-weather-today-details">
+                    <!-- 详细天气数据将由JS动态生成在这里 -->
+                </div>
+            </div>
+        </div>
+    </div>
 
         <!-- ▼▼▼ 【【【终极修复 V3.0：全屏日记查看器】】】 ▼▼▼ -->
     <div id="diary-viewer-modal" class="modal-overlay hidden">
