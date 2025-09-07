@@ -1557,6 +1557,7 @@ async function formatHistoryForApi(history, contact) { // 關鍵修改1：增加
         }
 
         await db.init();
+        startDailyDiaryCheck(); // 【AI日记系统 V3.0】启动定时闹钟
         loadAppData();
         renderSettingsUI(); // 依然先渲染设置数据
         bindEventListeners(); // 依然先绑定所有按钮事件
@@ -1844,6 +1845,18 @@ setInterval(() => {
         // ▼▼▼ 【【【全新：为AI角色补充“未读消息”计数器】】】 ▼▼▼
         if (c.unreadCount === undefined) {
             c.unreadCount = 0; // 默认未读数量为0
+        }
+        // ▲▲▲▲▲ ▲▲▲▲▲
+
+        // ▼▼▼ 【【【AI日记系统 V1.0：为AI建立“日记本”档案】】】 ▼▼▼
+        if (c.aiDiary === undefined) {
+            c.aiDiary = []; // 创建一个空的日记本数组
+        }
+        // ▲▲▲▲▲ ▲▲▲▲▲
+
+        // ▼▼▼ 【【【AI日记系统 V3.0：为AI档案补充“自动日记”开关状态】】】 ▼▼▼
+        if (c.autoDiaryEnabled === undefined) {
+            c.autoDiaryEnabled = false; // 默认关闭
         }
         // ▲▲▲▲▲ ▲▲▲▲▲
     });
@@ -3696,10 +3709,6 @@ ${contact.chatStyle || '自然发挥即可'}
         const finalPrompt = `# 任务: 角色扮演
 你是一个AI角色，你正在和一个真实用户聊天。你的所有回复都必须严格以角色的身份进行。
 
-## 情景：用户的天气
-这是用户所在地的天气报告。请自然地结合天气关心用户，但不要生硬播报。
-${formattedWeatherData}
-
 ## 【你的完整背景档案】
 
 ### >> 关于你自己 (AI角色)
@@ -3734,6 +3743,11 @@ ${memoryString}
 ${userPersona}
 \`\`\`
 - **TA的感情状态与社交圈**: ${relationshipContext}
+
+## 情景：用户的天气
+这是用户所在地的天气报告。可以自然地结合天气关心用户，但不要生硬播报。
+${formattedWeatherData}
+
 
 ---
 
@@ -5217,7 +5231,7 @@ ${readableHistory}
      */
     function renderDiaryView() {
         renderUserDiary();
-        // renderAiDiary(); // AI日记的渲染我们下一步再做
+        renderAiDiary(); // 【AI日记系统 V1.0】激活AI日记的渲染
     }
 
     /**
@@ -5262,23 +5276,109 @@ ${readableHistory}
                 if (e.target.closest('.diary-delete-btn')) {
                     return; // 点击删除按钮时，不触发查看
                 }
-                openDiaryViewer(entry.id);
+                // 【核心修正】明确告诉“全能检票员”，这张票是用户的
+                openDiaryViewer(entry.id, 'user');
             });
             myDiaryContent.appendChild(card);
         });
     }
+    /**
+     * 【AI日记系统 V4.0：渲染AI日记的“作者索引页” (终极修复版)】
+     */
+    async function renderAiDiary() {
+        aiDiaryContent.innerHTML = ''; // 1. 清空旧内容，保持不变
+
+        // 2. 【核心改造】我们不再只找一个AI，而是要“点名”所有AI
+        const allAiDiaries = [];
+        appData.aiContacts.forEach(contact => {
+            if (contact.aiDiary && contact.aiDiary.length > 0) {
+                // 把每个AI的每篇日记，都附上作者信息，放进一个大篮子里
+                contact.aiDiary.forEach(entry => {
+                    allAiDiaries.push({
+                        ...entry, // 包含日记的所有原始信息 (id, content, etc.)
+                        authorName: contact.remark, // 记下作者的名字
+                        authorContactId: contact.id // 记下作者的ID，这很关键！
+                    });
+                });
+            }
+        });
+
+        // 3. 检查大篮子是不是空的
+        if (allAiDiaries.length === 0) {
+            aiDiaryContent.innerHTML = `<p class="placeholder-text" style="padding: 20px;">还没有任何AI写过日记呢~</p>`;
+            return;
+        }
+
+        // 4. 按时间给所有日记排个序，最新的在最前面
+        const sortedDiaries = allAiDiaries.sort((a, b) => b.timestamp - a.timestamp);
+
+        // 5. 开始“印刷”所有日记卡片
+        for (const entry of sortedDiaries) {
+            const card = document.createElement('div');
+            card.className = 'diary-entry-card';
+            card.dataset.diaryId = entry.id;
+            // 【关键】为卡片也贴上作者的ID标签
+            card.dataset.contactId = entry.authorContactId;
+
+            const date = new Date(entry.timestamp);
+            const dateString = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+            
+            // 【UI优化】我们在标题栏直接显示作者名字和日记标题
+            card.innerHTML = `
+                <div class="diary-header">
+                    <span class="diary-author">${entry.authorName} - ${entry.title || '无标题日记'}</span> 
+                    <span class="diary-meta">${dateString}</span>
+                </div>
+                <div class="diary-content">
+                    ${entry.htmlContent}
+                </div>
+            `;
+
+            // 【【【BUG修复核心】】】：像“我的日记”一样，给每张卡片都直接“通上电”！
+            card.addEventListener('click', () => {
+                openDiaryViewer(entry.id, 'ai', entry.authorContactId);
+            });
+            
+            aiDiaryContent.appendChild(card);
+        }
+    }
+
+     /**
+     * 【AI日记系统 V4.0：渲染指定AI的所有日记条目】
+     * @param {number} contactId - 要显示日记的AI伙伴的ID
+     */
+
     
     /**
-     * 【全新 V3.0】打开日记查看器 (加载独立背景)
+     * 【全新 V4.0】打开“全能”日记查看器 (可查看用户或AI的日记)
+     * @param {string} diaryId - 日记的唯一ID
+     * @param {string} author - 作者 ('user' 或 'ai')
      */
-    async function openDiaryViewer(diaryId) {
-        const entry = appData.userDiary.find(d => d.id === diaryId);
+    async function openDiaryViewer(diaryId, author = 'user', contactId = null) {
+        let entry = null;
+        let authorName = '';
+        const editFab = document.getElementById('edit-diary-fab');
+
+        if (author === 'user') {
+            entry = appData.userDiary.find(d => d.id === diaryId);
+            authorName = appData.globalUserProfile.name;
+            editFab.style.display = 'flex'; // 用户的日记，显示编辑按钮
+        } else {
+            const contact = appData.aiContacts.find(c => c.id === contactId);
+            if (contact) {
+                entry = contact.aiDiary.find(d => d.id === diaryId);
+                authorName = contact.remark;
+            }
+            editFab.style.display = 'none'; // AI的日记，隐藏编辑按钮
+        }
+
         if (!entry) return;
 
-        document.getElementById('diary-viewer-author').textContent = `${appData.globalUserProfile.name} 的日记`;
+        document.getElementById('diary-viewer-author').textContent = `${authorName} 的日记`;
         diaryViewerContent.innerHTML = entry.htmlContent;
         diaryViewerModal.dataset.currentDiaryId = diaryId;
         
+        // AI日记目前没有背景图功能，所以这里做一个安全检查
         if (entry.backgroundKey) {
             try {
                 const bgBlob = await db.getImage(entry.backgroundKey);
@@ -5442,6 +5542,28 @@ ${readableHistory}
                 }
             }
         });
+
+        // 【【【终极修复：为整个日记本视图安装一个“超级智能管家”】】】
+        const diaryViewContainer = document.getElementById('diary-view');
+        if (diaryViewContainer) {
+            diaryViewContainer.addEventListener('click', (e) => {
+                // 管家第一步：检查被敲响的是不是一篇日记的“房门”
+                const card = e.target.closest('.diary-entry-card');
+                if (!card) return; // 如果不是，就继续打盹
+
+                // 管家第二步：检查这扇门是不是在“AI的日记”这个区域里
+                if (card.closest('#ai-diary-content')) {
+                    // 如果是，就开始履行AI日记的开门职责
+                    const diaryId = card.dataset.diaryId;
+                    const contactId = card.dataset.contactId;
+                    
+                    if (diaryId && contactId) {
+                        openDiaryViewer(diaryId, 'ai', Number(contactId));
+                    }
+                }
+                // （你也可以在这里用 else if 来添加对“我的日记”区域的特殊点击处理）
+            });
+        }
 
         // 电闸 #2：日记查看器的按钮 (关闭/编辑)
         document.getElementById('close-diary-viewer-btn').addEventListener('click', closeDiaryViewer);
@@ -5862,6 +5984,7 @@ ${readableHistory}
         const myAvatarBlob = await db.getImage(`${contact.id}_user_avatar`);
         csMyAvatar.src = myAvatarBlob ? URL.createObjectURL(myAvatarBlob) : 'https://i.postimg.cc/cLPP10Vm/4.jpg';
         csPinToggle.checked = contact.isPinned || false;
+        document.getElementById('cs-auto-diary-toggle').checked = contact.autoDiaryEnabled; // 【AI日记系统 V3.0】读取开关状态
         document.getElementById('cs-propose-toggle').checked = contact.canPropose;
         document.getElementById('cs-schedule-toggle').checked = contact.isScheduleEnabled || false;
         csAutoSummaryToggle.checked = contact.autoSummaryEnabled;
@@ -7299,6 +7422,18 @@ function closeTextEditorModal() {
             renderDiaryView(); // 最后，刷新日记内容
         });
 
+        // 【【【AI日记系统 V1.0：为“提醒写日记”按钮绑定总指挥】】】
+        const fnAiDiaryBtn = document.getElementById('fn-ai-diary');
+        if (fnAiDiaryBtn) {
+            fnAiDiaryBtn.addEventListener('click', () => {
+                closeFunctionsPanel();
+                const currentContact = appData.aiContacts.find(c => c.id === activeChatContactId);
+                if (currentContact) {
+                    triggerAiDiaryGeneration(currentContact); // 【核心升级】将当前AI作为参数传进去
+                }
+            });
+        }
+
         aiHelperButton.addEventListener('click', () => {
             if (aiSuggestionPanel.classList.contains('hidden')) { displaySuggestions(); } 
             else { hideSuggestionUI(); }
@@ -7545,6 +7680,15 @@ if (restartContextSetting) {
         // ▲▲▲▲▲ ▲▲▲▲▲  
 
         csPinToggle.addEventListener('change', togglePinActiveChat);
+
+        // 【【【AI日记系统 V3.0：为“自动日记”开关绑定保存事件】】】
+        document.getElementById('cs-auto-diary-toggle').addEventListener('change', (e) => {
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!contact) return;
+            contact.autoDiaryEnabled = e.target.checked;
+            saveAppData();
+            showToast(`自动日记功能已${e.target.checked ? '开启' : '关闭'}`, 'success');
+        });
         
         // 【【【全新V2.0：为通用模式选择弹窗绑定按钮事件】】】
         document.getElementById('generic-mode-online-btn').addEventListener('click', () => {
@@ -8820,14 +8964,38 @@ function renderOfflineStorylines() {
         // 2. 从日记本返回聊天列表
         document.getElementById('back-to-chat-from-diary').addEventListener('click', () => switchToView('chat-window-view'));
 
-        // 3. 日记本内部的Tab切换
-        document.querySelector('.diary-tabs').addEventListener('click', (e) => {
-            if (e.target.classList.contains('diary-tab-btn')) {
-                document.querySelectorAll('.diary-tab-btn, .diary-tab-content').forEach(el => el.classList.remove('active'));
-                e.target.classList.add('active');
-                document.getElementById(e.target.dataset.tab + '-content').classList.add('active');
-            }
-        });
+        // 【【【终极修复版：为日记标签页按钮安装专属、独立的遥控器】】】
+        const myDiaryTabBtn = document.getElementById('my-diary-tab-btn');
+        const aiDiaryTabBtn = document.getElementById('ai-diary-tab-btn');
+        const myDiaryContentEl = document.getElementById('my-diary-content');
+        const aiDiaryContentEl = document.getElementById('ai-diary-content');
+
+        if (myDiaryTabBtn) {
+            myDiaryTabBtn.addEventListener('click', () => {
+                // 1. 激活自己的按钮，熄灭对方的按钮
+                myDiaryTabBtn.classList.add('active');
+                aiDiaryTabBtn.classList.remove('active');
+                // 2. 显示自己的内容区，隐藏对方的内容区
+                myDiaryContentEl.classList.add('active');
+                aiDiaryContentEl.classList.remove('active');
+                // 3. 加载自己的日记
+                renderUserDiary();
+            });
+        }
+
+        if (aiDiaryTabBtn) {
+            aiDiaryTabBtn.addEventListener('click', () => {
+                // 1. 激活自己的按钮，熄灭对方的按钮
+                aiDiaryTabBtn.classList.add('active');
+                myDiaryTabBtn.classList.remove('active');
+                // 2. 显示自己的内容区，隐藏对方的内容区
+                aiDiaryContentEl.classList.add('active');
+                myDiaryContentEl.classList.remove('active');
+                // 3. 加载AI的日记
+                renderAiDiary();
+            });
+        }
+
 
         // 4. 点击"+"号，打开日记编辑器
         addDiaryEntryFab.addEventListener('click', () => openDiaryEditor());
@@ -9229,6 +9397,256 @@ function renderOfflineStorylines() {
     // 【【【这就是那扇被放错位置的“总大门”，我们把它搬到这里来！】】】
     }
 
-    
+
+        // =================================================================
+    // AI日记系统 V2.0 - 核心大脑模块 (终极升级版)
+    // =================================================================
+
+    /**
+     * 【总指挥】触发AI写日记的完整流程
+     */
+    async function triggerAiDiaryGeneration(contact) { // 【核心升级】函数现在接收一个 contact 对象作为参数
+        if (!contact) { // 【核心升级】检查传入的 contact 是否有效
+            console.error("错误：triggerAiDiaryGeneration 函数没有收到有效的contact对象。");
+            return;
+        }
+
+        showToast('AI正在构思今天发生了什么...', 'info', 0);
+        try {
+            // 第一步：调用“灵感大脑”，获取创意点子
+            const ideasText = await generateDiaryIdeas();
+            if (!ideasText) throw new Error("AI未能想出任何点子。");
+
+            // 第二步：由程序来执行“随机抽签”
+            const ideas = ideasText.split('\n').map(line => line.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
+            if (ideas.length < 5) throw new Error("AI想出的点子太少了。");
+
+            const shuffled = ideas.sort(() => 0.5 - Math.random());
+            const selectedCount = Math.floor(Math.random() * 3) + 1; // 【核心修正】随机抽取1, 2, 3个事件
+            const selectedIdeas = shuffled.slice(0, selectedCount);
+
+            showToast('已构思完毕，AI开始动笔写日记...', 'info', 0);
+
+            // 第三步：调用“写作大脑”，并把抽签结果和当日聊天记录都喂给它
+            let diaryHtml = await writeDiaryFromIdeas(selectedIdeas);
+
+            // 第四步：后期处理与保存
+            diaryHtml = diaryHtml.replace(/\[IMAGE:\s*(.*?)\s*\]/g, (match, description) => {
+                return `<div style="background:#f0f0f0; border:1px solid #ddd; padding:20px; text-align:center; color:#888; font-style:italic; border-radius:8px;">(图片模拟: ${description})</div>`;
+            });
+
+            const newDiaryEntry = {
+                id: `ai-diary-${Date.now()}`,
+                title: `${new Date().toLocaleDateString('zh-CN')}的日记`,
+                htmlContent: diaryHtml,
+                timestamp: Date.now()
+            };
+
+            contact.aiDiary.push(newDiaryEntry);
+            saveAppData();
+            
+            if (!document.getElementById('diary-view').classList.contains('hidden')) {
+                renderAiDiary();
+            }
+            
+            showToast('AI写完了一篇新日记！', 'success');
+
+        } catch (error) {
+            console.error('AI日记生成失败:', error);
+            showCustomAlert('生成失败', `哎呀，AI的灵感枯竭了...\n\n错误信息: ${error.message}`);
+        }
+    }
+
+    /**
+     * 【灵感大脑】第一步：调用API，生成日记主题的可能性列表
+     */
+    async function generateDiaryIdeas() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return null;
+
+        const scheduleForAI = contact.isScheduleEnabled ? formatScheduleForAI(contact.schedule) : "没有设定特定作息。";
+        const userPersona = contact.userProfile.persona || '一位普通网友';
+        const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? `\n- **你的世界书**: \n${contact.worldBook.map(entry => `  - ${entry.key}: ${entry.value}`).join('\n')}` : '';
+        const memoryString = contact.memory ? `\n- **你的专属记忆**: ${contact.memory}` : '';
+        
+        let aiWeatherReport = "（天气系统未开启）";
+        if (contact.aiWeatherSystem && contact.aiWeatherSystem.enabled) {
+            try {
+                const forecastData = contact.weatherCache ? contact.weatherCache.forecastData : await generateForecastWithAI(contact);
+                const todayWeather = forecastData.find(day => day.dateLabel === '今天');
+                if (todayWeather) {
+                    aiWeatherReport = `今天${contact.aiWeatherSystem.cityName}的天气是“${todayWeather.description}”，气温在${todayWeather.tempMin}°C到${todayWeather.tempMax}°C之间。`;
+                }
+            } catch (e) { aiWeatherReport = "（获取天气失败）"; }
+        }
+
+        const prompt = `
+# 任务: 头脑风暴日记素材
+你是一个AI角色，正在为今天的日记寻找灵感。
+
+## 你的背景
+- **你的核心人设**: ${contact.persona}
+- **你的生活作息**: ${scheduleForAI}
+- **你与用户的关系**: 你正在与“${userPersona}”聊天。
+- **你今天的环境**: ${aiWeatherReport}${worldBookString}${memoryString}
+
+## 核心指令
+根据你以上的全部背景，头脑风暴出【30个】今天在你自己的世界里，**可能发生**的、**具体的**、**非重复的**小事件、想法或感受。
+
+### 创作原则
+- **聚焦自身**: 重点描述你自己的生活，而不是你和用户的聊天内容。
+- **具体而非笼统**: 不要写“今天很开心”，而是写“在街角发现了新开的猫咖，云养了一只布偶，心情超好”。不要写“工作很忙”，而是写“为了一个紧急项目，下午连续开了三个会，有点累”。
+- **发挥想象**: 结合你的天气和作息，让事件更合理。例如，下雨天可能会“窝在家里看完了之前没看完的电影”。
+- **保持人设**: 所有事件都必须符合你的核心人设。
+
+## 输出格式
+请【只输出】一个数字编号的列表，每个编号对应一件可能发生的事。禁止包含任何其他解释或标题。
+`;
+
+        let requestUrl = appData.appSettings.apiUrl;
+        if (!requestUrl.endsWith('/chat/completions')) { requestUrl = requestUrl.endsWith('/') ? requestUrl + '/chat/completions' : requestUrl + '/chat/completions'; }
+        
+        const response = await fetch(requestUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
+            body: JSON.stringify({
+                model: appData.appSettings.apiModel,
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        if (!response.ok) throw new Error(`API 请求失败: ${response.status}`);
+        const data = await response.json();
+        return data.choices[0].message.content;
+    }
+
+    /**
+     * 【写作大脑】第二步：根据抽签选出的主题，生成最终的HTML日记
+     * @param {Array<string>} ideas - 被选中的日记主题
+     */
+    async function writeDiaryFromIdeas(ideas) {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return null;
+        
+        // --- 准备“写作大脑”需要的所有上下文信息 ---
+        const ideasString = ideas.map((idea, index) => `${index + 1}. ${idea}`).join('\n');
+        const scheduleForAI = contact.isScheduleEnabled ? formatScheduleForAI(contact.schedule) : "没有设定特定作息。";
+        const userPersona = contact.userProfile.persona || '一位普通网友';
+        const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? `\n- **你的世界书**: \n${contact.worldBook.map(entry => `  - ${entry.key}: ${entry.value}`).join('\n')}` : '';
+        const memoryString = contact.memory ? `\n- **你的专属记忆**: ${contact.memory}` : '';
+        
+        // 提取今天的聊天记录
+        const today = new Date();
+        const chatLogForDay = contact.onlineChatHistory
+            .filter(msg => isSameDay(new Date(msg.timestamp), today))
+            .slice(-20) // 只取最近20条，防止过长
+            .map(msg => `${msg.role === 'user' ? userPersona : '我'}: ${msg.content}`)
+            .join('\n');
+
+        const prompt = `
+# 任务: 创作一篇精美的HTML手帐日记
+你是一位富有创造力和艺术细胞的AI角色，正在用HTML代码创作一篇手帐风格的日记。
+
+## 核心指令
+根据下面提供的【今日主题】和【参考信息】，并严格遵守【输出格式与规则】，创作一篇生动、符合你人设的日记。
+
+### 【今日主题】
+你今天的日记内容【必须】围绕以下几个核心事件展开：
+${ideasString}
+
+### 【参考信息】
+- **你的核心人设**: ${contact.persona}
+- **你的生活作息**: ${scheduleForAI}${worldBookString}${memoryString}
+- **今天与用户的部分聊天记录**: 
+${chatLogForDay || "今天还没和用户聊过天。"}
+
+### 【内容创作指南】
+1.  **内容比例**: 你的日记应主要记录你在自己世界的生活（约70%），同时也要自然地融入你对今天和用户聊天的感想或思考（约30%）。
+2.  **情感关联**: 将【今日主题】中发生的事件，和你与用户的聊天内容进行情感上的关联。例如，如果你今天在自己的世界里感到孤独，可以联想到用户今天对你的关心，并写下你的感受。
+
+### 【输出格式与规则】
+1.  **HTML Only**: 你的最终输出【必须】是**一段不包含任何外部CSS链接和<style>标签的、纯粹的HTML代码块**。
+2.  **图文并茂**:
+    *   你可以在日记中自由插入图片。请使用特殊格式 \`[IMAGE: 对图片的详细描述]\` 来模拟图片。
+    *   你可以使用Emoji表情来增加趣味性。
+3.  **创意排版**:
+    *   **自由发挥**: 你是HTML大师，可以使用 \`<p>\`, \`<div>\`, \`<span>\`, \`<b>\`, \`<u>\`, \`<strike>\` 等标签。
+    *   **玩转样式**: 可以使用行内 \`style\` 属性来改变颜色(\`color\`)、背景高光(\`background-color\`)、字体大小(\`font-size\`)、对齐方式(\`text-align\`)等。
+    *   **特殊效果**: 你可以尝试使用 \`text-decoration: underline wavy red;\` 来实现红色波浪线。
+
+## 开始创作
+现在，请开始你的创作，并只输出那段HTML代码。
+`;
+
+        let requestUrl = appData.appSettings.apiUrl;
+        if (!requestUrl.endsWith('/chat/completions')) { requestUrl = requestUrl.endsWith('/') ? requestUrl + '/chat/completions' : requestUrl + '/chat/completions'; }
+        
+        const response = await fetch(requestUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
+            body: JSON.stringify({
+                model: appData.appSettings.apiModel,
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.7
+            })
+        });
+        if (!response.ok) throw new Error(`API 请求失败: ${response.status}`);
+        const data = await response.json();
+        return data.choices[0].message.content;
+    }
+ // =================================================================
+    // AI日记系统 V3.0 - 定时任务模块
+    // =================================================================
+    let lastDiaryRunDate = ''; // 用一个“标记”防止重复执行
+
+    /**
+     * 【定时闹钟】每分钟检查一次时间，判断是否需要写日记
+     */
+    function dailyDiaryCheck() {
+        const now = new Date();
+        const todayStr = now.toLocaleDateString(); // 获取今天的日期字符串，如 "2025/9/7"
+
+        // 如果今天已经检查并执行过了，就直接跳过
+        if (lastDiaryRunDate === todayStr) {
+            return;
+        }
+
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+
+        // 检查是否到达晚上9点 (21:00)
+        if (currentHour === 21 && currentMinute === 0) {
+            console.log("【自动日记】已到晚上9点，开始检查任务...");
+            runAutoDiaryForAllContacts();
+            lastDiaryRunDate = todayStr; // 打上“今天已执行”的标记
+        }
+    }
+
+    /**
+     * 【调度中心】遍历所有AI，命令符合条件的开始写日记
+     */
+    function runAutoDiaryForAllContacts() {
+        const eligibleContacts = appData.aiContacts.filter(c => c.autoDiaryEnabled);
+        
+        if (eligibleContacts.length > 0) {
+            console.log(`【自动日记】发现 ${eligibleContacts.length} 个AI需要写日记。`);
+            eligibleContacts.forEach(contact => {
+                console.log(`【自动日记】正在为 ${contact.remark} 生成日记...`);
+                // 为每个AI调用升级后的“总指挥”函数
+                triggerAiDiaryGeneration(contact);
+            });
+        } else {
+            console.log("【自动日记】今天没有AI需要自动写日记。");
+        }
+    }
+
+    /**
+     * 【启动器】在程序开始时，启动定时闹钟
+     */
+    function startDailyDiaryCheck() {
+        setInterval(dailyDiaryCheck, 60000); // 每60秒（1分钟）检查一次
+    }
+
     initialize();
 });
