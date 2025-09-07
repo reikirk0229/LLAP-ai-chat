@@ -269,6 +269,11 @@ var _hmt = _hmt || [];
                             <div class="function-icon"><?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 6C10 4.89543 10.8954 4 12 4H40C41.1046 4 42 4.89543 42 6V42C42 43.1046 41.1046 44 40 44H12C10.8954 44 10 43.1046 10 42V6Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M34 6V42" stroke="#FFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 14H14" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 24H14" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 34H14" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 4H39" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 44H39" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
                             <span class="function-label">日记本</span>
                         </div>
+                        <!-- 【【【AI日记系统 V1.0：新增“提醒AI写日记”功能】】】 -->
+                        <div class="function-item" id="fn-ai-diary">
+                            <div class="function-icon"><?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 7H13M5 12H13M5 17H10" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 7L26 15L43 4" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 25H15C15 25 19.1333 30.1333 24 33C28.8667 35.8667 35 37 35 37H43V25H5Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                            <span class="function-label">提醒写日记</span>
+                        </div>
                     </div>
                 </div>
                 <!-- ▲▲▲ 扩展功能面板结束 ▲▲▲ -->
@@ -408,6 +413,14 @@ var _hmt = _hmt || [];
                     <div class="settings-item">
                         <span>允许AI主动求爱</span>
                         <label class="switch"><input type="checkbox" id="cs-propose-toggle"><span class="slider"></span></label>
+                    </div>
+                </div>
+
+                <!-- 【【【AI日记系统 V3.0：新增“自动日记”开关】】】 -->
+                <div class="settings-group">
+                    <div class="settings-item">
+                        <span>启用自动日记 (每日21:00)</span>
+                        <label class="switch"><input type="checkbox" id="cs-auto-diary-toggle"><span class="slider"></span></label>
                     </div>
                 </div>
 
@@ -682,17 +695,7 @@ var _hmt = _hmt || [];
                  <button id="save-user-sticker-settings-button" class="save-button" style="width: 100%; padding: 15px; border: none; background: var(--gradient-primary); color: white; border-radius: var(--radius-md); font-size: 16px; cursor: pointer;">保存</button>
             </div>
         </div>
-        <!-- ▼▼▼ 【【【全新：账本视图】】】 ▼▼▼ -->
-        <div id="ledger-view" class="view hidden">
-            <div class="header">
-                <button id="back-to-main-from-ledger" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <span>我的账本</span>
-            </div>
-            <div id="ledger-container" class="contact-settings-container">
-                <!-- 账目列表将由JS动态生成在这里 -->
-            </div>
-            <button id="add-transaction-fab" class="fab">+</button>
-        </div>
+        
 
         <!-- ▼▼▼ 【【【全新：账本视图】】】 ▼▼▼ -->
             <div id="ledger-view" class="view hidden">
@@ -706,26 +709,22 @@ var _hmt = _hmt || [];
                 <button id="add-transaction-fab" class="fab">+</button>
             </div>
             
-            <!-- ▼▼▼ 【【【全新：日记系统视图（已搬家到正确位置）】】】 ▼▼▼ -->
+            <!-- ▼▼▼ 【【【终极修复版：日记系统视图】】】 ▼▼▼ -->
             <div id="diary-view" class="view hidden">
                 <div class="header">
-                    <button id="back-to-chat-from-diary" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+                    <button id="back-to-chat-from-diary" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
                     <span>日记本</span>
                 </div>
-                <!-- 日记切换标签 -->
                 <div class="diary-tabs">
-                    <button class="diary-tab-btn active" data-tab="my-diary">我的日记</button>
-                    <button class="diary-tab-btn" data-tab="ai-diary">AI的日记</button>
+                    <button id="my-diary-tab-btn" class="diary-tab-btn active" data-tab="my-diary">我的日记</button>
+                    <button id="ai-diary-tab-btn" class="diary-tab-btn" data-tab="ai-diary">AI的日记</button>
                 </div>
-                <!-- 日记内容容器 -->
                 <div class="diary-container">
                     <div id="my-diary-content" class="diary-tab-content active">
-                        <!-- 我的日记内容将在这里显示 -->
                         <p class="placeholder-text" style="padding: 20px;">你还没有写过日记哦~</p>
                     </div>
                     <div id="ai-diary-content" class="diary-tab-content">
-                        <!-- AI的日记内容将在这里显示 -->
-                         <p class="placeholder-text" style="padding: 20px;">AI还没有写过日记呢~</p>
+                        <p class="placeholder-text" style="padding: 20px;">AI还没有写过日记呢~</p>
                     </div>
                 </div>
                 <button id="add-diary-entry-fab" class="fab">+</button>
@@ -1224,13 +1223,11 @@ var _hmt = _hmt || [];
                 <button id="add-accounting-entry-btn" style="width:100%; padding:10px; margin-top:10px; background:none; border: 1px dashed #ccc; cursor:pointer;">+ 添加另一笔</button>
             </div>
             <div class="modal-footer-split">
-                <button id="cancel-accounting-btn" class="modal-button secondary">取消</button>
-                <button id="confirm-accounting-btn" class="modal-button primary">完成记账</button>
-            </div>
+            <button id="cancel-accounting-btn" class="modal-button secondary">取消</button>
+            <button id="confirm-accounting-btn" class="modal-button primary">完成记账</button>
         </div>
     </div>
-    </div>
-    </div>
+</div>
 <!-- ▼▼▼ 【【【全新：AI生活作息编辑器弹窗】】】 ▼▼▼ -->
     <div id="schedule-editor-modal" class="modal-overlay hidden">
         <div class="modal-content">
@@ -1460,12 +1457,9 @@ var _hmt = _hmt || [];
                 <button id="cancel-storyline-select-btn" class="modal-button secondary">取消</button>
                 <!-- 核心新增：添加一个“确定”按钮 -->
                 <button id="confirm-storyline-select-btn" class="modal-button primary">确定</button>
-            </div>
         </div>
     </div>
-    </div>
 </div>
-
 <!-- ▼▼▼ 【【【全新：剧情线编辑器弹窗】】】 ▼▼▼ -->
 <div id="storyline-editor-modal" class="modal-overlay hidden">
     <div class="modal-content">
