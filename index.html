@@ -7,6 +7,12 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="fix-colors.css">
 
+    <!-- ▼▼▼ 【【【全新：从Google Fonts引入字体设计师】】】 ▼▼▼ -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&family=ZCOOL+KuaiLe&family=Great+Vibes&family=Pacifico&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <!-- ▲▲▲▲▲ 字体引入完毕 ▲▲▲▲▲ -->
+
     <style>
             .message-context-menu { position: fixed; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 5px; z-index: 1000; display: none; }
             .context-menu-item { padding: 8px 12px; cursor: pointer; font-size: 14px; border-radius: 5px; }
@@ -75,6 +81,12 @@ var _hmt = _hmt || [];
             <div class="side-menu-item" id="side-menu-favorites">
                 <span class="menu-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></span>
                 <span>收藏</span>
+            </div>
+            <div class="side-menu-item" id="side-menu-my-diary">
+                <span class="menu-icon">
+                    <?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 40C8 36 8 10 8 10C8 6.68629 10.8654 4 14.4 4H40V36C40 36 19.9815 36 14.4 36C9.36225 36 8 36.6842 8 40Z" fill="none" stroke-width="4" stroke-linejoin="round"/><path fill-rule="evenodd" clip-rule="evenodd" d="M12 44H40V36H12C9.79086 36 8 37.7909 8 40C8 42.2091 9.79086 44 12 44Z" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span>我的日记</span>
             </div>
             <div class="side-menu-item" id="side-menu-themes">
                 <span class="menu-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0L12 2.69z"></path></svg></span>
@@ -270,10 +282,7 @@ var _hmt = _hmt || [];
                             <span class="function-label">日记本</span>
                         </div>
                         <!-- 【【【AI日记系统 V1.0：新增“提醒AI写日记”功能】】】 -->
-                        <div class="function-item" id="fn-ai-diary">
-                            <div class="function-icon"><?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 7H13M5 12H13M5 17H10" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 7L26 15L43 4" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 25H15C15 25 19.1333 30.1333 24 33C28.8667 35.8667 35 37 35 37H43V25H5Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-                            <span class="function-label">提醒写日记</span>
-                        </div>
+                        
                     </div>
                 </div>
                 <!-- ▲▲▲ 扩展功能面板结束 ▲▲▲ -->
@@ -711,10 +720,12 @@ var _hmt = _hmt || [];
             
             <!-- ▼▼▼ 【【【终极修复版：日记系统视图】】】 ▼▼▼ -->
             <div id="diary-view" class="view hidden">
-                <div class="header">
-                    <button id="back-to-chat-from-diary" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                    <span>日记本</span>
-                </div>
+            <div class="header">
+                <button id="back-to-chat-from-diary" class="header-button back-button">
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+</button>
+                <span id="diary-view-title">日记本</span>
+            </div>
                 <div class="diary-tabs">
                     <button id="my-diary-tab-btn" class="diary-tab-btn active" data-tab="my-diary">我的日记</button>
                     <button id="ai-diary-tab-btn" class="diary-tab-btn" data-tab="ai-diary">AI的日记</button>
@@ -775,7 +786,7 @@ var _hmt = _hmt || [];
     <div id="diary-viewer-modal" class="modal-overlay hidden">
         <div class="modal-content modal-fullscreen">
                         <div class="modal-header">
-                <!-- 【【【核心最终修复：将标题和编辑按钮分组】】】 -->
+                <!-- (解释：我们把标题和编辑按钮的“分组”恢复回来) -->
                 <div class="header-title-group">
                     <h3 id="diary-viewer-author"></h3>
                     <button id="edit-diary-fab" class="header-button-inline">
@@ -990,6 +1001,9 @@ var _hmt = _hmt || [];
         <div class="modal-content">
             <div class="modal-header">
                 <h3 id="custom-confirm-title">确认操作</h3>
+                <!-- ▼▼▼ 【【【终极修复：在这里为它装上一个标准的关闭按钮！】】】 ▼▼▼ -->
+                <button id="custom-confirm-close-btn" class="close-button">&times;</button>
+                <!-- ▲▲▲▲▲ 【【【安装完毕】】】 ▲▲▲▲▲ -->
             </div>
             <div class="modal-body">
                 <p id="custom-confirm-text"></p>
