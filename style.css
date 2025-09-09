@@ -1011,13 +1011,15 @@ input:checked + .slider:before {
 }
 /* --- 【【【真正解决问题的终极修复代码】】】 --- */
 /* 这段代码的作用是：专门针对日记窗口的“外框”，命令它放弃居中对齐的特性 */
+#diary-viewer-modal .modal-content,
+#diary-editor-modal .modal-content {
+    overflow-y: auto; /* (解释：核心魔法！命令整个“画框”变成可以滚动的“画卷”) */
+}
 #diary-viewer-modal,
 #diary-editor-modal {
-    display: block; /* 覆盖掉 display:flex，解除居中魔咒 */
-    align-items: initial; /* 重置对齐属性 */
-    justify-content: initial; /* 重置对齐属性 */
-    
-    /* 由于内层窗口会全屏，外框的背景和模糊效果就不需要了，可以移除以提升性能 */
+    display: block; 
+    align-items: initial; 
+    justify-content: initial; 
     background: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
@@ -1096,25 +1098,37 @@ input:checked + .slider:before {
 /* 【新增】左右分割的弹窗底部按钮样式 */
 .modal-footer-split {
     display: flex;
-    margin-top: 20px;
-    border-top: 1px solid var(--glass-border);
+    gap: 15px; /* 按钮之间的间距 */
+    border-top: none;
+    justify-content: center; /* 让按钮们在横向上居中 */
+    align-items: center; /* 让按钮们在垂直方向上也对齐（如果高度不一的话） */
+    padding-top: 15px; /* 增加一点上边距，让按钮和内容区有呼吸感 */
 }
+
 .modal-button {
-    flex: 1;
-    padding: 15px;
+    flex: 1; /* 魔法！让每个按钮都占据一份空间，实现均分 */
+    max-width: 180px; /* 给按钮一个“最大宽度”上限，防止在宽屏上拉得太长 */
+    padding: 12px; /* 稍微减小一点内边距，让按钮更精致 */
     border: none;
     background: none;
     cursor: pointer;
     font-size: 16px;
     font-weight: bold;
     transition: all 0.3s ease;
+    white-space: nowrap;
+    border-radius: 8px; /* 顺便给按钮加上一点圆角，更好看 */
+    
+    /* ▼▼▼ 【【【终极修复：安装“智能居中机器人”】】】 ▼▼▼ */
+    display: flex;             /* 指令1：给按钮通电，让它变成一个Flexbox容器 */
+    justify-content: center;   /* 指令2：命令它把内部所有东西都水平居中 */
+    /* ▲▲▲ 【【【安装完毕！我们不再需要 text-align: center; 了】】】 ▲▲▲ */
 }
 .modal-button.secondary {
     color: var(--text-secondary);
-    border-right: 1px solid var(--glass-border);
+    /* 【核心改造】把这条多余的右边框删掉 */
+    /* border-right: 1px solid var(--glass-border); */
     transition: all 0.3s ease;
 }
-
 .modal-button.secondary:hover {
     background: rgba(80, 151, 205, 0.1);
     border-radius: var(--radius-sm);
@@ -3206,10 +3220,9 @@ input:checked + .slider:before {
 
 /* 步骤2: 告诉“身体”部分（内容区），你是可以伸缩和滚动的 */
 .modal-body {
-    flex-grow: 1; /* 允许它占据头部和尾部之外的所有可用空间 */
-    overflow-y: auto; /* 【核心】如果内容超出你拥有的空间，就显示垂直滚动条！ */
+    /* 【核心改造】我们把这个空房间的所有布局指令都删掉，让它自然收缩到0高度 */
+    overflow-y: auto;
 }
-
 /* 步骤3: 确保“头部”和“尾部”高度固定，不被挤压 */
 .modal-header, .modal-footer-split {
     flex-shrink: 0; /* 禁止它们收缩 */
@@ -3499,12 +3512,15 @@ input:checked + .slider:before {
 
 /* 1. 赋予“全屏身份证”真正的力量 */
 .modal-fullscreen {
-    width: 100%;
+    width: 100%; /* (解释：我们不再使用可能导致问题的vw/vh，而是用100%来继承父元素的全部宽度) */
     height: 100%;
-    max-width: none !important; /* 覆盖旧限制 */
-    max-height: none !important; /* 覆盖旧限制 */
-    border-radius: 0 !important; /* 全屏不需要圆角 */
-    padding: 0 !important; /* 全屏不需要内边距 */
+    max-width: none !important; 
+    max-height: none !important; 
+    border-radius: 0 !important; 
+    padding: 0 !important; 
+    margin: 0 !important;
+    display: flex; /* (解释：重新启用Flex布局，为下一步做准备) */
+    flex-direction: column; /* (解释：确保内部的“版头”和“内容区”是垂直排列的) */
 }
 .modal-fullscreen .modal-header {
     padding: 10px 15px;
@@ -3526,32 +3542,23 @@ input:checked + .slider:before {
 
 /* --- 【终极修复 V4.0】恢复工具栏滚动条并进行美化 --- */
 
-/* 1. 我们只对“编辑器”和“查看器”这两个大区域，隐藏垂直滚动条 */
-.diary-editor-area,
-.diary-viewer-area {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-}
-.diary-editor-area::-webkit-scrollbar,
-.diary-viewer-area::-webkit-scrollbar {
-    display: none;
-}
+/* (解释：我们不再需要单独隐藏滚动条了，因为滚动任务已经完全交给了 .modal-content) */
 
 /* 2. 【核心】我们为“工具栏”专门设计一个纤细、漂亮的水平滚动条 */
 .diary-toolbar::-webkit-scrollbar {
-    height: 6px; /* 【核心】设置一个很细的高度，而不是0！ */
+    height: 6px;
 }
 .diary-toolbar::-webkit-scrollbar-track {
-    background-color: rgba(0,0,0,0.05); /* 轨道的背景色，淡淡的几乎看不见 */
+    background-color: rgba(0,0,0,0.05);
     border-radius: 10px;
 }
 .diary-toolbar::-webkit-scrollbar-thumb {
-    background-color: #ccc; /* 滚动条滑块本身的颜色 */
+    background-color: #ccc;
     border-radius: 10px;
-    transition: background-color 0.2s ease; /* 添加平滑过渡效果 */
+    transition: background-color 0.2s ease;
 }
 .diary-toolbar::-webkit-scrollbar-thumb:hover {
-    background-color: #999; /* 鼠标悬停在滑块上时颜色变深 */
+    background-color: #999;
 }
 
 /* 3. 日记查看器专属样式 */
@@ -3561,6 +3568,7 @@ input:checked + .slider:before {
     overflow-y: auto;
     font-size: 16px;
     line-height: 1.8;
+    background-color: transparent; /* 【核心修复】命令“内墙”必须是透明的！ */
 }
 
 /* 4. 图片尺寸调节器样式 */
@@ -3591,14 +3599,18 @@ input:checked + .slider:before {
     background-repeat: no-repeat;
 }
 /* 【核心终极修复】让编辑器和查看器的内容区真正撑满屏幕 */
+.modal-fullscreen .modal-body {
+    flex-grow: 1; /* (解释：命令“内容区”占据所有剩余的垂直空间) */
+    overflow-y: auto; /* (解释：核心魔法！命令“内容区”自己负责滚动，这样版头就不在滚动范围内了) */
+    -webkit-overflow-scrolling: touch; /* (解释：在手机上开启流畅的滚动效果) */
+}
 .diary-editor-area,
 .diary-viewer-area {
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    flex-grow: 1; /* 【关键】命令内容区“长大”，填满所有垂直方向的剩余空间 */
-    padding: 20px; /* 增加内边距，让文字和图片不会贴着屏幕边缘 */
-    overflow-y: auto; /* 当内容超多时，允许自身滚动 */
+    /* (解释：我们不再需要这里的 flex-grow 和 overflow-y 了，因为它的父级 .modal-body 已经接管了这些任务) */
+    padding: 20px;
 }
 /* --- 【全新 V4.0】图片对齐样式 --- */
 
@@ -3796,7 +3808,7 @@ input:checked + .slider:before {
     padding: 0 !important;
     margin: 0 !important;
     display: block !important; /* 强制取消 flex 居中 */
-    background-color: #fff !important; /* 确保背景是纯白 */
+    background-color: transparent; /* 【【【终极核心修正！！！】】】 */
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     z-index: 1001 !important; /* 确保在最顶层 */
@@ -3819,6 +3831,7 @@ input:checked + .slider:before {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    background-color: transparent;
 }
 /*
 ============================================================
@@ -4089,6 +4102,21 @@ input:checked + .slider:before {
     outline-offset: 2px;
     cursor: pointer;
 }
+
+/*
+============================================================
+ V-ULTIMATE-FIX-7: 日记查看器滚动与全屏终极修复
+============================================================
+*/
+/* 步骤1: 命令整个弹窗变成一个可滚动的容器 */
+#diary-viewer-modal .modal-content {
+    overflow-y: auto;
+}
+/* 步骤2: 解除内容区自己的滚动能力，防止冲突 */
+#diary-viewer-modal .modal-body {
+    overflow-y: visible;
+}
+
 /*
 ============================================================
  V-ULTIMATE-FIX-6: 日记编辑器最终布局&缩放条样式补丁
@@ -4579,20 +4607,20 @@ input:checked + .slider:before {
     position: absolute;
     top: -2px;
     right: -2px;
-    min-width: 20px;
+    width: 20px; /* 核心修复1：把 min-width 改成固定的 width */
     height: 20px;
     background-color: #fa5151;
     color: white;
-    border-radius: 50%; /* 终极修复1：使用百分比确保在任何尺寸下都是完美的圆形或胶囊形 */
+    border-radius: 50%;
     font-size: 12px;
     font-weight: bold;
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 0 4px;
+    /* 核心修复2：移除导致宽度被撑开的 padding */
     border: 2px solid white;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    box-sizing: border-box; /* 核心修正：命令边框和内边距向内计算，不撑大盒子 */
+    box-sizing: content-box; /* 核心修复3：改回 content-box，确保边框不会挤压内部空间 */
 }
 /*
 ================================================================
@@ -5057,4 +5085,574 @@ body.dark-theme .weather-icon-container svg {
 .diary-back-btn:hover {
     background-color: #f5f5f5;
     color: var(--text-dark);
+}
+.side-menu-item {
+    align-items: center;
+}
+/*
+============================================================
+ V-FINAL-HEADER-ALIGNMENT: 标题栏居中终极修复补丁
+============================================================
+*/
+
+/* 步骤1: 将日记本的头部变成一个“定位锚点” */
+#diary-view .header {
+    position: relative;
+    /* 确保内部元素（如返回按钮）能垂直居中 */
+    display: flex;
+    align-items: center;
+    /* 让返回按钮靠左，为居中标题腾出空间 */
+    justify-content: flex-start; 
+}
+
+/* 步骤2: 【核心魔法】命令标题“自由飞行”，并绝对居中 */
+#diary-view #diary-view-title {
+    position: absolute; /* 开启“自由飞行”模式 */
+    top: 50%;           /* 垂直方向先移动到中线 */
+    left: 50%;          /* 水平方向也移动到中线 */
+    
+    /* 这是CSS中最经典的“完美居中”咒语 */
+    transform: translate(-50%, -50%); 
+    
+    /* 为了防止标题过长时，与返回按钮重叠 */
+    padding: 0 50px; 
+    box-sizing: border-box;
+    width: 100%;
+    text-align: center;
+}
+/* --- 【全新】AI日记自定义格式样式 --- */
+
+/* 引用框 (图片1) */
+.diary-quote {
+    background-color: #f7f7f7;
+    border-left: 4px solid #dcdcdc;
+    padding: 15px 20px;
+    margin: 20px 0;
+    font-style: italic;
+    color: #555;
+}
+
+/* 居中单字/词框 (图片1) */
+.diary-centerbox {
+    text-align: center;
+    margin: 25px 0;
+}
+.diary-centerbox::before, .diary-centerbox::after {
+    content: '';
+    display: inline-block;
+    width: 25px;
+    height: 1px;
+    background-color: #ccc;
+    vertical-align: middle;
+    margin: 0 10px;
+}
+
+/* 大标题 (图片3) */
+.diary-title {
+    text-align: center;
+    font-size: 2em;
+    font-weight: bold;
+    margin: 30px 0;
+    letter-spacing: 2px;
+}
+
+/* 文本装饰 */
+.diary-highlight {
+    background-color: #fff4a3;
+    padding: 0 4px;
+    border-radius: 3px;
+}
+.diary-underline {
+    text-decoration: underline;
+}
+.diary-wavy {
+    text-decoration: underline wavy #ff6b6b;
+}
+
+/* 字体样式与变化 */
+.diary-size-large { font-size: 1.25em; }
+.diary-size-huge { font-size: 1.6em; }
+.diary-size-small { font-size: 0.8em; }
+.diary-blur {
+    filter: blur(3px);
+    transition: filter 0.3s ease;
+}
+.diary-blur:hover {
+    filter: blur(0);
+}
+.diary-glow-pink { text-shadow: 0 0 8px #ff79c6; }
+.diary-glow-cyan { text-shadow: 0 0 8px #8be9fd; }
+.diary-glow-yellow { text-shadow: 0 0 8px #f1fa8c; }
+
+/* -- 核心升级：为我们请来的字体设计师分配工作 -- */
+.font-noto-serif-sc { font-family: 'Noto Serif SC', serif; }
+.font-zcool-kuaile { font-family: 'ZCOOL KuaiLe', cursive; }
+.font-great-vibes { font-family: 'Great Vibes', cursive, serif; font-size: 1.5em; /* 花体英文通常需要放大一点才好看 */ }
+.font-pacifico { font-family: 'Pacifico', cursive; }
+.font-press-start-2p { font-family: '"Press Start 2P"', cursive; line-height: 1.5; /* 像素字体需要更大行高 */ }
+/* --- 【全新V2】AI日记高级格式样式 --- */
+
+/* 涂黑效果 */
+.diary-redacted {
+    cursor: pointer;
+    position: relative;
+    display: inline-block;
+}
+.diary-redacted .cover {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1em; /* 核心修改：让方块的高度等于当前文字的大小 */
+    top: 50%; /* 核心修改：先把它往下推一半 */
+    transform: translateY(-50%); /* 核心修改：再把它自己高度的一半拉回来，实现完美居中 */
+    background-color: #222;
+    border-radius: 2px;
+    transition: opacity 0.3s ease;
+    opacity: 1;
+}
+.diary-redacted .text {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+.diary-redacted.revealed .cover {
+    opacity: 0;
+}
+.diary-redacted.revealed .text {
+    opacity: 1;
+}
+
+
+/* --- 【全新V3】日记主题系统 (精装修版) --- */
+
+
+
+/* 主题1: 复古剪贴簿 (精装修) */
+.modal-content.theme-scrapbook { /* 【核心修正】我们不再指定 .diary-viewer-area */
+    background-image: url('https://www.transparenttextures.com/patterns/paper-fibers.png');
+    background-color: #fdfaf4;
+}
+.modal-content.theme-scrapbook .diary-quote { /* 这条规则保持不变，因为它本身就是对的 */
+    border-left-color: #c9bda7;
+}
+
+/* 主题2: 拍立得照片墙 */
+.modal-content.theme-polaroid-light { /* 【核心修正】我们不再指定 .diary-viewer-area */
+    border: none;
+    background-image: url('https://www.transparenttextures.com/patterns/cork-wallet.png');
+    background-color: #d8c9a8;
+}
+
+/* 主题3: 黑色终端 */
+.modal-content.theme-terminal-dark {
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+}
+/* 终端主题的内容区也需要透明 */
+.modal-content.theme-terminal-dark .diary-viewer-area {
+    background-color: transparent;
+}
+.modal-content.theme-terminal-dark .modal-header h3 {
+    color: #569cd6;
+}
+.modal-content.theme-terminal-dark .diary-viewer-area {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    line-height: 1.8;
+}
+.modal-content.theme-terminal-dark .diary-viewer-area .diary-quote {
+    background-color: #252526;
+    border-left-color: #4ec9b0;
+    color: #9cdcfe;
+}
+
+
+/* --- 【专业日记背景设计系列 V4.1 - 完整重构版】 --- */
+
+/* 
+   ================================================================
+   核心结构设定：
+   1. 主题 (.theme-xxx) -> 控制最外层弹窗 (.modal-content) 的基础底色。
+   2. 背景 (.bg-xxx) -> 控制内容区 (.diary-viewer-area) 的纹理和复杂样式。
+   ================================================================
+*/
+
+/* --- 基础设定 --- */
+.diary-viewer-modal .modal-content {
+    transition: background-color 0.6s ease, border-color 0.6s ease;
+}
+.diary-viewer-area {
+    transition: background 0.6s ease;
+    position: relative;
+    box-sizing: border-box;
+}
+
+/* --- 主题底色定义 --- */
+.modal-content.theme-scrapbook,
+.modal-content.theme-polaroid-light,
+.modal-content.theme-terminal-dark {
+    background: transparent; /* 【核心修正】让主题框架变透明，透出后面的背景！ */
+}
+
+
+/* --- 背景与配色方案 --- */
+
+/* 配方 #1: 典雅羊皮纸 */
+.diary-viewer-area.bg-parchment {
+    --text-primary: #3e2723; --text-heading: #2e1a17; --text-accent: #5d4037; --text-secondary: #6d4c41; --text-quote: #4e342e;
+    background: radial-gradient(ellipse at top, rgba(253, 245, 230, 0.9), rgba(248, 236, 209, 0.95)), url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><filter id="paper"><feTurbulence type="fractalNoise" baseFrequency="0.04" result="noise" /><feDiffuseLighting in="noise" lighting-color="white" surfaceScale="1"><feDistantLight azimuth="45" elevation="60" /></feDiffuseLighting></filter><rect width="100" height="100" filter="url(%23paper)" opacity="0.3"/></svg>');
+}
+
+/* 配方 #2: 深邃星空 */
+.diary-viewer-area.bg-starry-night {
+    --text-primary: #e8eaf6; --text-heading: #ffffff; --text-accent: #64b5f6; --text-secondary: #b39ddb; --text-quote: #9fa8da;
+    background: radial-gradient(ellipse at bottom, #1a1a2e 0%, #0a0a15 100%), radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3), transparent 50%), radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1), transparent 50%), radial-gradient(circle at 40% 40%, rgba(200, 200, 255, 0.05), transparent 50%);
+    background-size: 100% 100%, 600px 600px, 800px 800px, 1000px 1000px;
+}
+
+/* 配方 #3: 水彩梦境 */
+.diary-viewer-area.bg-watercolor {
+    --text-primary: #37474f; --text-heading: #263238; --text-accent: #00acc1; --text-secondary: #546e7a; --text-quote: #607d8b;
+    background: linear-gradient(120deg, rgba(224, 247, 250, 0.8) 0%, rgba(255, 227, 231, 0.5) 50%, rgba(230, 245, 255, 0.8) 100%), radial-gradient(circle at 30% 50%, rgba(255, 182, 193, 0.2), transparent 70%), radial-gradient(circle at 70% 70%, rgba(176, 224, 230, 0.2), transparent 60%);
+}
+
+/* (解释：这里是把 terminal-dark 主题的黑色背景，直接合并到了 cyber-grid 背景里) */
+.diary-viewer-area.bg-cyber-grid {
+    --text-primary: #00ffc8; --text-heading: #00ffff; --text-accent: #ff006e; --text-secondary: #00b4d8; --text-quote: #90e0ef;
+    background-color: #1e1e1e; /* <-- 从 theme-terminal-dark 搬过来的黑色底色 */
+    background-image: linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 255, 0.1) 1px, transparent 1px), radial-gradient(circle at 50% 50%, rgba(0, 150, 255, 0.1), transparent 70%);
+    background-size: 40px 40px, 40px 40px, 100% 100%;
+}
+
+/* 配方 #5: 黄昏余晖 */
+.diary-viewer-area.bg-sunset-gradient {
+    --text-primary: #5d2e46; --text-heading: #4a1942; --text-accent: #c9184a; --text-secondary: #7d4f68; --text-quote: #6f3d5e;
+    background: linear-gradient(180deg, #fff5f5 0%, #ffe0e6 20%, #ffccd5 40%, #ffb3c1 60%, #ff8fa3 80%, #ff758f 100%);
+}
+
+/* 配方 #6: 晨光微露 */
+.diary-viewer-area.bg-morning-mist {
+    --text-primary: #5d4e37; --text-heading: #4a3c28; --text-accent: #f57c00; --text-secondary: #7d6d5d; --text-quote: #6d5d4d;
+    background: linear-gradient(135deg, rgba(255, 251, 235, 0.9) 0%, rgba(255, 244, 214, 0.7) 50%, rgba(255, 237, 191, 0.9) 100%), radial-gradient(ellipse at top left, rgba(255, 255, 255, 0.4), transparent 70%), radial-gradient(ellipse at bottom right, rgba(255, 248, 220, 0.3), transparent 70%);
+}
+
+/* 配方 #7: 墨染宣纸 */
+.diary-viewer-area.bg-ink-wash {
+    --text-primary: #212121; --text-heading: #000000; --text-accent: #d32f2f; --text-secondary: #424242; --text-quote: #616161;
+    background: radial-gradient(circle at 20% 50%, rgba(0, 0, 0, 0.06), transparent 50%), radial-gradient(circle at 80% 80%, rgba(0, 0, 0, 0.04), transparent 60%), radial-gradient(circle at 40% 20%, rgba(0, 0, 0, 0.03), transparent 40%), linear-gradient(to bottom, #fafafa, #f5f5f5);
+}
+
+/* 配方 #8: 森林秘境 */
+.diary-viewer-area.bg-forest-whisper {
+    --text-primary: #1b5e20; --text-heading: #0d3b0f; --text-accent: #2e7d32; --text-secondary: #388e3c; --text-quote: #43a047;
+    background: linear-gradient(180deg, rgba(229, 243, 235, 0.9) 0%, rgba(194, 231, 206, 0.8) 100%), radial-gradient(ellipse at top right, rgba(165, 214, 167, 0.3), transparent 60%), radial-gradient(ellipse at bottom left, rgba(129, 199, 132, 0.2), transparent 70%);
+}
+
+/* 配方 #9: 复古打字机 */
+.diary-viewer-area.bg-vintage-typewriter {
+    --text-primary: #3e2e2e; --text-heading: #2c1810; --text-accent: #8b4513; --text-secondary: #5d4a4a; --text-quote: #6b5555;
+    background: repeating-linear-gradient(0deg, #fefefe, #fefefe 20px, #f8f8f8 20px, #f8f8f8 21px), linear-gradient(90deg, transparent 79px, rgba(255, 182, 193, 0.1) 79px, rgba(255, 182, 193, 0.1) 81px, transparent 81px), linear-gradient(#f5f5f5, #f0f0f0);
+    background-size: 100% 100%, 100% 100%, 100% 100%;
+}
+
+/* 配方 #10: 极光之夜 */
+.diary-viewer-area.bg-aurora-nights {
+    --text-primary: #b2fef7; --text-heading: #ffffff; --text-accent: #4fc3f7; --text-secondary: #81c9fa; --text-quote: #a8e6cf;
+    background: linear-gradient(45deg, #0f2027 0%, #203a43 50%, #2c5364 100%), radial-gradient(ellipse at top, rgba(64, 224, 208, 0.3), transparent 60%), radial-gradient(ellipse at bottom, rgba(255, 0, 150, 0.2), transparent 70%);
+}
+
+/* 配方 #11: 咖啡时光 */
+.diary-viewer-area.bg-coffee-time {
+    --text-primary: #4e342e; --text-heading: #3e2723; --text-accent: #6f4e37; --text-secondary: #6d4c41; --text-quote: #795548;
+    background: radial-gradient(circle at 30% 40%, rgba(215, 189, 155, 0.3), transparent 50%), radial-gradient(circle at 70% 60%, rgba(198, 164, 126, 0.2), transparent 60%), linear-gradient(135deg, #f7f3ed 0%, #ede7dc 50%, #e6ddd0 100%);
+}
+
+/* 配方 #12: 海洋深蓝 */
+.diary-viewer-area.bg-ocean-depth {
+    --text-primary: #0d47a1; --text-heading: #0a3d91; --text-accent: #1565c0; --text-secondary: #1976d2; --text-quote: #1e88e5;
+    background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 35%, #90caf9 65%, #64b5f6 100%), radial-gradient(ellipse at center, rgba(255, 255, 255, 0.1), transparent 70%);
+}
+
+/* 配方 #13: 樱花飘落 */
+.diary-viewer-area.bg-sakura-dream {
+    --text-primary: #880e4f; --text-heading: #6a1b47; --text-accent: #e91e63; --text-secondary: #ad1457; --text-quote: #c2185b;
+    background: radial-gradient(circle at 10% 20%, rgba(255, 183, 197, 0.3), transparent 40%), radial-gradient(circle at 80% 80%, rgba(255, 154, 179, 0.2), transparent 50%), radial-gradient(circle at 50% 50%, rgba(255, 213, 220, 0.2), transparent 60%), linear-gradient(to bottom, #fff5f7, #ffe4e9);
+}
+
+/* --- 【通用样式应用】 --- */
+.diary-viewer-area[class*="bg-"] {
+    color: var(--text-primary);
+}
+
+.diary-viewer-area[class*="bg-"] h1,
+.diary-viewer-area[class*="bg-"] h2,
+.diary-viewer-area[class*="bg-"] h3,
+.diary-viewer-area[class*="bg-"] .diary-title {
+    color: var(--text-heading);
+}
+
+.diary-viewer-area[class*="bg-"] .diary-quote {
+    color: var(--text-quote);
+    border-left-color: var(--text-accent);
+}
+
+.diary-viewer-area[class*="bg-"] ::selection {
+    background-color: var(--text-accent);
+    color: white;
+}
+
+.bg-starry-night *,
+.bg-cyber-grid *,
+.bg-aurora-nights * {
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.diary-viewer-area.bg-starry-night *,
+.diary-viewer-area.bg-cyber-grid *,
+.diary-viewer-area.bg-aurora-nights * {
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* --- 【毛玻璃效果】 --- */
+.diary-viewer-area .diary-content {
+    padding: 20px 22px; /* (解释：我们再次压缩了左右的内边距，让文字区域更宽) */
+    margin: 12px; /* (解释：再次压缩了外边距，让毛玻璃几乎贴近屏幕边缘) */
+    backdrop-filter: blur(4px) saturate(150%);
+    -webkit-backdrop-filter: blur(4px) saturate(150%);
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 【【【终极修复补丁 V2.0！！！】】】 */
+/* 核心修正：我们把指令的“地址”从 .diary-viewer-area 改为了更准确的 .modal-content */
+.diary-viewer-area[class*="bg-"] .diary-content { /* (解释：这里的地址已修正！现在指令能准确找到需要变透明的“毛玻璃层”) */
+    background-color: transparent; /* 【核心修正】让主题框架变透明，透出后面的背景！ */
+    border: 1px solid rgba(255, 255, 255, 0.18); /* 边框也变得更透明 */
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1); /* 阴影也可以微调一下 */
+    /* 关键：我们不再删除 backdrop-filter，让毛玻璃效果得以保留！ */
+}
+.theme-terminal-dark .diary-content {
+    background-color: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+
+/* --- 【特殊效果增强】 --- */
+.diary-viewer-area.bg-starry-night::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: radial-gradient(1px 1px at 20% 30%, white, transparent), radial-gradient(1px 1px at 40% 70%, white, transparent), radial-gradient(1px 1px at 60% 40%, white, transparent), radial-gradient(1px 1px at 80% 90%, white, transparent);
+    background-size: 200% 200%;
+    animation: sparkle 20s linear infinite;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+@keyframes sparkle {
+    from { transform: translateY(0); }
+    to { transform: translateY(-100%); }
+}
+
+/* --- 【全新V4】AI日记高级图文组件样式 (布局修复版) --- */
+.diary-image-pair {
+    display: flex;
+    flex-direction: column; /* 保持垂直堆叠 */
+    align-items: center;    /* 保持水平居中 */
+    gap: 0;                 /* 移除间距，为重叠做准备 */
+    margin: 25px 0;
+}
+
+.diary-polaroid {
+    padding: 10px 10px 20px 10px;
+    background: white;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    border: 1px solid #ddd;
+    text-align: center;
+    transition: transform 0.2s ease-in-out;
+}
+
+.diary-polaroid:hover {
+    transform: scale(1.05) !important; /* 统一的悬停放大效果 */
+    z-index: 10;
+}
+
+/* 核心修复：单张照片的样式 */
+.diary-viewer-area > .diary-polaroid {
+    width: 60%;
+    margin: 20px auto; /* 核心修复：让它水平居中 */
+    transform: rotate(-2deg); /* 给它一个默认的轻微旋转 */
+}
+
+/* 【【【终极修复：双图布局的全新指令集】】】 */
+.diary-image-pair .diary-polaroid {
+    width: 85%; /* 1. 宽度大幅增加，达到“铺满”效果 */
+    max-width: 300px; /* (可选) 限制一个最大宽度 */
+}
+.diary-image-pair .diary-polaroid:nth-child(1) {
+    transform: rotate(-4deg); /* 2. 确保第一张照片向左歪斜 */
+    z-index: 1; /* 确保它在下方 */
+}
+.diary-image-pair .diary-polaroid:nth-child(2) {
+    transform: rotate(5deg); /* 3. 确保第二张照片向右歪斜 */
+    /* 【核心魔法】减小负边距，让重叠效果更轻微、更自然 */
+    margin-top: -10px;
+    z-index: 2; /* 确保它在上方 */
+}
+
+.diary-polaroid-img {
+    background:#f0f0f0; 
+    border:1px solid #ddd; 
+    padding: 20px; 
+    text-align:center; 
+    color:#888; 
+    font-style:italic; 
+    min-height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.diary-polaroid-caption {
+    margin-top: 15px;
+    font-family: 'ZCOOL KuaiLe', cursive;
+    color: #555;
+    font-size: 1.1em;
+}
+/* --- 【专业日记字体配色方案】(V2.0 - 智能阴影版) --- */
+
+/* 
+   ================================================================
+   核心设定：
+   现在，每个背景配方都自带一个 --text-shadow-color 变量。
+   浅色背景使用半透明的黑色阴影，深色背景使用半透明的白色辉光。
+   ================================================================
+*/
+
+/* 配方 #1: 典雅羊皮纸 (浅色) */
+.bg-parchment {
+    --text-primary: #3e2723; --text-heading: #2e1a17; --text-accent: #5d4037; --text-secondary: #6d4c41; --text-quote: #4e342e;
+    --text-shadow-color: rgba(0, 0, 0, 0.15); /* (解释：为它指定了半透明的黑色阴影) */
+    background: radial-gradient(ellipse at top, rgba(253, 245, 230, 0.9), rgba(248, 236, 209, 0.95)), url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><filter id="paper"><feTurbulence type="fractalNoise" baseFrequency="0.04" result="noise" /><feDiffuseLighting in="noise" lighting-color="white" surfaceScale="1"><feDistantLight azimuth="45" elevation="60" /></feDiffuseLighting></filter><rect width="100" height="100" filter="url(%23paper)" opacity="0.3"/></svg>');
+}
+
+/* 配方 #2: 深邃星空 (深色) */
+.bg-starry-night {
+    --text-primary: #e8eaf6; --text-heading: #ffffff; --text-accent: #64b5f6; --text-secondary: #b39ddb; --text-quote: #9fa8da;
+    --text-shadow-color: rgba(255, 255, 255, 0.2); /* (解释：为它指定了半透明的白色辉光) */
+    background: radial-gradient(ellipse at bottom, #1a1a2e 0%, #0a0a15 100%), radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3), transparent 50%), radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1), transparent 50%), radial-gradient(circle at 40% 40%, rgba(200, 200, 255, 0.05), transparent 50%);
+    background-size: 100% 100%, 600px 600px, 800px 800px, 1000px 1000px;
+}
+
+/* 配方 #3: 水彩梦境 (浅色) */
+.bg-watercolor {
+    --text-primary: #37474f; --text-heading: #263238; --text-accent: #00acc1; --text-secondary: #546e7a; --text-quote: #607d8b;
+    --text-shadow-color: rgba(0, 0, 0, 0.1);
+    background: linear-gradient(120deg, rgba(224, 247, 250, 0.8) 0%, rgba(255, 227, 231, 0.5) 50%, rgba(230, 245, 255, 0.8) 100%), radial-gradient(circle at 30% 50%, rgba(255, 182, 193, 0.2), transparent 70%), radial-gradient(circle at 70% 70%, rgba(176, 224, 230, 0.2), transparent 60%);
+}
+
+/* 配方 #4: 赛博矩阵 (深色) */
+.diary-viewer-area.bg-cyber-grid {
+    --text-primary: #00ffc8; --text-heading: #00ffff; --text-accent: #ff006e; --text-secondary: #00b4d8; --text-quote: #90e0ef;
+    --text-shadow-color: rgba(0, 255, 255, 0.2);
+    background-color: #1e1e1e;
+    background-image: linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 255, 0.1) 1px, transparent 1px), radial-gradient(circle at 50% 50%, rgba(0, 150, 255, 0.1), transparent 70%);
+    background-size: 40px 40px, 40px 40px, 100% 100%;
+}
+
+/* 配方 #5: 黄昏余晖 (浅色) */
+.diary-viewer-area.bg-sunset-gradient {
+    --text-primary: #5d2e46; --text-heading: #4a1942; --text-accent: #c9184a; --text-secondary: #7d4f68; --text-quote: #6f3d5e;
+    --text-shadow-color: rgba(0, 0, 0, 0.1); /* (解释：锦上添花！把阴影从白色改为非常淡的黑色，立体感更好) */
+    /* (解释：为你重新调制了一套更清淡、更柔和的“黄昏余晖”配色) */
+    background: linear-gradient(180deg, #fff9f9 0%, #fff0f3 30%, #ffe4e9 60%, #ffdde3 80%, #ffddd1 100%);
+}
+
+/* 配方 #6: 晨光微露 (浅色) */
+.diary-viewer-area.bg-morning-mist {
+    --text-primary: #5d4e37; --text-heading: #4a3c28; --text-accent: #f57c00; --text-secondary: #7d6d5d; --text-quote: #6d5d4d;
+    --text-shadow-color: rgba(0, 0, 0, 0.15);
+    background: linear-gradient(135deg, rgba(255, 251, 235, 0.9) 0%, rgba(255, 244, 214, 0.7) 50%, rgba(255, 237, 191, 0.9) 100%), radial-gradient(ellipse at top left, rgba(255, 255, 255, 0.4), transparent 70%), radial-gradient(ellipse at bottom right, rgba(255, 248, 220, 0.3), transparent 70%);
+}
+
+/* 配方 #7: 墨染宣纸 (浅色) */
+.diary-viewer-area.bg-ink-wash {
+    --text-primary: #212121; --text-heading: #000000; --text-accent: #d32f2f; --text-secondary: #424242; --text-quote: #616161;
+    --text-shadow-color: rgba(0, 0, 0, 0.1);
+    background: radial-gradient(circle at 20% 50%, rgba(0, 0, 0, 0.06), transparent 50%), radial-gradient(circle at 80% 80%, rgba(0, 0, 0, 0.04), transparent 60%), radial-gradient(circle at 40% 20%, rgba(0, 0, 0, 0.03), transparent 40%), linear-gradient(to bottom, #fafafa, #f5f5f5);
+}
+
+/* 配方 #8: 森林秘境 (浅色) */
+.diary-viewer-area.bg-forest-whisper {
+    --text-primary: #1b5e20; --text-heading: #0d3b0f; --text-accent: #2e7d32; --text-secondary: #388e3c; --text-quote: #43a047;
+    --text-shadow-color: rgba(0, 0, 0, 0.2);
+    background: linear-gradient(180deg, rgba(229, 243, 235, 0.9) 0%, rgba(194, 231, 206, 0.8) 100%), radial-gradient(ellipse at top right, rgba(165, 214, 167, 0.3), transparent 60%), radial-gradient(ellipse at bottom left, rgba(129, 199, 132, 0.2), transparent 70%);
+}
+
+/* 配方 #9: 复古打字机 (浅色) */
+.diary-viewer-area.bg-vintage-typewriter {
+    --text-primary: #3e2e2e; --text-heading: #2c1810; --text-accent: #8b4513; --text-secondary: #5d4a4a; --text-quote: #6b5555;
+    --text-shadow-color: rgba(0, 0, 0, 0.1);
+    background: repeating-linear-gradient(0deg, #fefefe, #fefefe 20px, #f8f8f8 20px, #f8f8f8 21px), linear-gradient(90deg, transparent 79px, rgba(255, 182, 193, 0.1) 79px, rgba(255, 182, 193, 0.1) 81px, transparent 81px), linear-gradient(#f5f5f5, #f0f0f0);
+    background-size: 100% 100%, 100% 100%, 100% 100%;
+}
+
+/* 配方 #10: 极光之夜 (深色) */
+.diary-viewer-area.bg-aurora-nights {
+    --text-primary: #b2fef7; --text-heading: #ffffff; --text-accent: #4fc3f7; --text-secondary: #81c9fa; --text-quote: #a8e6cf;
+    --text-shadow-color: rgba(255, 255, 255, 0.2);
+    background: linear-gradient(45deg, #0f2027 0%, #203a43 50%, #2c5364 100%), radial-gradient(ellipse at top, rgba(64, 224, 208, 0.3), transparent 60%), radial-gradient(ellipse at bottom, rgba(255, 0, 150, 0.2), transparent 70%);
+}
+
+/* 配方 #11: 咖啡时光 (浅色) */
+.diary-viewer-area.bg-coffee-time {
+    --text-primary: #4e342e; --text-heading: #3e2723; --text-accent: #6f4e37; --text-secondary: #6d4c41; --text-quote: #795548;
+    --text-shadow-color: rgba(0, 0, 0, 0.1);
+    background: radial-gradient(circle at 30% 40%, rgba(215, 189, 155, 0.3), transparent 50%), radial-gradient(circle at 70% 60%, rgba(198, 164, 126, 0.2), transparent 60%), linear-gradient(135deg, #f7f3ed 0%, #ede7dc 50%, #e6ddd0 100%);
+}
+
+/* 配方 #12: 海洋深蓝 (浅色) */
+.diary-viewer-area.bg-ocean-depth {
+    --text-primary: #0d47a1; --text-heading: #0a3d91; --text-accent: #1565c0; --text-secondary: #1976d2; --text-quote: #1e88e5;
+    --text-shadow-color: rgba(0, 0, 0, 0.2);
+    background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 35%, #90caf9 65%, #64b5f6 100%), radial-gradient(ellipse at center, rgba(255, 255, 255, 0.1), transparent 70%);
+}
+
+/* 配方 #13: 樱花飘落 (浅色) */
+.diary-viewer-area.bg-sakura-dream {
+    --text-primary: #880e4f; --text-heading: #6a1b47; --text-accent: #e91e63; --text-secondary: #ad1457; --text-quote: #c2185b;
+    --text-shadow-color: rgba(255, 255, 255, 0.4); /* (解释：这也是一个特例，深粉色文字配白色辉光更好看) */
+    background: radial-gradient(circle at 10% 20%, rgba(255, 183, 197, 0.3), transparent 40%), radial-gradient(circle at 80% 80%, rgba(255, 154, 179, 0.2), transparent 50%), radial-gradient(circle at 50% 50%, rgba(255, 213, 220, 0.2), transparent 60%), linear-gradient(to bottom, #fff5f7, #ffe4e9);
+}
+
+/* --- 【通用样式应用】 --- */
+.diary-viewer-area[class*="bg-"] {
+    color: var(--text-primary);
+}
+
+.diary-viewer-area[class*="bg-"] h1,
+.diary-viewer-area[class*="bg-"] h2,
+.diary-viewer-area[class*="bg-"] h3,
+.diary-viewer-area[class*="bg-"] .diary-title {
+    color: var(--text-heading);
+}
+
+.diary-viewer-area[class*="bg-"] .diary-quote {
+    color: var(--text-quote);
+    border-left-color: var(--text-accent);
+}
+
+.diary-viewer-area[class*="bg-"] ::selection {
+    background-color: var(--text-accent);
+    color: white;
+}
+
+/* (解释：这是全新的“万能阴影”规则，它会读取上面每个背景里定义的阴影颜色) */
+.diary-viewer-area[class*="bg-"] * {
+    text-shadow: 0 1px 3px var(--text-shadow-color);
+}
+/* --- 【【【终极修复：日记本弹窗强制居中补丁】】】 --- */
+#custom-confirm-modal {
+    align-items: center; /* 魔法！命令它垂直居中！ */
+    padding-top: 0;      /* (推荐) 同时把顶部的安全距离也去掉，实现完美居中 */
 }
