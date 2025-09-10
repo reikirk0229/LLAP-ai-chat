@@ -60,6 +60,22 @@ var _hmt = _hmt || [];
 }
     </style>
 </head>
+<!-- 【【【全新：Toast弹窗圆角修复补丁】】】 -->
+    <style>
+        #global-toast {
+            border-radius: 12px; /* 让所有四个角都变成12像素的圆角 */
+        }
+    </style>
+    <!-- 【【【全新：总结模式弹窗按钮居中补丁】】】 -->
+    <style>
+        .mode-select-buttons {
+            display: flex;          /* 1. 开启Flexbox布局，把它变成一个智能容器 */
+            flex-direction: column; /* 2. 命令里面的按钮垂直堆叠 */
+            align-items: center;    /* 3. 【核心】命令所有按钮在水平方向上向中轴线看齐！*/
+            gap: 15px;              /* 4. 在两个按钮之间增加一点舒适的间距 */
+            margin-top: 25px;       /* 5. 让按钮离上面的说明文字远一点 */
+        }
+    </style>
 <body>
     <div id="app-wrapper"></div>
     <!-- ▼▼▼▼▼ 【全新】侧滑菜单 (个人中心) ▼▼▼▼▼ -->
