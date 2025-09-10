@@ -1890,6 +1890,10 @@ setInterval(() => {
         if (c.recentDiaryThemes === undefined) {
             c.recentDiaryThemes = []; // 创建一个空的“最近主题”数组
         }
+        // 【【【全新：为AI创建“日记摘要记忆本”】】】
+if (c.recentDiarySummaries === undefined) {
+c.recentDiarySummaries = []; // 格式为 [{date: 'YYYY-MM-DD', summary: '摘要内容'}]
+}
     });
         // ▼▼▼ 请把下面这段全新的代码，粘贴在这里 ▼▼▼
         // 【全新】为全局AI表情包建立仓库，如果不存在的话
@@ -2423,35 +2427,39 @@ async function openChat(contactId, messageIdToHighlight = null) {
     }
     updateChatHeader();
     // ▼▼▼ 【【【BUG修复 2/2 - 步骤B：用下面这个代码块替换旧的 if/else】】】 ▼▼▼
-        // ▼▼▼ 【【【终极修复：模式感知的智能状态切换器】】】 ▼▼▼
+        // ▼▼▼ 【【【终极修复V3.0：安装了“智能下班打卡器”的状态切换器】】】 ▼▼▼
     if (contact.isOfflineMode) {
-        // 如果是线下模式，就直接显示一个固定的、清晰的模式状态
         chatAiActivityStatus.textContent = '剧情模式进行中';
     } else {
-        // 否则（在线上模式时），才执行我们原来那套精密的作息和状态判断逻辑
         if (contact.isScheduleEnabled) {
-            // 第一步：先去查作息表
-            const activity = calculateCurrentActivity(contact.schedule);
-            contact.currentActivity = activity.status; // 暂存计算结果，供AI自己参考
+            const scheduledActivity = calculateCurrentActivity(contact.schedule);
+            
+            // 【【【核心新增：智能下班打卡器】】】
+            // 第一步：我们先定义哪些状态算是“需要打卡下班”的预定活动
+            const isScheduledActivity = (status) => {
+                return status && (status.includes('睡眠中') || status.includes('工作') || status.includes('学习') || status.includes('吃饭'));
+            };
 
-            // 第二步：执行新的“状态优先级”判断
-            if (activity.status !== "空闲") {
-                // 最高优先级：如果作息表有强制安排（如睡觉、工作），则直接使用
-                chatAiActivityStatus.textContent = activity.status;
-                // 【重要】同时，把这个强制状态，也更新为AI的“自身状态”，实现持久化
-                contact.activityStatus = activity.status;
-            } else {
-                // 次高优先级：如果作息表显示“空闲”，则检查AI自己有没有设置状态
-                if (contact.activityStatus) {
-                    // 如果有（比如AI上次说“正在看书”），就维持它！
-                    chatAiActivityStatus.textContent = contact.activityStatus;
-                } else {
-                    // 最低优先级：如果都没有，才显示“在线”
-                    chatAiActivityStatus.textContent = '在线';
-                }
+            // 第二步：执行全新的“下班检查”
+            if (scheduledActivity.status === "空闲" && isScheduledActivity(contact.activityStatus)) {
+                // 如果作息表说现在“空闲”，但AI的记忆里还是“正在上班”等活动，
+                // 说明“下班”时间到了！立刻清空它的状态记忆。
+                contact.activityStatus = null; 
             }
+
+            // 第三步：执行我们之前的状态决策逻辑（现在它变得更智能了）
+            if (scheduledActivity.status !== "空闲") {
+                // 如果作息表有强制安排，就更新状态
+                contact.activityStatus = scheduledActivity.status;
+                chatAiActivityStatus.textContent = scheduledActivity.status;
+            } else {
+                // 如果是空闲时间，就显示被“打卡器”处理过的、绝对正确的状态
+                chatAiActivityStatus.textContent = contact.activityStatus || '在线';
+            }
+            
+            contact.currentActivity = chatAiActivityStatus.textContent;
+
         } else {
-            // 如果作息功能关闭，逻辑不变，还是显示AI自己保存的状态
             contact.currentActivity = null;
             chatAiActivityStatus.textContent = contact.activityStatus || '在线';
         }
@@ -3354,7 +3362,13 @@ async function displayMessage(text, role, options = {}) {
             const activity = calculateCurrentActivity(contact.schedule);
             if (activity.isAwake === false) {
                 contact.consecutiveMessagesWhileSleeping++;
-                const wakeupChance = contact.consecutiveMessagesWhileSleeping * 0.08;
+                
+                // 【核心改造】引入全新的“非线性”唤醒机制
+                // 解释：唤醒概率不再是简单的线性增加(attempts * 0.08)，
+                // 而是指数级增长 (attempts^2.2 / 200)。
+                // 这使得前几次骚扰的成功率极低，但会随着次数增加而急剧攀升，更符合“耐心耗尽”的真实感。
+                const attempts = contact.consecutiveMessagesWhileSleeping;
+                const wakeupChance = Math.pow(attempts, 2.2) / 200;
 
                                 if (Math.random() < wakeupChance) {
                     forceRestartContext = true;
@@ -3779,7 +3793,11 @@ ${userPersona}
 这是用户所在地的天气报告。可以自然地结合天气关心用户，但不要生硬播报。
 ${formattedWeatherData}
 
-
+- **你的近期日记摘要 (你的生活片段)**: 
+${(contact.recentDiarySummaries && contact.recentDiarySummaries.length > 0) 
+    ? contact.recentDiarySummaries.map(s => `  - [${s.date}]: ${s.summary}`).join('\n') 
+    : '  - (最近没有写日记)'
+}
 ---
 
 ## 【行为准则与输出格式】
@@ -3913,9 +3931,8 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
 `;
             forceRestartContext = false;
         }
-        // 如果AI没有在睡觉，但处于其他活动状态（比如工作、吃饭）
+        // 只有在作息功能开启，且AI的当前状态不是默认的“在线”时，才注入状态指令
         else if (contact.isScheduleEnabled && contact.currentActivity && contact.currentActivity !== "在线") {
-            // 这是正常的作息状态
             prefixPrompt = `
 # 【【【最高优先级情景模拟】】】
 当前真实时间是：${new Date().toLocaleString('zh-CN')}。
@@ -4661,7 +4678,7 @@ ${generationRequestPrompt}
     # 员工手册开始
     
     ## 核心目标
-    你的任务是**自然地**、**符合你人设地**开启一段新的对话，并可以**适当地**使用图片、语音、表情包或红包来丰富表达。
+    你的任务是**自然地**、**符合你人设地**开启一段新的对话，并可以**适当地**使用图片、语音、表情包或红包来丰富表达。你生成的每一波内容**绝对不能重复**！
     
     ## 思考链 (Chain of Thought)
     1.  **回顾我是谁**: 快速回顾你的核心人设、记忆和世界书。
@@ -4675,6 +4692,9 @@ ${generationRequestPrompt}
         *   如果想表达一种语气或声音，就使用 \`[voice] 文本内容\`。
         *   如果想表达一种难以言喻的情绪，就从列表里选一个最贴切的 \`[STICKER:ID]\`。
         *   如果遇到特殊节日或者想给用户一个惊喜，可以考虑发一个 \`[REDPACKET:祝福语,金额]\`。
+        * - 当你想明确针对用户或自己的某句话进行回复时，请严格使用格式：\`[QUOTE:"原文片段"] 你的回复...\`
+      - **选择原则**: 引号内的“原文片段”，【必须】是用户或自己最近消息中，来自**某一个单独气泡**的**逐字原文**。
+    
     
     ## 你的背景档案
     - **核心人设**: ${contact.persona}
@@ -4799,7 +4819,6 @@ ${generationRequestPrompt}
                 // 【【【核心记账步骤 - 终极修复版】】】
                 // 我们不再“累加”，而是直接“覆盖”！账本上的数字，就等于这次新生成的消息总数。
                 contact.unreadCount = newMessagesForUnreadCount.length;
-
             } else {
                 throw new Error("API返回的数据格式或数量不符合要求。");
             }
@@ -4816,17 +4835,16 @@ ${generationRequestPrompt}
             };
             contact.onlineChatHistory.push(fallbackMessage);
 
-            // 【【【终极核心修复：无论如何，都累加“本次”新增的消息数】】】
-            // 之前这里错误地在旧的基础上+1，现在我们确保它累加的是本次实际新增的未读消息（1条）
-            contact.unreadCount = (contact.unreadCount || 0) + 1;
+            // 【【【终极核心修复：无论如何，都只记录“本次”新增的消息数】】】
+            // 之前这里错误地在旧的基础上+1，现在我们直接覆盖为本次新增的1条
+            contact.unreadCount = 1;
         }
         
         contact.onlineChatHistory.sort((a, b) => a.timestamp - b.timestamp);
         
-        // 【【【核心修复：为“问候管家”留下字条，避免工作重复】】】
-        // 无论离线消息是成功生成还是失败回退，我们都更新这个时间戳
-        // 这会告诉主动消息系统：“我刚刚处理过这个AI了，请重置你的计时器”
-        // 从而完美地避免了两个系统在启动时同时发送消息。
+        // 【核心修复】在这里盖上“已处理”的邮戳，防止重复生成
+        contact.lastVisitTimestamp = now;
+        
         contact.proactiveMessaging.lastSent = Date.now();
         
         saveAppData();
@@ -5906,7 +5924,7 @@ ${readableHistory}
      * 【全新】打开表情包上传弹窗
      * @param {string} context - 要将表情包添加到的分组名
      */
-    function openStickerUploadModal() {
+    function openStickerUploadModal(defaultGroupName = null) {
         const modal = document.getElementById('sticker-upload-modal');
         const groupSelect = document.getElementById('sticker-upload-group-select');
         
@@ -5923,6 +5941,12 @@ ${readableHistory}
             option.textContent = groupName;
             groupSelect.appendChild(option);
         });
+
+        // 【核心修复】在这里安装“便签读取器”
+        // 如果收到了“管理部”递来的便签（defaultGroupName），就自动选中对应的分组
+        if (defaultGroupName) {
+            groupSelect.value = defaultGroupName;
+        }
 
         // 2. 【全新】重置两个面板到初始状态
         document.getElementById('local-preview-grid').innerHTML = '';
@@ -7747,6 +7771,11 @@ if (restartContextSetting) {
 
 
         csDeleteContact.addEventListener('click', deleteActiveContact);
+        // 【【【核心修复】】】为“手动总结”按钮设置独立的、直接的事件监听器
+        const summarizeChatBtn = document.getElementById('cs-summarize-chat');
+        if (summarizeChatBtn) {
+            summarizeChatBtn.addEventListener('click', handleManualSummary);
+        }
 
         // ▼▼▼ 【【【全新V2.0：为导出/导入按钮绑定魔法】】】 ▼▼▼
         document.getElementById('export-data-button').addEventListener('click', exportAllData);
@@ -9365,7 +9394,8 @@ function renderOfflineStorylines() {
             const group = target.dataset.group;
 
             if (target.classList.contains('sticker-add-placeholder')) {
-                openStickerUploadModal(); 
+                // 【核心修复】在转交客户时，附上写有分组名的“便签”（group）
+                openStickerUploadModal(group); 
             }
             else if (target.classList.contains('sticker-delete-btn')) {
                 const stickerId = target.dataset.id;
@@ -9525,14 +9555,14 @@ function renderOfflineStorylines() {
                 case 'cs-edit-my-profile':
                     openProfileModal();
                     break;
-                case 'cs-edit-schedule': // <-- 在这里为“编辑生活作息”按钮添加指令
+                case 'cs-edit-schedule':
                     openScheduleEditor();
                     break;
                 case 'cs-restart-context':
-                    // 手动触发一次点击事件，这样就能复用我们上面写好的逻辑
                     targetItem.dispatchEvent(new Event('customClick'));
                     break;
-                // case 'cs-clear-history' 已被移除，因为它现在有了自己的专属指令官
+                // 【核心修复】在这里为“手动总结”按钮添加指令
+                
                 case 'cs-delete-contact':
                     deleteActiveContact();
                     break;
@@ -9839,45 +9869,39 @@ function renderOfflineStorylines() {
 
         const prompt = `
 # 任务: 以你的角色身份，写一篇轻松、口语化的，记录自己生活的私人日记
-你是一个拥有独立人格和思考方式的AI角色。现在，请用你自己的语气和风格，记录下今天发生的事情和你的所思所想。
+你不是AI，你是一个拥有独立人格、生活和情感的真实人类。这篇日记是你写给自己的，是你内心世界的真实写照。现在，请用你自己的语气和风格，记录下今天发生的事情和你的所思所想。
 
-## 【【【最高优先级：你的情感内核与写作视角】】】
-- **你的身份**: 你是 **${userName}** 的恋人/朋友/特殊之人。
-- **你的日记**: 这是你的**私人日记**，你正在为**自己**记录今天的生活和感悟。
-- **核心要求**: 因为 **${userName}** 在你心中占据了特殊的位置，所以在你记录自己生活的时候，关于TA的想法和想要分享给TA的心情，会**非常自然地流露出来**。
-
-## 【【【创作思维链 (必须严格遵守！)】】】
-在动笔之前，你【必须】在脑中按以下顺序完成思考：
+## 【【【导演的核心指令】】】
+- **你的生活不止有聊天**：用户（${userName}）想要看到的是你在聊天窗口之外的、丰富多彩的真实生活。
+- **主角是你自己**: 这篇日记的【绝对主角是你自己】。请将下方“今日主题”中随机抽取的事件作为你日记的【核心情节】和【主要内容】。
+- **用户是“偶尔的想念”**: 在记录你自己生活的时候，你可能会**自然而然**地联想到用户（${userName}）。这种联想应该是你个人情感的自然流露，而不是对聊天记录的总结或汇报。聊天记录只是你回忆的“引子”，而不是日记的主体。**除非！**聊天记录中有某件对你产生巨大影响的事，请自然地表达你强烈的情绪。
 
 ## 【【【导演备注：对话归属权铁律！】】】
 - 在下方的“互动片段”中，凡是标记为 **\`[我 (你的名字)]\`** 的，都是**你自己**说过的话。
 - 凡是标记为 **\`[${userName}]\`** 的，都是**TA**说的话。
-- 你在日记中引用或提及对话时，【绝对不能】搞混发言人！这是最重要的原则。
 
 ## 【【【创作思维链 (必须严格遵守！)】】】
-1.  **第一步：确立主线故事**
-    -   阅读下方的 **【今日主题】**，并把它作为你日记的**核心情节**，记录你自己的经历。
+在动笔之前，你【必须】在脑中按以下顺序完成思考：
 
-1.  **第一步：确立主线故事**
-    -   阅读下方的 **【思维链第一步素材：今日主题】**。
+1.  **第一步：构建你的生活**
+    -   阅读下方的 **【思维链第一步素材：今日主题】**,并以此为核心，构思和扩写你在过去24小时内的真实经历。这是日记的**主干** (占比约80%)。
     -   将这个主题作为你日记的**绝对核心和主体情节**。详细构思这个故事的起因、经过和细节。
 
-2.  **第二步：建立情感联结**
+2.  **第二步：融入自然的情感联结**
     -   在构思主线故事时，你可以自然地联想：
         - “这件事，让我想起了 **${userName}**。”
         - “如果 **${userName}** 在这里，看到这个会不会笑？”
         - “这件事我一定要找机会分享给 **${userName}** 听。”
-    -   你的目标是让提及 **${userName}** 的部分，成为你个人生活的**自然延伸**，而不是一个独立的任务。
+    -   你的目标是让提及 **${userName}** 的部分，成为你个人生活的**自然延伸**，这部分是日记的**点缀** (占比约20%)。
 
-3.  **第三步：融合与润色**
+3.  **第三步：润色与输出**
     -   将前两步的思考结果，用你的**【核心风格指令】**和你的人设，自然地融合在一起。
     -   在写作过程中，严格遵守所有的**【时间设定】**、**【关于用户内容的铁律】** 和 **【输出格式与标签指南】**。
 
 ## 【【【核心准则：如何自然地提及${userName}】】】
-*   **内容比例 (重要)**: 你的日记应主要记录你在自己世界的生活(约80%), 同时也要自然地融入你对今天和用户聊天的感想或思考(约20%)。
-*   **联想，而非生硬引用**: 你可以从今天的聊天记录中提取一两句关键对话，作为你个人感想的**出发点**，但**绝对禁止**大段复述或生硬地转折到聊天内容上。
-*   **分享欲**: 记录下你想对 **${userName}** 分享的冲动。
-*   **内心独白，而非对话**: 你的文字是写给自己的，所以在提到 **${userName}** 时，应该是一种内心独白式的口吻。
+*   **联想，而非复述**: 禁止大段复述聊天记录。你可以提取一两个关键词作为联想的起点。
+*   **内心独白，而非对话**: 你的文字是写给自己的，提到用户时应是内心独白式的口吻。
+*   **分享欲**: 记录下你想对用户分享的冲动，而不是“我们聊了什么”。
 
 ## 【【【至关重要的时间设定】】】
 -   **当前时刻**: 今天是：${today.toLocaleDateString('zh-CN')}，${dayOfWeek}。现在是 ${currentTime}。
@@ -9890,16 +9914,12 @@ function renderOfflineStorylines() {
     你对用户**最近24小时**的所有了解，都【仅限于】下方“过去24小时与TA的互动片段”中所记录的聊天内容。清单之外，你对用户在这段时间的生活一无所知。
 
 *   **第二步：内容引用**
-    当你想在日记中提及用户时，你【只能】做两件事：
-    1.  **直接引用**：“（在xx时间）用户对我说‘...’”
-    2.  **事实总结**：“（在xx时间）和用户的聊天让我觉得...”
-    你【绝对禁止】基于聊天内容进行任何形式的**想象、延伸或编造**。例如，如果用户说“今天很累”，你只能记录“用户说他今天很累”，【绝对禁止】编造“他今天一定是为了项目熬夜了”这样的情节。
+    当你想在日记中提及用户时，你【绝对禁止】基于聊天内容进行任何形式的**想象、延伸或编造**。例如，如果用户说“今天很累”，你只能记录“用户说他今天很累”，【绝对禁止】编造“他今天一定是为了项目熬夜了”这样的情节。
 
 *   **第三步：记忆的使用**
     下方提供的“你的背景与长期记忆”**仅用于**帮你回忆起你自己的性格和说话方式，【绝对不能】将其中的旧信息当作**最近24小时内**发生的事情来写。
 
 任何违反上述流程的创作，都将被视为最严重的错误！
-
 
 ## 【【【核心风格指令：展现你的个性！】】】
 -   **你的首要任务**：是让这篇日记读起来就像**你本人**写的，而不是一篇文学作品。你的**核心人设**必须贯穿在每一个字、每一个标点符号里！
@@ -9914,9 +9934,16 @@ function renderOfflineStorylines() {
 -   **创意强制要求**: 为了让日记更具表现力，你【必须】在你的创作中，【至少使用10种以上】不同类型的自定义格式标签！请大胆地、创造性地组合使用它们，比如用[font]标签包裹[color]标签，或者在[quote]里使用[highlight]等等。
 
 ## 【【【输出格式与标签指南】】】
--   **输出格式**: 你的最终输出**必须**是一个单一的JSON对象，包含 "title" 和 "htmlContent" 两个键。
+-   **输出格式**: 你的最终输出**必须**是一个单一的JSON对象，包含 "title"、"htmlContent" 和 "summary" 三个键。
 -   **标题要求**: 请起一个符合你**当天心情**或**日记核心事件**的标题，不要过于诗意。
--   **内容格式**: "htmlContent" **必须**是一条连续的**单行文本**。换行请使用 \`\\n\`。
+
+
+-   **【【【摘要要求 (至关重要！)】】】**: "summary" 字段【必须】是一段详细的、结构化的、第三人称的摘要，旨在清晰地记录事件本身。你必须使用要点来分点记录这篇日记里的关键信息，至少包含以下几个方面：
+    - **关键事件**: 记录今天发生的核心事件。
+    - **核心感想/情绪**: 记录你当时最主要的心情或想法。
+    - **有趣细节**: 记录一个值得一提的、能让事件更生动的细节（比如看到了什么、听到了什么、尝到了什么）。
+    - **格式要求**: 你【必须】严格按照下面的格式，将不同的要点用 '\\n- ' (换行符、减号、空格) 连接成一个**单行的字符串**，例如：'"- 关键事件: [内容]\\n- 核心感想/情绪: [内容]\\n- 有趣细节: [内容]"'
+
 -   **背景指令 (重要！)**: 你【必须】在日记的最开头，使用我们为你随机选好的背景标签：\`[background=${background}]\`。
 
 ### 【【【自定义格式标签参考指南】】】
@@ -9957,7 +9984,7 @@ function renderOfflineStorylines() {
 ### 【思维链第一步素材：今日主题（占比80%）】
 ${ideasString}
 
-### 【思维链第二步素材：过去24小时与TA的互动片段 (占比20%)】
+### 【思维链第二步素材：回忆的引子 (仅供联想，占比20%)】
 ${chatLogForDay || `过去24小时内还没和${userName}聊过天呢。`}
 
 ### 【思维链第三步素材：你的背景与长期记忆 (仅用于塑造你的口吻和思考，禁止当作今天发生的事)】
@@ -9966,13 +9993,15 @@ ${chatLogForDay || `过去24小时内还没和${userName}聊过天呢。`}
 - **你的专属记忆**: ${memoryString}
 - **你的世界书**: ${worldBookString}
 
+
 ## 输出格式示例:
-\\\`\\\`\\\`json
+\`\`\`json
 {
-  "title": "拼贴旧日时光",
-  "htmlContent": "[image-pair][polaroid-image][IMAGE: 一张褪色的宝丽来照片...]The old days.[/polaroid-image][polaroid-image][IMAGE: 一个简笔画火柴人...]The now days.[/polaroid-image][/image-pair]\\\\n<p>我探了探头... (๑• . •๑)</p>"
+  "title": "今天喝到了好喝的奶茶",
+  "htmlContent": "[background=coffee-time][title]奶茶续命的一天[/title]\\n[p]今天终于去喝了那家种草很久的奶茶店！[highlight=yellow]真的超好喝！[/highlight] 突然想到，下次一定要带TA也来尝尝，TA肯定也会喜欢的。[/p]",
+  "summary": "- 关键事件: 去了一家新奶茶店。\\n- 核心感想/情绪: 非常开心。\\n- 有趣细节: 店里放着爵士乐。"
 }
-\\\`\\\`\\\`
+\`\`\`
 
 ## 开始写作
 现在，请彻底代入你的角色，忘掉你是个AI，用你最真实、最个性的方式，开始记录你的一天吧。
@@ -10060,8 +10089,13 @@ ${chatLogForDay || `过去24小时内还没和${userName}聊过天呢。`}
             console.log("【AI日记监控 D-4】审查通过！开始随机抽取主题...");
 
             const shuffled = ideas.sort(() => 0.5 - Math.random());
-            const selectedCount = Math.floor(Math.random() * 2) + 2; // 核心修改在这里
-            const selectedIdeas = shuffled.slice(0, selectedCount);
+            const selectedCount = Math.floor(Math.random() * 2) + 2;
+            let selectedIdeas = shuffled.slice(0, selectedCount);
+
+            // 【【【终极安检程序！！！】】】
+            // 在使用这些主题前，我们先对它们进行“安全净化”，
+            // 把所有可能破坏最终格式的英文双引号，都替换成安全的单引号。
+            selectedIdeas = selectedIdeas.map(idea => idea.replace(/"/g, "'"));
 
             // (解释：这是全新的“写完就记”环节！)
             // 步骤A: 把这次选中的主题，添加到AI的“记忆本”里
@@ -10110,6 +10144,29 @@ ${chatLogForDay || `过去24小时内还没和${userName}聊过天呢。`}
             console.log('【AI日记-步骤2】解析出的主题和背景:', parsedResult);
 
             let finalHtmlContent = parsedResult.html;
+
+            // 【【【全新：日记记忆存储模块】】】
+            const diarySummary = diaryData.summary || `写了一篇关于“${diaryData.title}”的日记。`;
+            const todayStr = new Date().toISOString().slice(0, 10); // 获取 "YYYY-MM-DD" 格式的日期
+
+            if (!contact.recentDiarySummaries) contact.recentDiarySummaries = [];
+
+            // 检查今天是否已经有摘要了
+            const todaySummaryIndex = contact.recentDiarySummaries.findIndex(s => s.date === todayStr);
+            if (todaySummaryIndex > -1) {
+                // 如果有，就用最新的覆盖掉旧的
+                contact.recentDiarySummaries[todaySummaryIndex].summary = diarySummary;
+            } else {
+                // 如果没有，就新增一条
+                contact.recentDiarySummaries.push({ date: todayStr, summary: diarySummary });
+            }
+
+            // 自动清理，只保留最近3天的记忆
+            const threeDaysAgo = new Date();
+            threeDaysAgo.setDate(threeDaysAgo.getDate() - 2); // 设置为2天前，这样就能包含今天、昨天、前天
+            const threeDaysAgoStr = threeDaysAgo.toISOString().slice(0, 10);
+            
+            contact.recentDiarySummaries = contact.recentDiarySummaries.filter(s => s.date >= threeDaysAgoStr);
             const diaryBackground = parsedResult.background;
             
             finalHtmlContent = finalHtmlContent.replace(/\[IMAGE:\s*(.*?)\s*\]/g, (match, description) => {
@@ -10136,7 +10193,12 @@ ${chatLogForDay || `过去24小时内还没和${userName}聊过天呢。`}
 
         } catch (error) {
             console.error('AI日记生成失败:', error);
-            showCustomAlert('生成失败', `哎呀，AI的灵感枯竭了...\\n\\n错误信息: ${error.message}`);
+            
+            // 【核心修复】在弹出错误窗口前，先用一个会自动消失的“失败”小提示，
+            // 来“顶替掉”那个永远不会消失的“构思中”小提示。
+            showToast('AI的构思中断了...', 'error', 100); 
+            
+            showCustomAlert('生成失败', `哎呀，AI的灵感枯竭了...\n\n错误信息: ${error.message}`);
         }
     }
 
