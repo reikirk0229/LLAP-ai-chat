@@ -217,10 +217,15 @@ var _hmt = _hmt || [];
                     <button id="back-to-list-button" class="header-button back-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
                     <div id="chat-header-info">
                         <span id="chat-ai-name" class="clickable">AI 伙伴</span>
-                        <div id="chat-ai-status-line">
+                        <div id="chat-ai-status-line" class="clickable"> <!-- 【核心修正】让整行状态都可以点击 -->
                             <span class="online-indicator"></span>
                             <span id="chat-ai-status">在线</span>
                             <span id="chat-ai-activity-status"></span>
+                        </div>
+                        <!-- 【【【全新植入：状态管理气泡】】】 -->
+                        <div id="status-context-menu" class="status-bubble hidden">
+                            <button id="status-calibrate-btn">校准</button>
+                            <button id="status-reset-btn">重置</button>
                         </div>
                     </div>
                     <button id="chat-settings-button" class="header-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button>
@@ -297,7 +302,11 @@ var _hmt = _hmt || [];
                             <div class="function-icon"><?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 6C10 4.89543 10.8954 4 12 4H40C41.1046 4 42 4.89543 42 6V42C42 43.1046 41.1046 44 40 44H12C10.8954 44 10 43.1046 10 42V6Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M34 6V42" stroke="#FFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 14H14" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 24H14" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 34H14" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 4H39" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 44H39" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
                             <span class="function-label">日记本</span>
                         </div>
-                        <!-- 【【【AI日记系统 V1.0：新增“提醒AI写日记”功能】】】 -->
+                        <!-- ▼▼▼ 【【【全新植入：“小剧场”功能按钮 (精准匹配版)】】】 ▼▼▼ -->
+                        <div class="function-item" id="fn-little-theater">
+                            <div class="function-icon"><?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M38.5121 9.5362C34.8466 6.10249 29.9188 4 24.5 4C13.1782 4 4 13.1782 4 24.5C4 35.8218 13.1782 45 24.5 45C30.1148 45 35.2024 42.7427 38.9048 39.0861L24 24L38.5121 9.5362Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M40 28C42.2091 28 44 26.2091 44 24C44 21.7909 42.2091 20 40 20C37.7909 20 36 21.7909 36 24C36 26.2091 37.7909 28 40 28Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M17 13V21" stroke="#FFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 17H21" stroke="#FFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                            <span class="function-label">小剧场</span>
+                        </div>
                         
                     </div>
                 </div>
@@ -484,12 +493,12 @@ var _hmt = _hmt || [];
                 <!-- ▲▲▲▲▲ 线下模式结束 ▲▲▲▲▲ -->
 
                 <div class="settings-group">
-                    <div class="settings-item"><span>导出/导入聊天记录</span><span class="arrow">&gt;</span></div>
-                    <div class="settings-item" id="cs-restart-context">
-                        <span>刷新AI记忆</span>
-                        <span class="arrow">&gt;</span>
-                    </div>
-                </div>
+    <div class="settings-item" id="cs-character-data-btn"><span>角色数据迁移</span><span class="arrow">&gt;</span></div>
+    <div class="settings-item" id="cs-restart-context">
+        <span>刷新AI记忆</span>
+        <span class="arrow">&gt;</span>
+    </div>
+</div>
                 <div class="settings-group">
                     <div class="settings-item"><span>设置AI动态频率</span><span class="arrow">&gt;</span></div>
                 </div>
@@ -800,9 +809,11 @@ var _hmt = _hmt || [];
 
         <!-- ▼▼▼ 【【【终极修复 V3.0：全屏日记查看器】】】 ▼▼▼ -->
     <div id="diary-viewer-modal" class="modal-overlay hidden">
-        <div class="modal-content modal-fullscreen">
-                        <div class="modal-header">
-                <!-- (解释：我们把标题和编辑按钮的“分组”恢复回来) -->
+        <!-- 【核心改造】我们不再使用 .modal-content 和 .modal-body 这两个旧“房间” -->
+        <!-- 我们直接在这里盖一栋全新的“别墅”，它自己负责所有事情 -->
+        <div class="diary-viewer-container">
+            <!-- 1. 把“版头”作为别墅的“一楼” -->
+            <div class="modal-header">
                 <div class="header-title-group">
                     <h3 id="diary-viewer-author"></h3>
                     <button id="edit-diary-fab" class="header-button-inline">
@@ -811,10 +822,9 @@ var _hmt = _hmt || [];
                 </div>
                 <button id="close-diary-viewer-btn" class="header-button close-button">&times;</button>
             </div>
-            <div class="modal-body">
-                <div id="diary-viewer-content" class="diary-viewer-area">
-                    <!-- 日记内容会显示在这里 -->
-                </div>
+            <!-- 2. 把“日记内容”作为别墅的“二楼” -->
+            <div id="diary-viewer-content" class="diary-viewer-area">
+                <!-- 日记内容会显示在这里 -->
             </div>
         </div>
     </div>
@@ -1512,9 +1522,63 @@ var _hmt = _hmt || [];
         </div>
     </div>
 </div>
+<!-- ▼▼▼ 【【【全新植入：小剧场列表弹窗】】】 ▼▼▼ -->
+    <div id="little-theater-list-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-height: 70vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h3>小剧场列表</h3>
+                <button id="close-little-theater-list-btn" class="close-button">&times;</button>
+            </div>
+            <div class="modal-body" id="little-theater-list-container" style="flex-grow: 1; overflow-y: auto; padding: 10px;">
+                <!-- 关键词按钮将由JS动态生成到这里 -->
+            </div>
+
+        </div>
+    </div>
+    <!-- ▲▲▲▲▲ 小剧场列表弹窗结束 ▲▲▲▲▲ -->
+
+    <!-- ▼▼▼ 【【【全新植入：小剧场编辑器弹窗】】】 ▼▼▼ -->
+    <div id="little-theater-editor-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-height: 85vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h3 id="little-theater-editor-title">编辑小剧场</h3>
+                <!-- ▼▼▼ 我们用一个全新的“展示柜”来装这些按钮 ▼▼▼ -->
+                <div class="header-actions">
+                    <button id="delete-little-theater-btn" class="header-button" title="删除">
+                        <?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 10V44H39V10H9Z" fill="none" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M20 20V33" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M28 20V33" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 10H44" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 10L19.289 4H28.7771L32 10H16Z" fill="none" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/></svg>
+                    </button>
+                    <button id="cancel-little-theater-btn" class="header-button" title="取消">
+                        <?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 8L40 40" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 40L40 8" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <button id="save-little-theater-btn" class="header-button" title="保存">
+                        <?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 9C6 7.34315 7.34315 6 9 6H34.2814L42 13.2065V39C42 40.6569 40.6569 42 39 42H9C7.34315 42 6 40.6569 6 39V9Z" fill="none" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path fill-rule="evenodd" clip-rule="evenodd" d="M24.0083 6L24 13.3846C24 13.7245 23.5523 14 23 14H15C14.4477 14 14 13.7245 14 13.3846L14 6" fill="none"/><path d="M24.0083 6L24 13.3846C24 13.7245 23.5523 14 23 14H15C14.4477 14 14 13.7245 14 13.3846L14 6H24.0083Z" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M9 6H34.2814" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 26H34" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 34H24.0083" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-body" style="flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
+                <div class="input-group">
+                    <label for="little-theater-keyword-input">触发关键词</label>
+                    <input type="text" id="little-theater-keyword-input" placeholder="例如：下雨了">
+                </div>
+                <div class="input-group">
+                    <label for="little-theater-prompt-input">内容提示词 (选填)</label>
+                    <input type="text" id="little-theater-prompt-input" placeholder="例如：写一段悲伤的独白">
+                </div>
+                <div class="input-group" style="flex-grow: 1; display: flex; flex-direction: column;">
+                    <label for="little-theater-html-textarea">小剧场HTML代码</label>
+                    <textarea id="little-theater-html-textarea" placeholder="在此处粘贴你的HTML代码..." style="flex-grow: 1; min-height: 200px;"></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- ▲▲▲▲▲ 小剧场编辑器弹窗结束 ▲▲▲▲▲ -->
+</div>
 <!-- ▲▲▲▲▲ 弹窗添加完毕 ▲▲▲▲▲ -->
-
-
+<!-- ▼▼▼ 【【【终极修复：为HTML小剧场开辟的专属“中央广场”】】】 ▼▼▼ -->
+<div id="html-widget-modal" class="modal-overlay hidden">
+    <!-- AI生成的、需要全屏显示的HTML内容，将会被动态地加载到这里 -->
+</div>
+<!-- ▲▲▲▲▲ “中央广场”开辟完毕 ▲▲▲▲▲ -->
 
 <!-- ▼▼▼ 【【【全新：AI主动消息顶部通知弹窗】】】 ▼▼▼ -->
 <div id="proactive-notification-popup" class="notification-popup">
