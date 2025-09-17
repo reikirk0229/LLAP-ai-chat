@@ -990,24 +990,31 @@ input:checked + .slider:before {
     z-index: 1000;
 }
 .modal-content {
-    /* 【核心】把背景色从纯白改为带有70%不透明度的白色 */
     background: var(--glass-bg);
-    /* 【核心】添加背景模糊滤镜 */
     backdrop-filter: blur(25px);
     -webkit-backdrop-filter: blur(25px);
-    
-    /* (可选) 增加一个微妙的“玻璃”边框，让质感更好 */
     border: 1px solid var(--glass-border);
-    box-shadow: var(--glass-shadow);
+    padding: 20px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 320px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.25);
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh; /* 设置一个“天花板”，防止弹窗过高 */
+}
 
-    /* -- 以下是你原来的样式，保持不变 -- */
-    padding: 20px; 
-    border-radius: 8px; 
-    width: 90%; 
-    max-width: 320px; 
-    box-shadow: 0 5px 20px rgba(0,0,0,0.25); 
-    display: flex; 
-    flex-direction: column; 
+/* --- 【【【全新：为全屏日记查看器“开特例”】】】 --- */
+.modal-content.modal-fullscreen {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+    background-color: #fff; /* 给一个纯白底色，防止透明 */
 }
 /* --- 【【【真正解决问题的终极修复代码】】】 --- */
 /* 这段代码的作用是：专门针对日记窗口的“外框”，命令它放弃居中对齐的特性 */
@@ -1832,9 +1839,10 @@ input:checked + .slider:before {
     border: 2px solid #ccc;
     border-radius: 4px;
     
-    /* 关键：让它在flex容器中能完美对齐 */
+    /* 【【【魔法就在这里！！！】】】 */
+    flex-shrink: 0; /* 命令它：绝对不许收缩！ */
+
     position: relative; 
-    flex-shrink: 0; /* 防止被压缩 */
     margin-right: 12px; /* 与文字的间距 */
     cursor: pointer;
 }
@@ -3218,15 +3226,13 @@ input:checked + .slider:before {
     max-height: 85vh; /* 设置一个“天花板”，弹窗最大高度为屏幕高度的85% */
 }
 
-/* 步骤2: 告诉“身体”部分（内容区），你是可以伸缩和滚动的 */
 .modal-body {
-    /* 【核心改造】我们把这个空房间的所有布局指令都删掉，让它自然收缩到0高度 */
     overflow-y: auto;
+    flex-grow: 1;
+    min-height: 0;
 }
-/* 步骤3: 确保“头部”和“尾部”高度固定，不被挤压 */
-.modal-header, .modal-footer-split {
-    flex-shrink: 0; /* 禁止它们收缩 */
-}
+
+
 /* --- 【全新】心声Emoji气泡专属样式 --- */
 
 /* 1. “包装盒”样式：负责占位和提供定位基准 */
@@ -3362,7 +3368,7 @@ input:checked + .slider:before {
 .diary-content {
     line-height: 1.8;
     font-size: 15px;
-    color: var(--text-dark);
+    color: inherit;
     word-break: break-word;
 }
 .diary-content img {
@@ -3730,11 +3736,39 @@ input:checked + .slider:before {
 }
 .header-button-inline:hover { color: #333; }
 .header-button-inline svg { width: 20px; height: 20px; }
-.modal-header .close-button {
-    width: 44px; height: 44px; background: none; border: none;
-    cursor: pointer; color: #888; display: flex;
-    align-items: center; justify-content: center;
-    font-size: 26px; font-weight: 400; padding: 0;
+.close-button { 
+    /* 步骤2：让关闭按钮“自由悬浮”，脱离父容器的束缚 */
+    position: absolute; 
+
+    /* 【【【这就是您要的遥控器！！！】】】 */
+    top: 5px;    /* 这是按钮距离【弹窗顶部】的距离 */
+    right: 15px;  /* 这是按钮距离【弹窗右侧】的距离 */
+
+    /* --- 以下是按钮本身的美化样式，保持不变 --- */
+    background: none; 
+    border: none; 
+    font-size: 24px; 
+    cursor: pointer; 
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 2px; /* 这一行是我额外加的，为了让叉号在圆圈里更居中一点 */
+}
+
+.close-button:hover {
+    background: rgba(80, 151, 205, 0.1);
+    color: var(--qq-blue);
+    transform: scale(1.1);
+}
+
+.modal-header .close-button:hover {
+    background: rgba(0, 0, 0, 0.1); /* 鼠标悬停时加深背景 */
+    transform: scale(1.1); /* 轻微放大 */
 }
 
 
@@ -5284,6 +5318,19 @@ body.dark-theme .weather-icon-container svg {
     transition: background 0.6s ease;
     position: relative;
     box-sizing: border-box;
+    /* 核心！命令它本身必须是透明的，这样才能透出后面的墙！ */
+    background: transparent;
+}
+.diary-viewer-area::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -1;
+    background: inherit;
+    transition: background 0.6s ease;
 }
 
 /* --- 主题底色定义 --- */
@@ -5366,10 +5413,13 @@ body.dark-theme .weather-icon-container svg {
     background: radial-gradient(circle at 30% 40%, rgba(215, 189, 155, 0.3), transparent 50%), radial-gradient(circle at 70% 60%, rgba(198, 164, 126, 0.2), transparent 60%), linear-gradient(135deg, #f7f3ed 0%, #ede7dc 50%, #e6ddd0 100%);
 }
 
-/* 配方 #12: 海洋深蓝 */
+/* 配方 #12: 海洋深蓝 (饱和度微调版) */
 .diary-viewer-area.bg-ocean-depth {
-    --text-primary: #0d47a1; --text-heading: #0a3d91; --text-accent: #1565c0; --text-secondary: #1976d2; --text-quote: #1e88e5;
-    background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 35%, #90caf9 65%, #64b5f6 100%), radial-gradient(ellipse at center, rgba(255, 255, 255, 0.1), transparent 70%);
+    /* 【核心】在原版鲜艳蓝色的基础上，微调了文字颜色，让它更柔和 */
+    --text-primary: #1e6091; --text-heading: #1a537d; --text-accent: #1e7cb7; --text-secondary: #3b8ac1; --text-quote: #2a6f97;
+    --text-shadow-color: rgba(0, 0, 0, 0.15);
+    /* 【核心】为你重新调配的“清澈感”蓝色渐变，比原版淡雅，比雾霾蓝鲜艳 */
+    background: linear-gradient(180deg, #e9f5ff 0%, #d4e9ff 50%, #abcfff 100%);
 }
 
 /* 配方 #13: 樱花飘落 */
@@ -5424,12 +5474,20 @@ body.dark-theme .weather-icon-container svg {
 }
 
 /* 【【【终极修复补丁 V2.0！！！】】】 */
-/* 核心修正：我们把指令的“地址”从 .diary-viewer-area 改为了更准确的 .modal-content */
-.diary-viewer-area[class*="bg-"] .diary-content { /* (解释：这里的地址已修正！现在指令能准确找到需要变透明的“毛玻璃层”) */
-    background-color: transparent; /* 【核心修正】让主题框架变透明，透出后面的背景！ */
-    border: 1px solid rgba(255, 255, 255, 0.18); /* 边框也变得更透明 */
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1); /* 阴影也可以微调一下 */
-    /* 关键：我们不再删除 backdrop-filter，让毛玻璃效果得以保留！ */
+.diary-viewer-area[class*="bg-"] .diary-content {
+    /* 1. 恢复毛玻璃效果，并让玻璃本身带一点点几乎看不见的白色，质感更好 */
+    backdrop-filter: blur(4px) saturate(150%);
+    -webkit-backdrop-filter: blur(4px) saturate(150%);
+    background-color: rgba(255, 255, 255, 0.05);
+
+    /* 2. 加上圆角和阴影，让它看起来像一个精致的卡片 */
+    border-radius: 12px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+
+    /* 3. 增加一点内外边距，让文字不会贴着玻璃边缘 */
+    padding: 20px 25px;
+    margin: 15px;
 }
 .theme-terminal-dark .diary-content {
     background-color: rgba(0, 0, 0, 0.2);
@@ -5611,11 +5669,13 @@ body.dark-theme .weather-icon-container svg {
     background: radial-gradient(circle at 30% 40%, rgba(215, 189, 155, 0.3), transparent 50%), radial-gradient(circle at 70% 60%, rgba(198, 164, 126, 0.2), transparent 60%), linear-gradient(135deg, #f7f3ed 0%, #ede7dc 50%, #e6ddd0 100%);
 }
 
-/* 配方 #12: 海洋深蓝 (浅色) */
+/* 配方 #12: 海洋深蓝 (饱和度微调版) */
 .diary-viewer-area.bg-ocean-depth {
-    --text-primary: #0d47a1; --text-heading: #0a3d91; --text-accent: #1565c0; --text-secondary: #1976d2; --text-quote: #1e88e5;
-    --text-shadow-color: rgba(0, 0, 0, 0.2);
-    background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 35%, #90caf9 65%, #64b5f6 100%), radial-gradient(ellipse at center, rgba(255, 255, 255, 0.1), transparent 70%);
+    /* 【核心】在原版鲜艳蓝色的基础上，微调了文字颜色，让它更柔和 */
+    --text-primary: #1e6091; --text-heading: #1a537d; --text-accent: #1e7cb7; --text-secondary: #3b8ac1; --text-quote: #2a6f97;
+    --text-shadow-color: rgba(0, 0, 0, 0.15);
+    /* 【核心】为你重新调配的“清澈感”蓝色渐变，比原版淡雅，比雾霾蓝鲜艳 */
+    background: linear-gradient(180deg, #e9f5ff 0%, #d4e9ff 50%, #abcfff 100%);
 }
 
 /* 配方 #13: 樱花飘落 (浅色) */
@@ -5655,4 +5715,307 @@ body.dark-theme .weather-icon-container svg {
 #custom-confirm-modal {
     align-items: center; /* 魔法！命令它垂直居中！ */
     padding-top: 0;      /* (推荐) 同时把顶部的安全距离也去掉，实现完美居中 */
+}
+
+/*
+============================================================
+ V-UI-FIX: AI日记列表精装修补丁
+============================================================
+*/
+
+/* 1. 【核心】让日记卡片成为一个“定位锚点”，为删除按钮做准备 */
+.diary-entry-card {
+    position: relative;
+}
+
+/* 2. 【核心】将“版头”改造为“智能容器” */
+.diary-entry-card .diary-header {
+    display: flex;                 /* 开启Flexbox布局 */
+    justify-content: space-between; /* 命令子元素两端对齐 */
+    align-items: flex-start;       /* 顶部对齐，防止标题过长时日期也下移 */
+    gap: 15px;                     /* 在标题和日期之间增加安全间距 */
+}
+
+/* 3. 【核心】为日期设置“铁律”，绝不换行 */
+.diary-entry-card .diary-meta {
+    flex-shrink: 0;      /* 禁止收缩！这是最重要的指令 */
+    white-space: nowrap; /* 强制不换行，作为双重保险 */
+    text-align: right;   /* 确保日期本身是右对齐的 */
+}
+
+/* 4. 【核心】为摘要文本“拨乱反正”，强制左对齐 */
+.diary-entry-card .diary-preview-text {
+    text-align: left; /* 无论父级如何，我必须左对齐 */
+    margin: 0; /* 移除 p 标签可能自带的上下边距 */
+    
+    /* (可选) 增加一个渐变遮罩，让结尾更柔和 */
+    max-height: 90px;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+    mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+}
+
+/* 5. 【核心】“常驻”删除按钮的样式 */
+.diary-delete-btn {
+    position: absolute;
+    top: 12px; /* <-- 就是这个数字！你可以自己微调它 */
+    right: 15px;
+    width: 32px;
+    height: 32px;
+    background-color: transparent;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.5;
+    transition: all 0.2s ease;
+}
+
+/* 鼠标悬停在按钮本身上时，让它更清晰 */
+.diary-delete-btn:hover {
+    opacity: 1; /* 完全不透明 */
+    background-color: rgba(0,0,0,0.08); /* 给一个淡淡的背景反馈 */
+}
+
+.diary-delete-btn:hover {
+    background-color: rgba(229, 57, 53, 0.2); /* 悬停时显示淡淡的红色 */
+}
+
+.diary-delete-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke: var(--text-secondary);
+}
+
+.diary-delete-btn:hover svg {
+    stroke: #e53935; /* 悬停时图标变红 */
+}
+/*
+================================================================
+ V-ULTIMATE-REWRITE-FINAL: 日记查看器终极重写补丁
+================================================================
+*/
+
+/* 1. 【核心】命令“别墅”本身铺满整个屏幕，并且自己负责滚动 */
+.diary-viewer-container {
+    position: absolute; /* 让它脱离 overlay 的居中控制 */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #fff; /* 【【【终极修复！！！】】】我们把日记本的底色恢复为不透明的白色！ */
+    overflow-y: auto; /* 魔法！命令整栋别墅自己滚动 */
+    -webkit-overflow-scrolling: touch; /* 适配移动端流畅滚动 */
+    z-index: 1002; /* 确保它在半透明遮罩之上 */
+}
+
+/* 2. 【核心】当我们打开日记时，让后面的黑色半透明遮罩也变透明，防止颜色叠加 */
+#diary-viewer-modal:not(.hidden) {
+    background-color: transparent !important;
+}
+
+#diary-viewer-modal .modal-header {
+    position: sticky; /* 开启粘性定位 */
+    top: 0;           /* 当滚动到顶部时就粘住 */
+    background: none !important; /* 【【【终极指令！！！】】】背景彻底消失，不留任何痕迹！ */
+    backdrop-filter: none !important; /* 确保模糊效果也一起消失 */
+    -webkit-backdrop-filter: none !important;
+    z-index: 10;      /* 确保它在最上层 */
+    
+    /* 以下是美化样式 */
+    padding: 15px;
+    padding-top: calc(15px + env(safe-area-inset-top)); /* 适配 iPhone 刘海屏 */
+    border-bottom: none; /* 【核心】既然版头都透明了，这条分割线也就不需要了 */
+}
+
+/* 【【【终极修复：在这里为关闭按钮下达绝对指令！】】】 */
+#diary-viewer-modal .modal-header .close-button {
+    background: transparent !important; /* 指令1：背景必须透明！ */
+    border: none !important;            /* 指令2：不能有边框！ */
+    box-shadow: none !important;        /* 指令3：不能有阴影！ */
+    width: 44px;  /* 扩大可点击区域 */
+    height: 44px; /* 扩大可点击区域 */
+}
+
+#diary-viewer-modal .modal-header .close-button:hover {
+    background: rgba(0,0,0,0.08) !important; /* 指令4：鼠标放上去时，也只能有一个淡淡的背景 */
+}
+    
+
+
+/* 4. 【核心】为“日记内容区”设置舒适的阅读边距 */
+.diary-viewer-container .diary-viewer-area {
+    padding: 20px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom)); /* 适配 iPhone 底部安全区 */
+}
+/* --- 【全新】日记查看器标题美化 --- */
+#diary-viewer-author {
+    font-family: 'Noto Serif SC', serif; /* 使用一个优雅的衬线字体 */
+    font-weight: 700; /* 加粗 */
+    font-size: 18px; /* 稍微放大一点 */
+    color: #333; /* 确保文字是深色 */
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5); /* 【关键】加上一层微弱的白色阴影，确保在任何深色背景下都清晰可读 */
+}
+/*
+================================================================
+ V-ULTIMATE-FIX-FINAL: 日记关闭按钮专属“隐身衣” (精准制导版)
+================================================================
+*/
+/* 核心：我们在选择器里，把 .close-button 换成了更精确的 ID 选择器 */
+#diary-viewer-modal #close-diary-viewer-btn {
+    background: transparent !important;
+    box-shadow: none !important;
+    position: absolute;
+    top: calc(10px + env(safe-area-inset-top)); /* 适配刘海屏 */
+    right: 10px;
+}
+
+#diary-viewer-modal #close-diary-viewer-btn:hover {
+    background: rgba(0,0,0,0.1) !important; /* 悬停时也只显示一个极淡的背景 */
+}
+/*
+============================================================
+ V-STATUS-BUBBLE: AI状态管理气泡样式
+============================================================
+*/
+/* 1. 让标题栏的信息区成为气泡的“定位锚点” */
+#chat-header-info {
+    position: relative; /* 这是让气泡相对于它定位的关键 */
+}
+
+/* 2. 气泡本身的核心样式 */
+.status-bubble {
+    position: absolute;
+    top: 100%; /* 从父元素的底部开始 */
+    left: 0;
+    margin-top: 8px; /* 与状态栏之间留出一点空隙 */
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 100;
+    display: flex; /* 让内部按钮横向排列 */
+    overflow: hidden; /* 确保内部按钮不会超出圆角 */
+    border: 1px solid #eee;
+}
+
+/* 3. 气泡内部按钮的样式 */
+.status-bubble button {
+    background: none;
+    border: none;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    transition: background-color 0.2s;
+}
+
+.status-bubble button:hover {
+    background-color: #f5f5f5;
+}
+
+/* 4. 按钮之间的分割线 */
+.status-bubble button:first-child {
+    border-right: 1px solid #eee;
+}
+/*
+================================================================
+ V-HTML-THEATER: HTML小剧场专属适配补丁 (最终通用版)
+================================================================
+*/
+
+/* 
+   这是为我们在JS里创建的那个专属容器 .message-html-container 设定的规则
+*/
+.message-html-container {
+    /* 
+       【魔法】使用负外边距，让这个容器向外扩张，
+       从而完美抵消掉父级气泡(.message)自带的内边距(padding)。
+       这会让内部的小剧场看起来像是无缝地充满了整个气泡。
+    */
+    margin: -8px -12px;
+}
+
+/* 
+   这是为小剧场本身（容器里的第一个div）设定的规则
+*/
+.message-html-container > div {
+    width: 100% !important; /* 强制宽度撑满 */
+    max-width: 100% !important;
+    border-radius: var(--radius-lg); /* 继承和气泡一样的圆角 */
+    overflow: hidden; /* 裁剪掉所有超出圆角的内容 */
+    border: none !important; /* 移除小剧场可能自带的边框 */
+}
+/* --- 全新：小剧场“添加”按钮的专属样式 (终极修复版) --- */
+
+/* 基础样式：让它看起来像个占位符 */
+.suggestion-button.add-placeholder {
+    background: transparent;                 /* 1. 背景必须是透明的 */
+    color: var(--text-secondary);            /* 2. 使用你已定义的次要文字颜色 (灰色) */
+    border: 2px dashed var(--border-color);  /* 3. 使用你已定义的边框颜色，并设为虚线 */
+    box-shadow: none;                        /* 4. 【关键】移除普通按钮自带的阴影，让它更扁平 */
+    transition: all 0.2s ease-in-out;
+}
+
+/* 鼠标悬停时的样式 */
+.suggestion-button.add-placeholder:hover {
+    background: rgba(80, 151, 205, 0.1);  /* 5. 悬停时给一个淡淡的主题色背景 */
+    color: var(--qq-blue);                   /* 6. 文字颜色变为你的主题色 */
+    border-color: var(--qq-blue);            /* 7. 虚线框颜色也变为你的主题色 */
+}
+/* --- 全新：为小剧场编辑页的顶部操作按钮，进行终极美化 (V2.0) --- */
+
+/* 1. 指挥“展示柜”，让按钮们横向排队 (保持不变) */
+.modal-header .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 2. 【核心改造】美化每一个按钮本身 */
+.header-actions .header-button {
+    width: 32px;  /* 强制宽度，让它变小 */
+    height: 32px; /* 强制高度，确保是正方形 */
+    padding: 0;   /* 移除内边距，防止变形 */
+    background: none;
+    border: none;
+    border-radius: 50%; /* 正方形+50%圆角=完美圆形 */
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+    color: #8e8e93; /* 设置一个默认的图标颜色 */
+}
+
+/* 3. 【核心改造】美化按钮里的SVG图标 */
+.header-actions .header-button svg {
+    width: 20px;
+    height: 20px;
+}
+.header-actions .header-button svg path {
+    stroke: currentColor;
+}
+
+/* ▼▼▼ 【【【全新植入：删除按钮专属“像素级校准”补丁】】】 ▼▼▼ */
+.header-actions #delete-little-theater-btn svg {
+    position: relative; /* 指令1：解锁微调能力 */
+    top: 1px;           /* 指令2：向下移动1个像素！ */
+}
+
+/* 4. 添加漂亮的鼠标悬停效果 (保持不变) */
+.header-actions .header-button:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+/* 5. (锦上添花) 为删除按钮添加一个危险警告的悬停效果 */
+.header-actions #delete-little-theater-btn:hover {
+    background-color: rgba(229, 57, 53, 0.1);
+    color: #e53935; /* 悬停时，按钮的颜色变为红色 */
+}
+/* --- 【全新】弹窗层级修复补丁 --- */
+/* 这张“VIP通行证”拥有更高的z-index，可以确保它显示在最顶层 */
+.modal-overlay.modal-on-top {
+    z-index: 1005; 
 }
