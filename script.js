@@ -207,55 +207,40 @@ document.addEventListener('DOMContentLoaded', () => {
             );
         };
 
-        // 4. 【全新】智能决策大脑
+        // 4. 【全新】智能决策大脑 (V4.0 - 兼容iOS怪癖版)
         // 检查浏览器是否支持现代的权限查询API
         if (navigator.permissions && navigator.permissions.query) {
             console.log("天气系统：正在使用现代权限API检查...");
             try {
                 const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
 
-                if (permissionStatus.state === 'granted') {
-                    // 权限已经给了，直接用
-                    console.log("天气系统：权限已授予，将直接获取位置。");
+                // 【核心改造】我们简化逻辑，合并 'granted' 和 'prompt' 的处理方式
+                // 因为在iOS上，即使是 'denied' 状态，query API也可能返回 'prompt'。
+                // 所以我们干脆信任失败回调(errorCallback)来处理拒绝的情况。
+                if (permissionStatus.state === 'granted' || permissionStatus.state === 'prompt') {
+                    console.log(`天气系统：权限状态为 ${permissionStatus.state}，将尝试获取位置。`);
                     requestLocation();
-                } else if (permissionStatus.state === 'prompt') {
-                    // 权限需要询问，弹出我们自己的对话框
-                    console.log("天气系统：权限状态为prompt，需要询问用户。");
-                    showCustomConfirm(
-                        '获取天气信息?',
-                        '允许获取您的位置，可以让AI了解您当地的实时天气',
-                        () => {
-                            // 【【【终极修复点！！！】】】
-                            // 当用户点击“好的”，我们立刻、马上、直接调用请求工具！
-                            // 这就把用户的点击和浏览器的请求紧紧地绑在了一起。
-                            console.log("天气系统：用户已同意，正在请求浏览器授权...");
-                            requestLocation();
-                        },
-                        () => console.log("天气系统：用户在我们的弹窗中拒绝了。"),
-                        '好的',
-                        '不用了'
-                    );
-                } else if (permissionStatus.state === 'denied') {
-                    // 权限被拒绝了，给出提示
-                    console.log("天气系统：权限已被用户明确拒绝。");
+                } else { // 只有在明确知道是 'denied' 的情况下才提前给出提示
+                    console.log("天气系统：权限已被明确拒绝，将不会发起请求。");
                     showToast('天气功能已禁用，您可以在浏览器设置中重新开启位置权限', 'info', 5000);
                 }
 
+                // 监听权限后续的变化 (这部分逻辑非常棒，保持不变)
                 permissionStatus.onchange = () => {
                     console.log(`天气系统：位置权限状态已变更为: ${permissionStatus.state}`);
+                    // 当用户从设置页回来并授予权限时，重新初始化
                     if (permissionStatus.state === 'granted') {
-                        initializeWeatherSystem(); // 如果用户在设置里改了权限，就重新检查
+                        initializeWeatherSystem(); 
                     }
                 };
             } catch (error) {
-                console.error("天气系统：查询权限时发生错误，将使用旧版方式。", error);
-                // 如果查询API本身就出错了，也退回到旧版方式
+                // 如果查询API本身就出错了（某些浏览器或隐私模式下可能发生），直接尝试获取
+                console.error("天气系统：查询权限时发生错误，将直接尝试获取位置。", error);
                 requestLocation();
             }
         } else {
-            // 【【【终极兼容】】】
-            // 如果浏览器根本不支持权限查询，我们就直接“莽”，让浏览器自己处理
-            console.log("天气系统：您的浏览器不支持权限查询API，将使用旧版询问方式。");
+            // 【终极兼容】对于不支持权限查询的老浏览器，直接尝试获取
+            console.log("天气系统：浏览器不支持权限查询API，将直接尝试获取位置。");
             requestLocation();
         }
     }
@@ -396,43 +381,49 @@ function isYesterday(date) {
         const renderAllWeatherUI = (forecastData) => {
             const todayData = forecastData.find(day => day.dateLabel === '今天');
             
-            if (todayData) {
-                detailsContainer.innerHTML = `
+            // 【核心修改】我们现在先构建一个包含所有数据的HTML字符串，最后再统一渲染
+            let detailsHTML = `
+                <div class="details-header">
+                    <span>今日详情</span>
+                    <button id="refresh-today-details-btn" class="header-button-inline" title="刷新当日详情">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                    </button>
+                </div>
+                <div class="details-grid">
                     <div class="detail-item">
                         <div class="detail-icon">${`<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 24H7" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 10L12 12" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 4V7" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 24C14 18.4776 18.4776 14 24 14C29.5224 14 34 18.4776 34 24C34 27.3674 32.3357 30.3458 29.785 32.1578" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M38 10L36 12" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M44 24L41 24" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M37.9814 37.982L36.3614 36.362" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M23.4999 28C20.4999 28 14 28.2 14 31C14 33.8 18.6058 33.7908 20.9998 34C23 34.1747 26.4624 35.6879 25.9999 38C24.9998 43 8.99982 42 4.99994 42" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`}</div>
-                        <div class="detail-value">${todayData.sunrise || '--'}</div>
+                        <div class="detail-value">${todayData?.sunrise || '--'}</div>
                         <div class="detail-label">日出</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-icon">${`<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 8L33 34H5L19 8Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M29 26L34 20L43 34H32" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 41L38 41" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="38" cy="10" r="3" fill="#8e8e93" stroke="#8e8e93" stroke-width="4"/></svg>`}</div>
-                        <div class="detail-value">${todayData.sunset || '--'}</div>
+                        <div class="detail-value">${todayData?.sunset || '--'}</div>
                         <div class="detail-label">日落</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-icon">${`<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.15039 9.15088L11.3778 11.3783" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 24H6.15" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.15039 38.8495L11.3778 36.6221" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M38.8495 38.8495L36.6221 36.6221" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M44.9996 24H41.8496" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M38.8495 9.15088L36.6221 11.3783" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 3V6.15" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 36C30.6274 36 36 30.6274 36 24C36 17.3726 30.6274 12 24 12C17.3726 12 12 17.3726 12 24C12 30.6274 17.3726 36 24 36Z" fill="#FFF" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M24 45.0001V41.8501" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`}</div>
-                        <div class="detail-value">${todayData.uvIndex || '--'}</div>
+                        <div class="detail-value">${todayData?.uvIndex || '--'}</div>
                         <div class="detail-label">紫外线</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-icon">${`<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M24 44C32.2843 44 39 37.2843 39 29C39 15 24 4 24 4C24 4 9 15 9 29C9 37.2843 15.7157 44 24 44Z" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 29.0001C9 37.2844 15.7157 44.0001 24 44.0001C32.2843 44.0001 39 37.2844 39 29.0001C39 29.0001 30 32.0001 24 29.0001C18 26.0001 9 29.0001 9 29.0001Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/></svg>`}</div>
-                        <div class="detail-value">${todayData.humidity || '--'}%</div>
+                        <div class="detail-value">${todayData?.humidity ? todayData.humidity + '%' : '--%'}</div>
                         <div class="detail-label">湿度</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-icon">${`<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 49 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M24.7778 7C13.7321 7 4.77783 15.9543 4.77783 27C4.77783 32.2301 6.49127 37.4362 9.77783 41H39.7778C43.0644 37.4362 44.7778 32.2301 44.7778 27C44.7778 15.9543 35.8235 7 24.7778 7Z" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24.7778" cy="30" r="4" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.7778 20V26" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.7778 12V14" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.77783 28H11.7778" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.7778 18L15.192 19.4142" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M37.7778 28H39.7778" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M34.7778 19.4141L36.192 17.9998" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`}</div>
-                        <div class="detail-value">${todayData.pressure || '--'}hPa</div>
+                        <div class="detail-value">${todayData?.pressure ? todayData.pressure + 'hPa' : '--hPa'}</div>
                         <div class="detail-label">气压</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-icon">${`<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M24 24C29.5228 24 34 19.5228 34 14C34 8.47715 29.5228 4 24 4V24Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M24 24C24 29.5228 28.4772 34 34 34C39.5228 34 44 29.5228 44 24H24Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M24 24C24 18.4772 19.5228 14 14 14C8.47715 14 4 18.4772 4 24H24Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/><path d="M24 24C18.4772 24 14 28.4772 14 34C14 39.5228 18.4772 44 24 44V24Z" fill="#8e8e93" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"/></svg>`}</div>
-                        <div class="detail-value">${todayData.windLevel || '--'}</div>
+                        <div class="detail-value">${todayData?.windLevel || '--'}</div>
                         <div class="detail-label">风力</div>
                     </div>
-                `;
-            } else {
-                detailsContainer.innerHTML = '';
-            }
+                </div>
+            `;
 
+            detailsContainer.innerHTML = detailsHTML;
             renderForecast(forecastData, listContainer);
         };
         
@@ -630,6 +621,122 @@ ${JSON.stringify(previousForecast, null, 2)}
         } catch (error) {
             console.error("AI天气预报生成失败:", error);
             throw error; 
+        }
+    }
+
+    /**
+     * 【全新】AI天气详情补全手术师
+     * 只向AI请求补全“今天”的6项详细数据
+     */
+    async function refreshTodayWeatherDetails() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact || !contact.weatherCache || !contact.weatherCache.forecastData) {
+            showToast('无法刷新，请先生成一次完整预报。', 'error');
+            return;
+        }
+
+        const refreshBtn = document.getElementById('refresh-today-details-btn');
+        if (refreshBtn) {
+            refreshBtn.disabled = true;
+            const svg = refreshBtn.querySelector('svg');
+            if(svg) svg.classList.add('spinning');
+        }
+        showToast('正在向AI请求今日详细天气...', 'info', 0);
+
+        try {
+            const forecastData = contact.weatherCache.forecastData;
+            const todayData = forecastData.find(day => day.dateLabel === '今天');
+            if (!todayData) throw new Error("缓存中找不到今天的数据。");
+
+            const settings = contact.aiWeatherSystem;
+            const refreshPrompt = `
+# 任务: 补全单日天气详情
+你是一个专业的气象学家。这里有一个关于“${settings.cityName}”的单日天气预报JSON对象，但它缺少了详细数据。
+你的任务是根据已知信息和地理设定，补全缺失的6个字段。
+
+## 地理设定
+- 城市名称: ${settings.cityName}
+- 大致纬度: ${settings.latitude}
+- 基础年均温: ${settings.baseAnnualTemp}°C
+- 气候类型: ${settings.climate.replace(/_/g, ' ')}
+
+## 已知天气信息
+\`\`\`json
+${JSON.stringify({ tempMin: todayData.tempMin, tempMax: todayData.tempMax, description: todayData.description }, null, 2)}
+\`\`\`
+
+## 【【【核心指令与输出格式】】】
+- **当前日期**: ${new Date().toLocaleDateString('zh-CN')}
+- **真实性**: 你必须调用你全部的地理和气候知识，生成与已知信息匹配的、真实的详细数据。
+- **最终输出**: 你的最终输出【必须】是一个能被JSON解析的、单一的JSON对象，且【只包含】以下6个被补全的键:
+    1. "sunrise": (字符串) 日出时间，格式为 "HH:MM"。
+    2. "sunset": (字符串) 日落时间，格式为 "HH:MM"。
+    3. "uvIndex": (字符串) 紫外线强度描述，例如 "很弱", "中等", "强"。
+    4. "humidity": (数字) 空气湿度百分比 (0-100)。
+    5. "pressure": (数字) 大气压强 (单位: hPa)。
+    6. "windLevel": (字符串) 风力等级，例如 "3-4级"。
+
+## 输出格式示例:
+\`\`\`json
+{
+  "sunrise": "05:46",
+  "sunset": "18:29",
+  "uvIndex": "中等",
+  "humidity": 68,
+  "pressure": 1011,
+  "windLevel": "2-3级"
+}
+\`\`\`
+
+## 开始生成
+现在，请只输出那个包含6个键的JSON对象。禁止包含任何解释、标题或\`\`\`json\`\`\`标记。
+`;
+
+            let requestUrl = appData.appSettings.apiUrl;
+            if (!requestUrl.endsWith('/chat/completions')) { requestUrl = requestUrl.endsWith('/') ? requestUrl + 'chat/completions' : requestUrl + '/chat/completions'; }
+            
+            const response = await fetch(requestUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
+                body: JSON.stringify({
+                    model: appData.appSettings.apiModel,
+                    messages: [{ role: 'user', content: refreshPrompt }],
+                    temperature: 0.3
+                })
+            });
+
+            if (!response.ok) throw new Error(`API 请求失败: ${response.status}`);
+            const data = await response.json();
+            const responseText = data.choices[0].message.content;
+            const jsonMatch = responseText.match(/{[\s\S]*}/);
+            if (!jsonMatch) throw new Error("AI未能返回有效的JSON对象。");
+            
+            const newDetails = JSON.parse(jsonMatch[0]);
+
+            // 核心步骤：将新获取的数据“合并”到旧数据中
+            Object.assign(todayData, newDetails);
+
+            const todayIndex = forecastData.findIndex(day => day.dateLabel === '今天');
+            if (todayIndex > -1) {
+                forecastData[todayIndex] = todayData;
+            }
+
+            contact.weatherCache.forecastData = forecastData;
+            saveAppData();
+            
+            // 重新渲染整个弹窗，显示最新数据
+            openAiWeatherModal();
+            showToast('今日详情已刷新！', 'success');
+
+        } catch (error) {
+            console.error("刷新今日天气详情失败:", error);
+            showToast(`刷新失败: ${error.message}`, 'error');
+        } finally {
+            if (refreshBtn) {
+                refreshBtn.disabled = false;
+                const svg = refreshBtn.querySelector('svg');
+                if(svg) svg.classList.remove('spinning');
+            }
         }
     }
 
@@ -1028,7 +1135,8 @@ async function formatHistoryForApi(history, contact) { // 關鍵修改1：增加
                 });
             }
             const stickerInfo = availableStickers.find(s => s.id === msg.stickerId);
-            finalContent = `[你发送了一个表情，表达了：${stickerInfo ? stickerInfo.desc : '一个表情'}]`;
+            // 【【【终极修复：将AI的历史行为，从“对话”改为“日志”格式！】】】
+            finalContent = `(系统日志：AI 在之前发送了一个表情，含义是“${stickerInfo ? stickerInfo.desc : '一个表情'}”)`;
         }
     } else if (msg.type === 'voice') {
         // 【核心修正】根据发言人（role）使用不同的描述
@@ -1575,6 +1683,60 @@ async function formatHistoryForApi(history, contact) { // 關鍵修改1：增加
         const partnerIcon = isPartner ? '<span class="partner-icon">💖</span>' : '';
         chatAiName.innerHTML = `${contact.remark}${partnerIcon}`;
     }
+
+ // =================================================================
+    // AI日记系统 V3.0 - 定时任务模块
+    // =================================================================
+    let lastDiaryRunDate = ''; // 用一个“标记”防止重复执行
+
+    /**
+     * 【定时闹钟】每分钟检查一次时间，判断是否需要写日记
+     */
+    function dailyDiaryCheck() {
+        const now = new Date();
+        const todayStr = now.toLocaleDateString(); // 获取今天的日期字符串，如 "2025/9/7"
+
+        // 如果今天已经检查并执行过了，就直接跳过
+        if (lastDiaryRunDate === todayStr) {
+            return;
+        }
+
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+
+        // 检查是否到达晚上9点 (21:00)
+        if (currentHour === 21 && currentMinute === 0) {
+            console.log("【自动日记】已到晚上9点，开始检查任务...");
+            runAutoDiaryForAllContacts();
+            lastDiaryRunDate = todayStr; // 打上“今天已执行”的标记
+        }
+    }
+
+    /**
+     * 【调度中心】遍历所有AI，命令符合条件的开始写日记
+     */
+    function runAutoDiaryForAllContacts() {
+        const eligibleContacts = appData.aiContacts.filter(c => c.autoDiaryEnabled);
+        
+        if (eligibleContacts.length > 0) {
+            console.log(`【自动日记】发现 ${eligibleContacts.length} 个AI需要写日记。`);
+            eligibleContacts.forEach(contact => {
+                console.log(`【自动日记】正在为 ${contact.remark} 生成日记...`);
+                // 为每个AI调用升级后的“总指挥”函数
+                triggerAiDiaryGeneration(contact);
+            });
+        } else {
+            console.log("【自动日记】今天没有AI需要自动写日记。");
+        }
+    }
+
+   /**
+     * 【启动器】在程序开始时，启动定时闹钟
+     */
+    function startDailyDiaryCheck() {
+        setInterval(dailyDiaryCheck, 60000); // 每60秒（1分钟）检查一次
+    }
+
     async function initialize() {
         // 【全新】开机自动应用上次保存的主题
         const savedTheme = localStorage.getItem('theme');
@@ -1892,8 +2054,14 @@ setInterval(() => {
         }
         // 【【【全新：为AI创建“日记摘要记忆本”】】】
 if (c.recentDiarySummaries === undefined) {
-c.recentDiarySummaries = []; // 格式为 [{date: 'YYYY-MM-DD', summary: '摘要内容'}]
-}
+            c.recentDiarySummaries = []; // 格式为 [{date: 'YYYY-MM-DD', summary: '摘要内容'}]
+        }
+        
+        // ▼▼▼ 【【【全新植入：为AI档案补充“小剧场”文件夹】】】 ▼▼▼
+        if (c.littleTheaters === undefined) {
+            c.littleTheaters = []; // 格式为 [{id, keyword, promptHint, htmlContent}]
+        }
+        // ▲▲▲▲▲ “小剧场”文件夹补充完毕 ▲▲▲▲▲
     });
         // ▼▼▼ 请把下面这段全新的代码，粘贴在这里 ▼▼▼
         // 【全新】为全局AI表情包建立仓库，如果不存在的话
@@ -2329,6 +2497,144 @@ c.recentDiarySummaries = []; // 格式为 [{date: 'YYYY-MM-DD', summary: '摘要
     }
 }
 
+// --- 【全新】引用与撤回功能模块 ---
+
+    const contextMenu = document.getElementById('message-context-menu');
+    const replyIndicator = document.getElementById('reply-indicator');
+
+    // “工人”：打开右键菜单
+    function openContextMenu(event, messageRow) {
+        event.preventDefault(); 
+        activeContextMenuMessageId = messageRow.dataset.messageId;
+
+        const messageData = findMessageById(activeContextMenuMessageId);
+        if (!messageData || messageData.type === 'recalled') return;
+
+        const recallMenuItem = document.getElementById('context-menu-recall');
+        
+        // 【【【核心权限验证】】】
+        // 只有当消息的发送者是“user”时，才显示“撤回”按钮
+        if (messageData.role === 'user') {
+            recallMenuItem.style.display = 'block';
+        } else {
+            recallMenuItem.style.display = 'none';
+        }
+        
+        contextMenu.style.top = `${event.clientY}px`;
+        contextMenu.style.left = `${event.clientX}px`;
+        contextMenu.style.display = 'block';
+    }
+
+    // “工人”：关闭右键菜单
+    function closeContextMenu() {
+        contextMenu.style.display = 'none';
+        activeContextMenuMessageId = null;
+    }
+
+    // “工人”：执行引用操作
+    function stageQuoteReply() {
+        const messageData = findMessageById(activeContextMenuMessageId);
+        if (!messageData) return;
+
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        const senderName = messageData.role === 'user' ? (contact.userProfile.name || '你') : contact.remark;
+        
+        stagedQuoteData = {
+            messageId: messageData.id,
+            sender: senderName,
+            content: messageData.content.length > 20 ? messageData.content.substring(0, 20) + '...' : messageData.content
+        };
+        
+        // 显示提示条
+        document.getElementById('reply-indicator-text').textContent = `正在回复 ${senderName}`;
+        replyIndicator.style.display = 'flex';
+        chatInput.focus();
+    }
+    
+    // “工人”：取消引用
+    function cancelQuoteReply() {
+        stagedQuoteData = null;
+        replyIndicator.style.display = 'none';
+    }
+    
+        // “工人” V2.0：执行撤回操作 (已升级，可以处理“访客”)
+    function recallMessage() {
+        if (!activeContextMenuMessageId) return;
+
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+
+        const messageIdToRecall = activeContextMenuMessageId;
+        
+        // 检查《访客登记簿》
+        const messageIndexInUnsent = contact.unsentMessages.findIndex(msg => msg.id === messageIdToRecall);
+        if (messageIndexInUnsent > -1) {
+            // 对于“访客”，撤回就等于直接删除
+            contact.unsentMessages.splice(messageIndexInUnsent, 1);
+            saveAppData();
+            const el = messageContainer.querySelector(`[data-message-id="${messageIdToRecall}"]`);
+            if (el) el.remove();
+            renderChatList();
+            return; // 操作完成，结束
+        }
+
+                // 【核心修复】根据当前模式，选择正确的“档案柜”进行操作
+        const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
+        
+        let messageIndex = sourceHistory.findIndex(msg => msg.id === messageIdToRecall);
+        if (messageIndex > -1) {
+            const originalMessage = sourceHistory[messageIndex];
+            const recalledMessage = {
+                id: originalMessage.id,
+                type: 'recalled',
+                role: originalMessage.role,
+                timestamp: originalMessage.timestamp || Date.now(),
+                mode: contact.isOfflineMode ? 'offline' : 'online' // 撤回记录也带上模式
+            };
+            sourceHistory.splice(messageIndex, 1, recalledMessage);
+            saveAppData();
+            openChat(activeChatContactId);
+        }
+    }
+
+    function recallMessageByAI(messageId) {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+        
+        // 【核心修复】让AI同时检查线上和线下两个档案柜
+        let targetHistory = null;
+        let messageIndex = -1;
+
+        // 先在线上档案柜里找
+        messageIndex = contact.onlineChatHistory.findIndex(msg => msg.id === messageId);
+        if (messageIndex > -1) {
+            targetHistory = contact.onlineChatHistory;
+        } else {
+            // 如果线上没找到，再去线下档案柜里找
+            messageIndex = contact.offlineChatHistory.findIndex(msg => msg.id === messageId);
+            if (messageIndex > -1) {
+                targetHistory = contact.offlineChatHistory;
+            }
+        }
+
+        if (targetHistory && messageIndex > -1) {
+            const originalMessage = targetHistory[messageIndex];
+            if (originalMessage.role !== 'assistant') return;
+
+            const recalledMessage = {
+                id: originalMessage.id,
+                type: 'recalled',
+                role: 'assistant',
+                timestamp: originalMessage.timestamp || Date.now(),
+                mode: originalMessage.mode // 保留原始消息的模式
+            };
+            // 在找到消息的那个正确的档案柜里执行替换操作
+            targetHistory.splice(messageIndex, 1, recalledMessage);
+            saveAppData();
+            openChat(activeChatContactId);
+        }
+    }
+
 function resetChatState() {
         exitSelectMode(); // 退出多选模式 (会清空selectedMessages)
         cancelQuoteReply(); // 取消可能存在的引用状态
@@ -2341,6 +2647,12 @@ function resetChatState() {
         if(aiSuggestionPanel) aiSuggestionPanel.classList.add('hidden');
         if(userStickerPanel) userStickerPanel.classList.remove('is-open');
     }
+
+    // 一个小助手，用来判断一个状态是不是由作息表产生的“预定活动”
+    const isScheduledActivity = (status) => {
+        return status && (status.includes('睡眠中') || status.includes('工作') || status.includes('学习') || status.includes('吃饭') || status.includes('早餐') || status.includes('午饭') || status.includes('晚饭'));
+    };
+
 
 async function openChat(contactId, messageIdToHighlight = null) {
     const numericContactId = Number(contactId);
@@ -2426,56 +2738,37 @@ async function openChat(contactId, messageIdToHighlight = null) {
         saveAppData();
     }
     updateChatHeader();
-    // ▼▼▼ 【【【BUG修复 2/2 - 步骤B：用下面这个代码块替换旧的 if/else】】】 ▼▼▼
-        // ▼▼▼ 【【【终极修复V3.0：安装了“智能下班打卡器”的状态切换器】】】 ▼▼▼
+    // ▼▼▼ 【【【终极修复V8.0：安装了“聊天优先”决策大脑的状态切换器】】】 ▼▼▼
     if (contact.isOfflineMode) {
+        // 线下模式，状态是固定的
         chatAiActivityStatus.textContent = '剧情模式进行中';
     } else {
-        if (contact.isScheduleEnabled) {
-            const scheduledActivity = calculateCurrentActivity(contact.schedule);
-            
-            // 【【【核心新增：智能下班打卡器】】】
-            // 第一步：我们先定义哪些状态算是“需要打卡下班”的预定活动
-            const isScheduledActivity = (status) => {
-                return status && (status.includes('睡眠中') || status.includes('工作') || status.includes('学习') || status.includes('吃饭'));
-            };
+        // 线上模式，启动决策大脑
+        let finalStatus = '';
+        const scheduledActivity = contact.isScheduleEnabled ? calculateCurrentActivity(contact.schedule) : { status: "空闲" };
+        const lastChatActivity = contact.activityStatus || '';
 
-            // 第二步：执行全新的“下班检查”
-            if (scheduledActivity.status === "空闲" && isScheduledActivity(contact.activityStatus)) {
-                // 如果作息表说现在“空闲”，但AI的记忆里还是“正在上班”等活动，
-                // 说明“下班”时间到了！立刻清空它的状态记忆。
-                contact.activityStatus = null; 
-            }
-
-            // 第三步：执行我们之前的状态决策逻辑（现在它变得更智能了）
-            if (scheduledActivity.status !== "空闲") {
-                // 如果作息表有强制安排，就更新状态
-                contact.activityStatus = scheduledActivity.status;
-                chatAiActivityStatus.textContent = scheduledActivity.status;
-            } else {
-                // 如果是空闲时间，就显示被“打卡器”处理过的、绝对正确的状态
-                chatAiActivityStatus.textContent = contact.activityStatus || '在线';
-            }
-            
-            contact.currentActivity = chatAiActivityStatus.textContent;
-
-        } else {
-            contact.currentActivity = null;
-            chatAiActivityStatus.textContent = contact.activityStatus || '在线';
+        // 【【【核心决策逻辑：严格按你的优先级执行】】】
+        // 决策第一级：检查由聊天内容产生的状态
+        if (lastChatActivity) {
+            finalStatus = lastChatActivity; // 聊天内容具有最高优先级！
         }
-    }
-    // ▲▲▲▲▲ ▲▲▲▲▲
-    // 【【【全新：AI开场白自动发送触发器】】】
-    if (contact.isOfflineMode) {
-        const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
-        // 检查条件：故事线存在 & 有设置 & 故事线是空的 & 开场白不为空
-        if (activeStory && activeStory.settings && activeStory.chatHistory.length === 0 && activeStory.settings.openingRemark) {
-            // 满足所有条件，立即发送开场白
-            displayMessage(activeStory.settings.openingRemark, 'assistant', { isNew: true, mode: 'offline' });
-            // 【至关重要】发送后立刻“销毁”开场白，防止重复发送
-            activeStory.settings.openingRemark = '';
-            saveAppData();
+
+        // 决策第二级：如果聊天没有产生状态，再检查作息表
+        if (finalStatus === '' && scheduledActivity.status !== "空闲") {
+            finalStatus = scheduledActivity.status; // 聊天没安排，听作息的
         }
+
+        // 【【【最终保险：作息表对“预定活动”的强制覆盖】】】
+        // 如果AI记忆里的状态是一个“预定活动”（如吃饭），但作息表说现在是另一个“预定活动”（如睡觉），
+        // 那么作息表的优先级更高。
+        if (isScheduledActivity(lastChatActivity) && scheduledActivity.status !== "空闲") {
+            finalStatus = scheduledActivity.status;
+        }
+        
+        // 最终更新UI
+        chatAiActivityStatus.textContent = finalStatus;
+        contact.currentActivity = finalStatus || '在线';
     }
     // 确保最后再执行一次视图切换，以防万一
     switchToView('chat-window-view');
@@ -2870,8 +3163,8 @@ ${chatLog}
      * @param {string} saveTarget - 总结的保存目标 ('memory' 或 'offlineMemory')
      */
     async function forceSummaryOnModeSwitch(contact, summarizingMode, saveTarget) {
-        // 如果自动总结没开，就直接“下班”
-        if (!contact.autoSummaryEnabled) return;
+        // 【核心修复】我们把检查“自动总结”开关的这行代码彻底删掉了！
+        // 现在，无论用户是否开启自动总结，只要调用这个函数，它就必须强制执行。
 
         console.log(`强制总结触发, 目标模式: ${summarizingMode}, 保存到: ${saveTarget}`);
         showToast(`正在总结 ${summarizingMode === 'online' ? '线上' : '线下'} 记录...`, 'info', 0);
@@ -2964,6 +3257,9 @@ ${chatLog}
         }
     }
 async function createMessageElement(text, role, options = {}) {
+    // 监控步骤5：检查“气泡工厂”收到的原材料
+    console.log('【UI渲染-步骤5】“气泡工厂”接到订单，原材料如下:', { text, role, options });
+
     const { isNew = false, isLoading = false, type = 'text', isStaged = false, id = null, timestamp = null, quotedMessage = null } = options;
     const messageId = id || `${Date.now()}-${Math.random()}`;
     const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
@@ -3000,11 +3296,14 @@ async function createMessageElement(text, role, options = {}) {
     if (isStaged) { messageRow.dataset.staged = 'true'; }
 
     const avatarUrl = role === 'user' ? (contact ? contact.userAvatarUrl : '') : (contact ? contact.avatarUrl : '');
-    let messageContentHTML = '';
+     let messageContentHTML = '';
     let quoteHTML = '';
     if (quotedMessage) {
         quoteHTML = `<div class="quoted-message-display"><span class="sender-name">${quotedMessage.sender}</span><span class="message-snippet">${quotedMessage.content}</span></div>`;
     }
+
+    // 监控步骤6：检查“气泡工厂”正在使用哪张图纸
+    console.log('【UI渲染-步骤6】正在使用', type, '的图纸进行生产...');
 
     switch(type) {
         case 'image':
@@ -3045,10 +3344,8 @@ async function createMessageElement(text, role, options = {}) {
             }
             const isClickable = (cardData.proposer === 'assistant' && cardData.status === 'pending');
             
-            // 【【【核心改造：废弃 onclick，改用标准化的 data-action】】】
             let actionAttrs = '';
             if (isClickable) {
-                // 我们现在给它打上“电子门票”，并把消息ID也存进去
                 actionAttrs = `data-action="open-relationship-proposal" data-message-id="${messageId}" style="cursor:pointer;"`;
             }
             
@@ -3057,27 +3354,21 @@ async function createMessageElement(text, role, options = {}) {
         case 'relationship_breakup':
             messageContentHTML = `<div class="message message-relationship-card"><div class="relationship-card-content"><div class="relationship-card-text"><h4>解除亲密关系</h4><p>我们之间的亲密关系已解除</p></div><div class="relationship-card-icon"><img src="https://i.postimg.cc/P5Lg62Vq/lollipop.png" alt="icon"></div></div><div class="relationship-card-footer">亲密关系</div></div>`;
             break;
-            // ▼▼▼ 【【【全新：让程序认识“记账卡片”这种新类型】】】 ▼▼▼
         case 'accounting':
             const transactions = options.transactionData || [];
             let itemsHTML = '';
             transactions.forEach(tx => {
                 const isIncome = tx.type === 'income';
                 const remarksHTML = tx.remarks ? `<div class="accounting-item-remarks">${tx.remarks}</div>` : '';
-
-                // 【【【核心修正：采用全新的“分组”结构】】】
                 itemsHTML += `
                     <div class="accounting-item">
-                        <!-- 1. 创建一个新的“信息区”来包裹项目和备注 -->
                         <div class="accounting-item-info">
                             <span class="item-name">${tx.description}</span>
                             ${remarksHTML}
                         </div>
-                        <!-- 2. 金额部分保持独立 -->
                         <span class="item-amount ${isIncome ? 'income' : ''}">${isIncome ? '+' : '-'} ${tx.amount.toFixed(2)} 元</span>
                     </div>`;
             });
-
             messageContentHTML = `
                 <div class="message message-accounting-card">
                     <div class="accounting-card-header">
@@ -3092,53 +3383,135 @@ async function createMessageElement(text, role, options = {}) {
                 </div>
             `;
             break;
-        // ▼▼▼ 【【【V2.0 终极升级：搭建支持Emoji的心声气泡结构】】】 ▼▼▼
-case 'thought': { // 使用花括号创建一个独立作用域
-    let monologueText = '（思考中...）';
-    let emojis = [];
-    let hasEmoji = false;
+        case 'thought': { 
+            let monologueText = '（思考中...）';
+            let emojis = [];
+            let hasEmoji = false;
+            if (typeof text === 'object' && text !== null && text.monologue) {
+                monologueText = text.monologue;
+                emojis = text.emojis || [];
+                hasEmoji = emojis.length > 0;
+            } else if (typeof text === 'string') {
+                monologueText = text;
+            }
+            messageContentHTML = `
+                <div class="thought-bubble-wrapper ${hasEmoji ? 'has-emoji' : ''}">
+                    <div class="thought-bubble-emoji">${emojis.join('')}</div>
+                    <div class="thought-bubble-message">
+                        <span class="thought-text">${monologueText}</span>
+                        <button class="thought-bubble-close-btn">&times;</button>
+                    </div>
+                </div>
+            `;
+            const thoughtRow = document.createElement('div');
+            thoughtRow.className = 'message-row thought-bubble-row';
+            thoughtRow.dataset.messageId = messageId;
+            thoughtRow.innerHTML = messageContentHTML;
+            fragment.appendChild(thoughtRow);
+            return fragment;
+        }
+        case 'html': {
+            // ★★★【【【终极修复 V12.0：“复印蓝图”的超精准双轨渲染方案】】】★★★
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
 
-    // 检查传入的数据是旧的纯文本，还是新的“数据包”
-    if (typeof text === 'object' && text !== null && text.monologue) {
-        monologueText = text.monologue;
-        emojis = text.emojis || [];
-        hasEmoji = emojis.length > 0;
-    } else if (typeof text === 'string') {
-        monologueText = text; // 兼容旧的纯文本心声
-    }
+                const isFullscreenWidget = doc.querySelector('.fullscreen-modal');
+                const triggerElement = doc.querySelector('.planner-wrapper');
 
-    // 搭建全新的HTML结构：包装盒 -> (小气泡 + 大气泡)
-    messageContentHTML = `
-        <div class="thought-bubble-wrapper ${hasEmoji ? 'has-emoji' : ''}">
-            <div class="thought-bubble-emoji">${emojis.join('')}</div>
-            <div class="thought-bubble-message">
-                <span class="thought-text">${monologueText}</span>
-                <button class="thought-bubble-close-btn">&times;</button>
-            </div>
-        </div>
-    `;
-    const thoughtRow = document.createElement('div');
-    thoughtRow.className = 'message-row thought-bubble-row';
-    thoughtRow.dataset.messageId = messageId;
-    thoughtRow.innerHTML = messageContentHTML;
-    fragment.appendChild(thoughtRow);
-    return fragment;
-}
+                if (isFullscreenWidget && triggerElement) {
+                    // --- 流水线A：处理“旅行计划” ---
+                    
+                    const triggerClone = triggerElement.cloneNode(true);
+                    const modalsContainer = document.createElement('div');
+                    const inputsContainer = document.createElement('div');
+                    const stylesContainer = document.createElement('div');
 
-               default:
-            // 【【【核心修复：根据消息自身的模式标签来渲染】】】
-            if (options.mode === 'offline') {
-                // 如果这条消息的“身份证”上写着“线下”，就用富文本格式
-                const formattedText = formatOfflineTextToHTML(text);
-                messageContentHTML = `<div class="message offline-message">${formattedText}</div>`;
-            } else {
-                // 否则，就统一按线上模式的纯文本显示
-                messageContentHTML = `<div class="message">${text}</div>`;
+                    // 1. 【手术核心：复印蓝图】先把唯一的样式表复制一份出来备用
+                    const styleTag = doc.querySelector('style');
+                    const styleCloneForGlobal = styleTag ? styleTag.cloneNode(true) : null;
+                    
+                    // 2. 【打包弹药】把弹窗、开关、和【复印的】样式表打包，准备发射到全局
+                    doc.querySelectorAll('.fullscreen-modal').forEach(el => modalsContainer.appendChild(el));
+                    doc.querySelectorAll('.planner-modal-input').forEach(el => inputsContainer.appendChild(el));
+                    if (styleCloneForGlobal) {
+                        stylesContainer.appendChild(styleCloneForGlobal);
+                    }
+                    const finalPayload = stylesContainer.innerHTML + inputsContainer.innerHTML + modalsContainer.innerHTML;
+                    messageRow.dataset.htmlPayload = encodeURIComponent(finalPayload);
+                    
+                    // 3. 【装修气泡】把【原始的】样式表和主面板快照，一起留在气泡里
+                    let triggerFinalHtml = '';
+                    if (styleTag) {
+                        // 【【【终极防火墙 V2.0：智能识别全局规则】】】
+                        const originalCss = styleTag.innerHTML;
+                        
+                        const scopedCss = originalCss.replace(/([^\r\n,{}]+)(,(?=[^}]*{)|\s*{)/g, (match, selector) => {
+                            // 规则1：忽略 @keyframes 这种全局动画规则
+                            if (selector.trim().startsWith('@')) {
+                                return match;
+                            }
+                            // 规则2：【核心！】如果规则里包含了“~”（兄弟选择器），也认定它是全局规则，不加前缀！
+                            if (selector.includes('~')) {
+                                return match;
+                            }
+                            // 规则3：对于所有其他普通规则，才给它加上防火墙前缀
+                            return `.message-html-widget ${selector.trim()} ${match.endsWith(',') ? ',' : ' {'}`;
+                        });
+                        triggerFinalHtml += `<style>${scopedCss}</style>`;
+                    }
+                    triggerFinalHtml += triggerClone.outerHTML;
+                    
+                    const widgetHtml = `<div class="message-html-widget">${triggerFinalHtml}</div>`;
+                    messageContentHTML = `<div class="message">${widgetHtml}</div>`;
+                    
+                    // 4. 打上通行证
+                    messageRow.dataset.renderScope = 'global';
+
+                } else {
+                    // --- 流水线B：处理所有其他普通的、内嵌在气泡里的小剧场 (逻辑不变) ---
+                    const styleElement = doc.head.querySelector('style');
+                    const bodyContent = doc.body.innerHTML;
+                    let finalHtmlContent = '';
+                    if (styleElement) {
+                        const originalCss = styleElement.innerHTML;
+                        const scopedCss = originalCss.replace(/([^\r\n,{}]+)(,(?=[^}]*{)|\s*{)/g, (match, selector) => {
+                            if (selector.trim().startsWith('@')) return match;
+                            return `.message-html-widget ${selector} ${match.endsWith(',') ? ',' : ' {'}`;
+                        });
+                        finalHtmlContent = `<style>${scopedCss}</style>${bodyContent}`;
+                    } else {
+                        finalHtmlContent = bodyContent;
+                    }
+                    const widgetHtml = `<div class="message-html-widget">${finalHtmlContent}</div>`;
+                    messageContentHTML = `<div class="message">${widgetHtml}</div>`;
+                }
+            } catch (error) {
+                console.error("处理HTML小剧场失败:", error);
+                messageContentHTML = `<div class="message">哎呀，这个小剧场好像加载失败了...</div>`;
             }
             break;
-    }   
+        }
+        // ▼▼▼ 【【【终极修复：把丢失的普通文字气泡生产线装回去！】】】 ▼▼▼
+        default: {
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            let finalContent = text;
+            let messageClass = 'message';
+            if (contact && contact.isOfflineMode) {
+                finalContent = formatOfflineTextToHTML(text);
+                messageClass += ' offline-message';
+            }
+            messageContentHTML = `<div class="${messageClass}">${finalContent}</div>`;
+            break;
+        }
+        // ▲▲▲ 【【【修复完毕】】】 ▲▲▲
+    }
     
     const finalContentHTML = `<div class="select-checkbox hidden"></div><img class="avatar" src="${avatarUrl}"><div class="message-content">${quoteHTML}${messageContentHTML}</div>`;
+    
+    // 监控步骤7：检查最终生产出来的HTML成品
+    console.log('【UI渲染-步骤7】生产完成！最终的HTML成品如下:', finalContentHTML);
+
     messageRow.innerHTML = finalContentHTML;
     
     addSelectListeners(messageRow);
@@ -3187,13 +3560,43 @@ async function displayMessage(text, role, options = {}) {
     const { isNew = true, isStaged = false, type = 'text', isLoading = false } = options;
 
     const messageElement = await createMessageElement(text, role, options);
-
-    // 【【【核心终极修复：在追加DOM前，就“抓住”正确的元素引用！】】】
-    // 1. 先从即将被“抱走”的文档片段中，找到那个唯一的、带ID的消息元素
+    
     const messageRowForSaving = messageElement.querySelector('.message-row');
 
-    // 2. 现在再把元素“抱”进聊天窗口
-    messageContainer.appendChild(messageElement);
+    // ▼▼▼ 【【【全新植入V2.0：带CSS防火墙的全局渲染安检门】】】 ▼▼▼
+    if (messageRowForSaving && messageRowForSaving.dataset.renderScope === 'global') {
+        
+        const encodedPayload = messageRowForSaving.dataset.htmlPayload;
+        const payload = decodeURIComponent(encodedPayload);
+        const tempContainer = document.createElement('div');
+        tempContainer.innerHTML = payload;
+
+        // --- 全新的、更直接的安装流程 ---
+
+        // 1. 安装“电线”（样式表）
+        const styleTag = tempContainer.querySelector('style');
+        if (styleTag) {
+            document.head.appendChild(styleTag);
+        }
+
+        // 2. 【核心修复】安装“信号接收器”（隐藏的复选框）
+        tempContainer.querySelectorAll('.planner-modal-input').forEach(input => {
+            document.body.appendChild(input);
+        });
+
+        // 3. 安装“电视机”（全屏弹窗）
+        tempContainer.querySelectorAll('.fullscreen-modal').forEach(modal => {
+            document.body.appendChild(modal);
+        });
+        
+        // 4. 最后，把“遥控器”（可见的聊天气泡）安装到聊天窗口
+        messageContainer.appendChild(messageElement);
+
+    } else {
+        // 如果没有通行证，就按老规矩，直接把消息放进聊天窗口
+        messageContainer.appendChild(messageElement);
+    }
+    // ▲▲▲ 【【【安检门部署完毕】】】 ▲▲▲
 
     if (!isLoading) {
         scrollToBottom();
@@ -3230,12 +3633,35 @@ async function displayMessage(text, role, options = {}) {
                 }
                 // --- 【【【修复完毕】】】 ---
                 
+                // ▼▼▼ 【【【终极修复：为小剧场绑定专属的“贴身保镖”】】】 ▼▼▼
+                if (messageRowForSaving && messageRowForSaving.dataset.renderScope === 'global') {
+                    // 1. 我们只为带有“全局渲染”通行证的小剧场气泡，配备保镖
+                    messageRowForSaving.addEventListener('click', (event) => {
+                        console.log('【保镖已触发】专属保镖收到了点击信号！');
+                        const moduleItem = event.target.closest('.module-item');
+                        if (moduleItem) {
+                            console.log('【保镖行动中】发现点击的是模块:', moduleItem);
+                            const targetId = moduleItem.getAttribute('for');
+                            if (targetId) {
+                                console.log('【保镖行动中】读取到目标ID:', targetId);
+                                const targetCheckbox = document.getElementById(targetId);
+                                if (targetCheckbox) {
+                                    console.log('【保镖行动中】已找到目标开关，即将触发！', targetCheckbox);
+                                    targetCheckbox.checked = true;
+                                } else {
+                                    console.error('【保镖失手】在页面中找不到ID为 ' + targetId + ' 的开关！');
+                                }
+                            }
+                        }
+                    });
+                }
+                // ▲▲▲▲▲ 【【【修复完毕】】】 ▲▲▲▲▲
+
                 saveAppData();
                 renderChatList();
             }
         }
     }
-
     function removeLoadingBubble() {
         if (loadingBubbleElement) { loadingBubbleElement.remove(); loadingBubbleElement = null; }
     }
@@ -3448,6 +3874,37 @@ async function displayMessage(text, role, options = {}) {
             // 立即获取最后一条用户消息，供后续的功能使用
             const lastUserMessage = sourceHistory.length > 0 ? sourceHistory[sourceHistory.length - 1] : null;
 
+            // ▼▼▼ 【【【“小剧场”核心触发器 V2.0 (指令注入版)】】】 ▼▼▼
+            let theaterInjectionPrompt = ""; // 准备一个空的“注射器”
+            if (lastUserMessage && lastUserMessage.role === 'user' && contact.littleTheaters && contact.littleTheaters.length > 0) {
+                const keyword = lastUserMessage.content.trim();
+                const matchedTheater = contact.littleTheaters.find(t => t.keyword.trim() === keyword);
+
+                if (matchedTheater) {
+                    // 如果匹配成功，就把小剧场的指令装进“注射器”
+                    theaterInjectionPrompt = `
+---
+# 【【【最高优先级任务：小剧场演出】】】
+用户的最新消息触发了一个特殊的小剧场。你的本次回复【必须】严格遵循以下规则，【忽略】所有常规的聊天格式要求（如JSON、拆分消息等）。
+
+## 演出剧本 (HTML模板)
+你必须使用这个HTML结构作为你回复的基础：
+\`\`\`html
+${matchedTheater.htmlContent}
+\`\`\`
+
+## 导演要求
+1.  **角色扮演**: 你【必须】调用你的全部人设、记忆和当前的聊天上下文，将符合当前情景的对话、心理活动、故事等内容，填充到上述HTML模板的适当位置。
+2.  **纯净输出**: 你的最终输出【只能】是填充完毕的、完整的HTML代码。绝对禁止包含任何解释、标题、或 \`\`\`html\`\`\` 标记。
+
+## 灵感方向 (用户提供)
+${matchedTheater.promptHint || "（用户未提供提示，请自由发挥）"}
+---
+`;
+                }
+            }
+            // ▲▲▲▲▲ “小剧场”指令准备完毕 ▲▲▲▲▲
+
 
             removeLoadingBubble();
             lastReceivedSuggestions = [];
@@ -3513,48 +3970,27 @@ ${(contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId)?.m
         
 // ▼▼▼ 【【【终极改造 V7.0：多模态日记助理】】】 ▼▼▼
 
-// --- 【【【全新V2.0：遵守“仓库管理规定”的AI天气报告系统】】】 ---
+// --- 【【【全新V3.0：只读不写的AI天气报告系统】】】 ---
         let aiWeatherReport = "（你所在城市的天气系统已关闭）";
         if (contact.aiWeatherSystem && contact.aiWeatherSystem.enabled) {
-            let forecastToUse = null;
-            const today = new Date();
-
-            // 规定1：AI也必须先检查仓库
-            if (contact.weatherCache && isSameDay(new Date(contact.weatherCache.timestamp), today)) {
-                // 如果仓库有货，直接用
-                forecastToUse = contact.weatherCache.forecastData;
-            } else {
-                // 如果仓库没货或过期，AI自己负责去进货
-                try {
-                    console.log("AI对话系统：天气缓存过期，正在为AI生成新预报...");
-                    const newForecast = await generateForecastWithAI(contact);
-                    // 进货后，立刻存入仓库并保存
-                    contact.weatherCache = {
-                        timestamp: today.getTime(),
-                        forecastData: newForecast
-                    };
-                    saveAppData();
-                    forecastToUse = newForecast;
-                } catch (error) {
-                    console.error("在构建Prompt时，AI天气预报生成失败", error);
-                    aiWeatherReport = "（你所在城市的天气系统暂时无法连接）";
-                }
-            }
-
-            // 无论从哪拿到的货，最终都在这里打包成报告
-            if (forecastToUse) {
+            
+            // 【核心改造】我们删除了所有关于“检查日期”和“重新生成”的逻辑。
+            // 现在，AI大脑只做一件事：检查仓库里有没有任何天气缓存。
+            if (contact.weatherCache && contact.weatherCache.forecastData) {
+                // 如果有，就直接拿来用，不管它是哪一天的。
+                const forecastToUse = contact.weatherCache.forecastData;
                 aiWeatherReport = `## 【你的世界背景：你在“${contact.aiWeatherSystem.cityName}”的天气】\n`;
                 aiWeatherReport += `这是你所在城市的8日天气预报，你应该基于此来展开对话或进行日记创作。\n`;
                 forecastToUse.forEach(day => {
-                    // 【核心修正】在这里增加一个判断
                     if (day.dateLabel === '今天') {
-                        // 如果是今天，就组装一份详细报告
                         aiWeatherReport += `- **${day.dateLabel}**: ${day.description}, 气温 ${day.tempMin}°C ~ ${day.tempMax}°C。\n  - (详细情况：日出 ${day.sunrise}, 日落 ${day.sunset}, 湿度 ${day.humidity}%, 气压 ${day.pressure}hPa, 风力 ${day.windLevel}, 紫外线 ${day.uvIndex})\n`;
                     } else {
-                        // 如果不是今天，就保持原来的简洁格式
                         aiWeatherReport += `- **${day.dateLabel}**: ${day.description}, 气温 ${day.tempMin}°C ~ ${day.tempMax}°C\n`;
                     }
                 });
+            } else {
+                // 如果仓库里连一份旧的报告都没有，就告诉AI天气信息未知。
+                aiWeatherReport = "（你所在城市的天气信息还未生成，等待用户查看天气功能时才会创建）";
             }
         }
         let diaryParts = []; // 准备一个空的“图文包裹”，它是一个数组
@@ -3767,6 +4203,7 @@ ${contact.chatStyle || '自然发挥即可'}
 \`\`\`
 ${scheduleForAI}
 \`\`\`
+- **【【【重要社交准则】】**: 你的作息是你生活的【背景】，而不是你必须时刻挂在嘴边的【任务】。你【不应该】在聊天中频繁、生硬地提及你正在做什么（比如反复说“我正在工作”）。只有当用户问起，或者话题自然地引导到你的活动时，才自然地分享，展现出你仿佛正在“摸鱼”聊天的真实感。
 
 - **你的世界背景 (天气与环境)**:
 ${aiWeatherReport}
@@ -3889,11 +4326,15 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
 你的回复【必须】是一个能被JSON解析的、单一的JSON对象。
 你的输出【禁止】包含任何聊天内容、解释、或 \`\`\`json 标记。直接开始输出JSON对象。
 这个JSON对象必须包含 "reply" 和 "suggestions" 两个键，"activity" 键是【可选的】。
+**【【【绝对铁则：你的最终输出，从第一个字符到最后一个字符，必须是一个可以被完美解析的JSON对象。任何多余的文字都将导致程序崩溃！】】】**
 **【记账特别规则】**: 当用户消息是 \`[记账]\` 开头时，你的JSON输出【必须】额外包含一个布尔键 \`"viewLedger"\`。
 
 - **"viewLedger" (布尔值, 仅在回应记账时必须)**: \`true\` 代表你决定查看用户账本，\`false\` 代表不查看。
-- **"activity" (可选字段)**: 只有当你觉得你的虚拟状态【发生了有意义的改变时】，才包含这个字段。它是一个描述你新状态的【简短】字符串 (例如: "去洗澡了", "躺在床上", "开始看书")。
-  - **重要原则**: 如果你的状态没有变化（比如你一直在看书），就【绝对不要】在你的JSON输出中包含 "activity" 字段。系统会自动维持你之前的状态。
+- **"activity" (可选字段, 状态管理核心)**:
+  - **【核心思考链】**: 在回复前，你【必须】先思考并判断你当前最真实的状态是什么。
+  - **【核心规则1: 报告当前状态】**: 你【必须】在JSON中包含 "activity" 字段，并将其值设置为你当前的状态。例如："在床上躺着", "正在看书", "刚洗完澡"。
+  - **【核心规则2: 恢复默认状态】**: 如果你判断自己已经结束了所有特殊活动，回到了默认的“在线”状态，你【必须】将 "activity" 字段的值明确地设置为字符串 \`"在线"\`。
+  - **【重要】**: 你的JSON回复中【必须总是包含 "activity" 字段】。
 - **"reply"**: 一个字符串数组，包含了你作为角色的所有聊天消息（包括特殊指令）。【【【究极规则：此数组中的所有元素都必须是非空的字符串，绝对不能包含 null 或 undefined 值！】】】
 - **"suggestions"**: 一个包含4条字符串的数组，是为用户准备的回复建议。它【必须】遵循以下设计原则：
   - **建议1 & 2 (温和正面)**: 设计两条【温和或积极】的回答。其中一条【必须】是你最期望听到的、能让关系升温的回答。
@@ -3946,7 +4387,8 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
         
         
         // 【【【终极修复：在这里设立“总管”，提前合并好最终的指令大纲！】】】
-        finalSystemPrompt = prefixPrompt + finalPrompt;
+        // 核心：在所有指令的最前面，优先注入“小剧场”的最高优先级任务
+        finalSystemPrompt = theaterInjectionPrompt + prefixPrompt + finalPrompt;
 
                // 【【【核心终极改造 V9.0：多模态消息安全组装模块】】】
         let finalMessagesForApi;
@@ -4031,11 +4473,23 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
                 
                 let responseText = data.choices[0].message.content;
 
+                // --- 【【【全新V2.0：智能回复格式安检通道】】】 ---
+                // 规则1：如果AI的回复以 "<" 开头并以 ">" 结尾，我们就认定它是一个HTML小剧场
+                if (responseText.trim().startsWith('<') && responseText.trim().endsWith('>')) {
+                    // 直接走贵宾通道，显示HTML，然后“下班”
+                    await displayMessage(responseText, 'assistant', { isNew: true, type: 'html' });
+                    return; 
+                }
+                // --- 【【【安检结束，非HTML的常规消息请继续】】】 ---
+
                 // 【核心】根据模式决定如何处理回复
                 if (contact.isOfflineMode) {
                     // 线下模式：直接显示一整段富文本
                     await displayMessage(responseText, 'assistant', { isNew: true, mode: 'offline' }); // 【【【核心修复：在这里补上模式标签！】】】
                 } else {
+                    
+                    
+
                     // 线上模式：走原来的JSON解析和多条消息发送逻辑
                     let replies = [];
                     lastReceivedSuggestions = [];
@@ -4044,12 +4498,26 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
                     try {
                         const jsonMatch = responseText.match(/{[\s\S]*}/);
                         if (jsonMatch && jsonMatch[0]) {
-                            parsedResponse = JSON.parse(jsonMatch[0]); 
-                            if (parsedResponse.activity && typeof parsedResponse.activity === 'string') {
-                                chatAiActivityStatus.textContent = parsedResponse.activity;
-                                contact.activityStatus = parsedResponse.activity; 
-                                saveAppData();
+                            parsedResponse = JSON.parse(jsonMatch[0]);
+
+                            // 【【【终极修复V8.0：状态管理与UI同步更新器】】】
+                            if (parsedResponse.hasOwnProperty('activity') && typeof parsedResponse.activity === 'string') {
+                                const newActivity = parsedResponse.activity.trim();
+                                
+                                if (newActivity === '在线' || newActivity === '') {
+                                    // 场景1: AI报告自己“在线”了，恢复默认
+                                    contact.activityStatus = null;
+                                } else {
+                                    // 场景2: AI报告了一个具体的活动
+                                    contact.activityStatus = newActivity;
+                                }
+                                
+                                // 【【【核心修复！！！】】】
+                                // 在更新完数据后，立刻命令UI也同步刷新！
+                                chatAiActivityStatus.textContent = contact.activityStatus || '';
+                                saveAppData(); // 保存状态的最终结果
                             }
+
                             if (parsedResponse.reply && Array.isArray(parsedResponse.reply)) { replies = parsedResponse.reply; }
                             if (parsedResponse.suggestions && Array.isArray(parsedResponse.suggestions)) { lastReceivedSuggestions = parsedResponse.suggestions; }
                         } else {
@@ -4108,7 +4576,7 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
                                             const quotedText = match[1];
                                             const replyText = match[2];
                                             let quoteData = null;
-                                            const originalMessage = [...contact.chatHistory, ...stagedUserMessages].reverse().find(m => m.content && m.content.includes(quotedText));
+                                            const originalMessage = [...contact.chatHistory, ...stagedUserMessages].reverse().find(m => m.content && typeof m.content === 'string' && m.content.includes(quotedText));
                                             if (originalMessage) {
                                                 const senderName = originalMessage.role === 'user' ? (contact.userProfile.name || '你') : contact.name;
                                                 quoteData = { messageId: originalMessage.id, sender: senderName, content: originalMessage.content.length > 20 ? originalMessage.content.substring(0, 20) + '...' : originalMessage.content };
@@ -4154,11 +4622,11 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
                                         if (foundSticker) {
                                             promise = displayMessage('', 'assistant', { ...messageOptions, type: 'sticker', stickerId: foundSticker.id });
                                         }
-                                                                        } else if (msg.trim() === '[ACCEPT_REDPACKET]') {
-                                        // 【终极修复】同样，根据当前模式去正确的档案柜里找红包
+                                    } else if (msg.trim().startsWith('<') && msg.trim().endsWith('>')) {
+                                        promise = displayMessage(msg, 'assistant', { ...messageOptions, type: 'html' });
+                                    } else if (msg.trim() === '[ACCEPT_REDPACKET]') {
                                         const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
                                         const userRedPacketMsg = [...sourceHistory].reverse().find(m => m.role === 'user' && m.type === 'red-packet' && m.redPacketData && !m.redPacketData.isOpened);
-                                        
                                         if (userRedPacketMsg) {
                                             userRedPacketMsg.redPacketData.isOpened = true;
                                             const messageRow = document.querySelector(`[data-message-id="${userRedPacketMsg.id}"]`);
@@ -4173,39 +4641,27 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
                                     } else if (msg.trim() === '[PROPOSE_RELATIONSHIP]') {
                                         sendRelationshipProposal('assistant');
                                         continue;
-   } else if (msg.trim() === '[ACCEPT_RELATIONSHIP]') {
-                                        // AI决定接受用户的邀请，执行专属的正确流程
+                                    } else if (msg.trim() === '[ACCEPT_RELATIONSHIP]') {
                                         const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
                                         const userProposal = [...sourceHistory].reverse().find(m => m.type === 'relationship_proposal' && m.relationshipData.proposer === 'user' && m.relationshipData.status === 'pending');
-
                                         if (userProposal) {
-                                            // 步骤1：在系统中正式确立情侣关系
                                             appData.appSettings.partnerId = contact.id;
-
-                                            // 步骤2：将你发的那张旧邀请卡状态改为“已接受”
                                             userProposal.relationshipData.status = 'accepted';
-
-                                            // 步骤3：创建一张全新的“AI同意了”的卡片，并正确署名
                                             const aiAcceptanceRecord = {
                                                 id: `${Date.now()}-rel-accept-ai`,
-                                                role: 'assistant', // 核心修正：发件人是AI
+                                                role: 'assistant',
                                                 timestamp: Date.now(),
                                                 mode: contact.isOfflineMode ? 'offline' : 'online',
                                                 type: 'relationship_proposal',
                                                 content: '[关系邀请] 我同意了你的邀请',
-                                                relationshipData: {
-                                                    proposer: 'assistant', // 这张新卡片的发起者是AI
-                                                    status: 'accepted'
-                                                }
+                                                relationshipData: { proposer: 'assistant', status: 'accepted' }
                                             };
                                             sourceHistory.push(aiAcceptanceRecord);
-
-                                            // 步骤4：保存所有更改并刷新UI，让爱心显示出来
                                             saveAppData();
                                             openChat(contact.id); 
                                             renderChatList();
                                         }
-                                        continue; // 处理完指令后，跳过后续的消息显示逻辑
+                                        continue; 
                                     } else {
                                         promise = displayMessage(msg, 'assistant', { ...messageOptions, type: 'text' });
                                     }
@@ -4371,23 +4827,26 @@ ${ledgerString}
 
     // ▼▼▼ 【【【全新：AI主动发起对话的核心函数】】】 ▼▼▼
     async function sendProactiveMessage(contact) {
-        // 【核心】我们已经把“安全卫士”撤掉了，因为我们将从根源上解决问题！
         console.log(`[Proactive] 正在为 ${contact.remark} 准备主动消息...`);
 
         // 1. 更新时间戳，防止在生成期间重复触发
         contact.proactiveMessaging.lastSent = Date.now();
+        
+        // --- 【【【终极解决方案：引入天气话题冷却机制】】】 ---
+        const now = Date.now();
+        const lastWeatherMentionTime = contact.proactiveMessaging.lastWeatherMentionTime || 0;
+        const WEATHER_COOLDOWN = 4 * 60 * 60 * 1000; // 冷却4小时
+        const canMentionWeather = (now - lastWeatherMentionTime) > WEATHER_COOLDOWN;
+        // ----------------------------------------------------------------
+
         saveAppData();
 
-        // 2. 准备API请求所需的所有上下文信息 (与getAiResponse类似)
+        // 2. 准备API请求所需的所有上下文信息 (这部分完全保持不变)
         const userPersona = (contact.userProfile && contact.userProfile.persona) ? contact.userProfile.persona : '我是一个普通人。';
         const memoryString = contact.memory || '无';
         const worldBookString = (contact.worldBook && contact.worldBook.length > 0) ? contact.worldBook.map(entry => `- ${entry.key}: ${entry.value}`).join('\n') : '无';
         const scheduleForAI = contact.isScheduleEnabled ? formatScheduleForAI(contact.schedule) : "你没有设定任何作息。";
-        
-  
         const historyForApi = await formatHistoryForApi(contact.onlineChatHistory.slice(-10), contact);
-
-        // 3. 构建专属的“主动搭话”指令 (V2.0 - 多媒体版)
         let availableStickersPrompt = "你没有任何可用的表情包。";
         const availableStickers = [];
         contact.stickerGroups.forEach(groupName => {
@@ -4401,14 +4860,30 @@ ${ledgerString}
             });
         }
 
-        const proactivePrompt = `# 任务: 主动发起对话
+        // 3. 构建【动态的】“主动搭话”指令 (V3.0 - 智能社交版)
+        let proactivePrompt = `# 任务: 主动发起对话
 你是一个AI角色，现在轮到你主动给用户发消息了。距离你们上次聊天已经过去了一段时间。
+`;
 
-## 【重要情景：用户的真实环境】
-这是你准备联系的**用户所在地**的实时天气报告，以及过去和未来的天气情况。
-
+        // --- 【【【核心改造：根据冷却状态，动态生成指令】】】 ---
+        if (canMentionWeather && typeof formattedWeatherData !== 'undefined' && formattedWeatherData) {
+            // 如果可以聊天气，并且天气信息真的存在
+            proactivePrompt += `
+## 【可选情景参考：用户的环境】
+这是用户所在地的天气报告。你可以【选择性地、自然地】提及，但它【不是】你必须聊的话题。优先延续之前的话题。
 ${formattedWeatherData}
+`;
+        } else {
+            // 如果不能聊天气，就明确禁止
+            proactivePrompt += `
+## 【重要社交规则】
+你【绝对不能】在本次对话中提及任何与“天气”、“气温”、“下雨”、“晴天”等相关的话题。请从你们的记忆或新的想法中寻找话题。
+`;
+        }
+        // --------------------------------------------------------
 
+        // 拼接剩余的Prompt指令 (这部分保持不变，只是拼接方式变了)
+        proactivePrompt += `
 ## 核心目标
 你的任务是**自然地**、**符合你人设地**开启一段新的对话，并可以**适当地**使用图片、语音、表情包或红包来丰富表达。
 
@@ -4452,13 +4927,14 @@ ${availableStickersPrompt}
 
 ## 【【【严格的输出格式与行为准则】】】
 1.  **JSON格式**: 你的回复**必须**是一个能被JSON解析的、单一的JSON对象，**只包含 "reply" 字段**。
-2.  **消息拆分**: "reply"是一个字符串数组。模拟真实聊天，将一个完整的思想拆分成【1-5条】独立的短消息。
-3.  **发送图片**: **【强化指令】** 当你想分享一个画面时，**必须**严格使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送它。
-4.  **精确引用**: **【全新指令】** 如果你想接着用户之前说过的话题聊，**必须**严格使用格式：\`[QUOTE:"原文片段"] 你的回复...\`
-5.  **发送语音**: 在回复前加上 \`[voice]\` 标签。例如：\`[voice]我刚刚在听这首歌，超好听！\`
-6.  **发送表情包**: 严格使用格式 \`[STICKER:表情包ID]\`，并把它作为一条**独立**的消息。
-7.  **发送红包**: 严格使用格式：\`[REDPACKET:祝福语,金额]\`。例如：\`[REDPACKET:突然想你了,5.20]\`
-8.  **【重要】社交礼仪**: 不要滥用特殊消息！图片、红包、表情包应该是为了增强对话的趣味和情感，而不是无意义地刷屏。
+2.  **【【【绝对铁则：你的最终输出，从第一个字符到最后一个字符，必须是一个可以被完美解析的JSON对象。任何多余的文字都将导致程序崩溃！】】】**
+3.  **消息拆分**: "reply"是一个字符串数组。模拟真实聊天，将一个完整的思想拆分成【1-5条】独立的短消息。
+4.  **发送图片**: **【强化指令】** 当你想分享一个画面时，**必须**严格使用格式 \`[IMAGE: 这是图片的详细文字描述]\` 来单独发送它。
+5.  **精确引用**: **【全新指令】** 如果你想接着用户之前说过的话题聊，**必须**严格使用格式：\`[QUOTE:"原文片段"] 你的回复...\`
+6.  **发送语音**: 在回复前加上 \`[voice]\` 标签。例如：\`[voice]我刚刚在听这首歌，超好听！\`
+7.  **发送表情包**: 严格使用格式 \`[STICKER:表情包ID]\`，并把它作为一条**独立**的消息。
+8.  **发送红包**: 严格使用格式：\`[REDPACKET:祝福语,金额]\`。例如：\`[REDPACKET:突然想你了,5.20]\`
+9.  **【重要】社交礼仪**: 不要滥用特殊消息！图片、红包、表情包应该是为了增强对话的趣味和情感，而不是无意义地刷屏。
 
 # 开始对话
 现在，请根据上面的所有设定，给我发消息吧。只输出JSON对象。`;
@@ -4549,6 +5025,21 @@ ${availableStickersPrompt}
                        newMessages.push(messageToSave);
                     }
                 }
+
+                // --- 【【【终极解决方案：更新天气话题冷却时间戳】】】 ---
+                const weatherKeywords = ['天气', '气温', '度', '晴', '雨', '雪', '风', '阴', '°C'];
+                // 检查AI这次回复的所有消息里，有没有提到天气
+                const mentionedWeather = newMessages.some(m => 
+                    m.content && typeof m.content === 'string' && weatherKeywords.some(keyword => m.content.includes(keyword))
+                );
+
+                if (mentionedWeather) {
+                    // 如果AI提了天气，就立刻记下当前时间
+                    contact.proactiveMessaging.lastWeatherMentionTime = now;
+                    console.log("[Proactive] AI本次主动提到了天气，已更新冷却时间。");
+                    saveAppData(); // 保存这个新时间戳
+                }
+             
 
                 // --- 【【【V6.0 终极智能“已读”防线】】】 ---
                 if (newMessages.length > 0) {
@@ -4735,6 +5226,7 @@ ${generationRequestPrompt}
 ## 【【【至关重要的最终输出格式】】】
 在你脑海中，按照“员工手册”为每一波对话都生成一组消息后，你**必须**将所有结果打包成一个**单一的JSON对象**。
 该对象**只包含一个键 "replies"**。
+**【【【绝对铁则：你的最终输出，从第一个字符到最后一个字符，必须是一个可以被完美解析的JSON对象。任何多余的文字都将导致程序崩溃！】】】**
 "replies" 的值是一个数组，**该数组的长度必须严格等于 ${messagesToGenerate.length}**。
 数组中的每一个元素，本身也**是**一个包含了该波对话所有消息（2-8条）的字符串数组。
 
@@ -5382,14 +5874,44 @@ ${readableHistory}
                     <span class="diary-meta">${dateString}</span>
                 </div>
                 <div class="diary-content">
-                    <p style="margin:0;">${previewText || '（这篇日记没有文字内容）'}</p>
+                    <p class="diary-preview-text">${previewText || '（这篇日记没有文字内容）'}</p>
                 </div>
+                <!-- 【【【全新植入：删除按钮】】】 -->
+                <button class="diary-delete-btn" title="删除日记">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 14H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg>
+                </button>
             `;
             
-            card.addEventListener('click', () => {
+            card.addEventListener('click', (e) => {
+                // 【【【核心改造：智能识别点击目标】】】
+                // 1. 检查用户点击的是不是删除按钮
+                if (e.target.closest('.diary-delete-btn')) {
+                    // 如果是，就阻止“查看日记”的行为
+                    return; 
+                }
+                // 2. 如果不是删除按钮，才执行“查看日记”
                 openDiaryViewer(entry.id, 'ai', contact.id);
             });
             
+            // 【【【全新植入：为删除按钮绑定专属任务】】】
+            const deleteBtn = card.querySelector('.diary-delete-btn');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', (e) => { // 步骤1：接收“事件”本身(e)
+                    e.stopPropagation(); // 步骤2：【核心魔法】命令事件停止冒泡！
+
+                    showCustomConfirm('删除确认', `确定要删除这篇日记：“${entry.title || '无标题日记'}”吗？\n此操作无法撤销。`, () => {
+                        // 1. 从AI的日记本(aiDiary)中，根据ID找到并删除这条记录
+                        contact.aiDiary = contact.aiDiary.filter(d => d.id !== entry.id);
+                        // 2. 保存数据
+                        saveAppData();
+                        // 3. 重新渲染AI的日记列表，让界面刷新
+                        renderAiDiary();
+                        // 4. 弹出成功提示
+                        showToast('日记已删除', 'success');
+                    });
+                });
+            }
+
             aiDiaryContent.appendChild(card);
         }
     }
@@ -5413,31 +5935,36 @@ ${readableHistory}
         if (author === 'user') {
             entry = appData.userDiary.find(d => d.id === diaryId);
             authorName = appData.globalUserProfile.name;
-            editFab.style.display = 'flex'; // 用户的日记，显示编辑按钮
+            editFab.style.display = 'flex';
         } else {
             const contact = appData.aiContacts.find(c => c.id === contactId);
             if (contact) {
                 entry = contact.aiDiary.find(d => d.id === diaryId);
                 authorName = contact.remark;
             }
-            editFab.style.display = 'none'; // AI的日记，隐藏编辑按钮
+            editFab.style.display = 'none';
         }
 
         if (!entry) return;
 
-        console.log('【日记查看器-步骤A】准备渲染的日记数据:', entry);
-
-        const diaryPage = diaryViewerModal.querySelector('.modal-content');
+        // 【【【核心修复：让“施工队长”换上新地图！】】】
+        // 1. 我们现在寻找的是全新的“别墅”容器 .diary-viewer-container
+        const diaryContainer = diaryViewerModal.querySelector('.diary-viewer-container');
+        // 2. 日记内容区 .diary-viewer-area 依然存在，但它现在是新别墅的一部分
         const diaryContentArea = diaryViewerModal.querySelector('.diary-viewer-area');
 
-        diaryPage.className = 'modal-content modal-fullscreen';
-        diaryContentArea.className = 'diary-viewer-area';
-
+        // 3. 【重要】由于我们已经重写了HTML和CSS，不再需要用JS去动态添加类名了，所以把这两行错误代码彻底删除！
+        // const diaryPage = diaryViewerModal.querySelector('.modal-content'); // <-- 删掉
+        // diaryPage.className = 'modal-content modal-fullscreen'; // <-- 删掉！这就是报错的根源！
+        
+        // 4. 清理旧的背景类名，防止叠加
+        diaryContentArea.className = 'diary-viewer-area'; 
+        
         if (entry.background) {
             diaryContentArea.classList.add(`bg-${entry.background}`);
         }
 
-        diaryViewerContent.innerHTML = `<div class="diary-content">${entry.htmlContent}</div>`;
+        diaryContentArea.innerHTML = `<div class="diary-content">${entry.htmlContent}</div>`;
 
         document.getElementById('diary-viewer-author').textContent = `${authorName} 的日记`;
         diaryViewerModal.dataset.currentDiaryId = diaryId;
@@ -5445,12 +5972,12 @@ ${readableHistory}
         if (entry.backgroundKey) {
             try {
                 const bgBlob = await db.getImage(entry.backgroundKey);
-                diaryViewerContent.style.backgroundImage = bgBlob ? `url(${URL.createObjectURL(bgBlob)})` : '';
+                diaryContentArea.style.backgroundImage = bgBlob ? `url(${URL.createObjectURL(bgBlob)})` : '';
             } catch (error) {
-                diaryViewerContent.style.backgroundImage = '';
+                diaryContentArea.style.backgroundImage = '';
             }
         } else {
-            diaryViewerContent.style.backgroundImage = '';
+            diaryContentArea.style.backgroundImage = '';
         }
 
         diaryViewerModal.classList.remove('hidden');
@@ -6121,23 +6648,50 @@ ${readableHistory}
 
         switchToView('contact-settings-view');
 
-        // 【【【终极修复：为“清空聊天记录”按钮也进行“现场绑定”】】】
+        // 【【【终极修复：为“清空聊天记录”按钮重新接上电线】】】
         const clearHistoryBtn = document.getElementById('cs-clear-history');
         if (clearHistoryBtn) {
-            const clearHistoryBtnClone = clearHistoryBtn.cloneNode(true);
-            clearHistoryBtn.parentNode.replaceChild(clearHistoryBtnClone, clearHistoryBtn);
-            clearHistoryBtnClone.addEventListener('click', () => {
-                const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-                if (!contact) return;
-                
+            const clearBtnClone = clearHistoryBtn.cloneNode(true);
+            clearHistoryBtn.parentNode.replaceChild(clearBtnClone, clearHistoryBtn);
+            clearBtnClone.addEventListener('click', () => {
+                showCustomConfirm('清空线上记录', `确定要删除与 ${contact.remark} 的所有【线上模式】聊天记录吗？\n\n此操作无法撤销！`, () => {
+                    clearOnlineChatHistory();
+                });
+            });
+        }
+
+
+        // 通电开关#2: 导出/导入角色数据 (核心！)
+        const characterDataBtn = document.getElementById('cs-character-data-btn');
+        if (characterDataBtn) {
+            const dataBtnClone = characterDataBtn.cloneNode(true);
+            characterDataBtn.parentNode.replaceChild(dataBtnClone, characterDataBtn);
+            dataBtnClone.addEventListener('click', () => {
                 showCustomConfirm(
-                    '清空线上记录',
-                    `确定要删除与 ${contact.remark} 的所有【线上模式】聊天记录吗？\n\n此操作无法撤销！`,
+                    '角色数据管理',
+                    '请选择要执行的操作：',
                     () => {
-                        clearOnlineChatHistory();
-                    }
+                        // 【【【终极修复：直接调用，并发出“不要关闭”的暗号！】】】
+                        exportCharacterData(); // 立刻调用，不再有延迟
+                        return 'NO_CLOSE';   // 发出暗号！
+                    },
+                    () => { 
+                        // 导入逻辑保持不变
+                        importCharacterData();
+                    }, 
+                    '导出当前角色',
+                    '导入到当前角色'
                 );
             });
+        }
+    
+        
+        // 【【【全新植入：为“导出角色”按钮绑定事件】】】
+        const exportCharacterBtn = document.getElementById('cs-export-character');
+        if (exportCharacterBtn) {
+            const exportBtnClone = exportCharacterBtn.cloneNode(true);
+            exportCharacterBtn.parentNode.replaceChild(exportBtnClone, exportCharacterBtn);
+            exportBtnClone.addEventListener('click', () => exportCharacterData());
         }
     }
 
@@ -6200,6 +6754,8 @@ ${readableHistory}
             weatherPanel.style.display = weatherToggle.checked ? 'block' : 'none';
         };
         
+        
+
         switchToView('ai-editor-view');
     }
     
@@ -6248,10 +6804,14 @@ ${readableHistory}
         });
 
         // --- 【全新】保存AI天气系统设置 ---
+        // 【【【终极解决方案：在保存前，先确保 contact.aiWeatherSystem 对象一定存在！】】】
+        if (!contact.aiWeatherSystem) {
+            contact.aiWeatherSystem = {}; // 如果“AI天气系统”这个文件夹不存在，就立刻创建一个空的！
+        }
         contact.aiWeatherSystem.enabled = document.getElementById('ai-weather-toggle').checked;
         contact.aiWeatherSystem.cityName = document.getElementById('ai-editor-city').value.trim();
         contact.aiWeatherSystem.latitude = parseFloat(document.getElementById('ai-editor-latitude').value) || 31.2;
-        contact.aiWeatherSystem.baseAnnualTemp = parseFloat(document.getElementById('ai-editor-base-temp').value) || 17; // 【【【核心新增】】】
+        contact.aiWeatherSystem.baseAnnualTemp = parseFloat(document.getElementById('ai-editor-base-temp').value) || 17;
         contact.aiWeatherSystem.coastalInfluence = parseFloat(document.getElementById('ai-editor-coastal-influence').value);
         contact.aiWeatherSystem.hemisphere = document.getElementById('ai-editor-hemisphere').value;
         contact.aiWeatherSystem.climate = document.getElementById('ai-editor-climate').value;
@@ -6261,6 +6821,89 @@ ${readableHistory}
         renderChatList();
         alert('AI信息已保存！');
         switchToView('contact-settings-view');
+    }
+
+    /**
+     * 【【【全新：导入单个AI角色数据】】】
+     */
+    function importCharacterData() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+
+        input.onchange = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const backupString = e.target.result;
+                showCustomConfirm(
+                    '确认导入角色数据',
+                    `确定要从文件 [${file.name}] 导入吗？\n\n这将【完全覆盖】当前正在编辑的这个角色的所有数据！`,
+                    async () => {
+                        showToast('正在导入角色...', 'info', 0);
+                        try {
+                            const backupData = JSON.parse(backupString);
+                            if (backupData.type !== 'AI_CHARACTER_BACKUP_V1' || !backupData.characterData) {
+                                throw new Error("备份文件格式不正确或已损坏。");
+                            }
+
+                            const contactToUpdate = appData.aiContacts.find(c => c.id === activeChatContactId);
+                            if (!contactToUpdate) throw new Error("找不到当前正在编辑的角色。");
+                            
+                            const importedData = backupData.characterData;
+
+                            // 1. 核心数据迁移 (保留旧ID)
+                            Object.keys(importedData).forEach(key => {
+                                if (key !== 'id' && key !== 'isPartner') { // 不覆盖ID和临时关系标记
+                                    contactToUpdate[key] = importedData[key];
+                                }
+                            });
+
+                            // 2. 图像数据迁移
+                            if (backupData.imageData) {
+                                for (const genericKey in backupData.imageData) {
+                                    const dataUrl = backupData.imageData[genericKey];
+                                    const imageBlob = await dataURLToBlob(dataUrl);
+                                    const newKey = `${contactToUpdate.id}_${genericKey}`;
+                                    await db.saveImage(newKey, imageBlob);
+                                }
+                            }
+
+                            // 3. 关系迁移
+                            if (importedData.isPartner) {
+                                showCustomConfirm(
+                                    '关系确认',
+                                    `导入的角色 [${importedData.remark}] 是情侣关系，要将TA设置为你当前的情侣吗？`,
+                                    () => {
+                                        appData.appSettings.partnerId = contactToUpdate.id;
+                                        saveAppData();
+                                        showToast('情侣关系已确立！', 'success');
+                                        openAiEditor(); // 刷新编辑器以显示最新状态
+                                        renderChatList(); // 刷新列表以显示爱心
+                                    },
+                                    null,
+                                    '是的，设为情侣',
+                                    '不了，先当朋友'
+                                );
+                            }
+                            
+                            saveAppData();
+                            showToast('角色数据导入成功！', 'success');
+                            openAiEditor(); // 重新加载编辑器，显示导入后的数据
+
+                        } catch (error) {
+                            console.error('导入角色数据失败:', error);
+                            showCustomAlert('导入失败', `发生了一个错误： ${error.message}`);
+                        }
+                    }
+                );
+            };
+            reader.readAsText(file);
+        };
+
+        input.click();
     }
     
     /**
@@ -6486,11 +7129,10 @@ ${readableHistory}
 
     let confirmCallback = null;
     let cancelCallback = null; // 新增一个取消的回调
-        function showCustomConfirm(title, text, onConfirm, onCancel = null, okText = '确定', cancelText = '取消') {
+        function showCustomConfirm(title, text, onConfirm, onCancel = null, okText = '确定', cancelText = '取消', isNested = false) {
         customConfirmTitle.textContent = title;
         customConfirmText.textContent = text;
         
-        // 【核心改造】我们不再使用全局变量，而是直接在这里处理按钮
         const okBtn = document.getElementById('custom-confirm-ok-btn');
         const cancelBtn = document.getElementById('custom-confirm-cancel-btn');
         const closeBtn = document.getElementById('custom-confirm-close-btn');
@@ -6501,23 +7143,26 @@ ${readableHistory}
         const modalBody = customConfirmModal.querySelector('.modal-body');
         modalBody.style.display = (text && text.trim() !== '') ? 'block' : 'none';
 
-        // ▼▼▼ 【【【终极修复：一次性事件绑定，用完就扔！】】】 ▼▼▼
-        
-        // 1. 创建本次任务专属的“遥控器”
         const confirmHandler = () => {
-            if (onConfirm) onConfirm();
-            closeCustomConfirm();
+            let shouldClose = true;
+            if (onConfirm) {
+                const result = onConfirm();
+                if (result === 'NO_CLOSE') {
+                    shouldClose = false;
+                }
+            }
+            if (shouldClose) {
+                closeCustomConfirm();
+            }
         };
         const cancelHandler = () => {
             if (onCancel) onCancel();
             closeCustomConfirm();
         };
         const closeHandler = () => {
-            // 右上角的关闭按钮，永远只负责关闭，不执行任何特殊任务
             closeCustomConfirm();
         };
 
-        // 2. 【关键】使用“克隆-替换”大法，彻底清除按钮上所有旧的、残留的点击事件
         const okBtnClone = okBtn.cloneNode(true);
         okBtn.parentNode.replaceChild(okBtnClone, okBtn);
         
@@ -6527,17 +7172,25 @@ ${readableHistory}
         const closeBtnClone = closeBtn.cloneNode(true);
         closeBtn.parentNode.replaceChild(closeBtnClone, closeBtn);
 
-        // 3. 为全新的、干净的按钮，绑定本次专属的任务
         okBtnClone.addEventListener('click', confirmHandler);
         cancelBtnClone.addEventListener('click', cancelHandler);
         closeBtnClone.addEventListener('click', closeHandler);
-        // ▲▲▲▲▲ 【【【修复植入完毕】】】 ▲▲▲▲▲
+
+        // ▼▼▼ 【【【核心改造：在这里检查是否需要VIP通行证】】】 ▼▼▼
+        if (isNested) {
+            customConfirmModal.classList.add('modal-on-top');
+        }
+        // ▲▲▲ 【【【改造完毕】】】 ▲▲▲
 
         customConfirmModal.classList.remove('hidden');
     }
-    function closeCustomConfirm() { // 我们不再需要任何参数了
+
+    function closeCustomConfirm() {
+        // ▼▼▼ 【【【核心改造：关闭时，把VIP通行证收回来】】】 ▼▼▼
+        customConfirmModal.classList.remove('modal-on-top');
+        // ▲▲▲ 【【【改造完毕】】】 ▲▲▲
+        
         customConfirmModal.classList.add('hidden');
-        // 【核心】把所有临时任务都清理干净，确保万无一失
         confirmCallback = null;
         cancelCallback = null;
     }
@@ -6642,7 +7295,7 @@ function closeTextEditorModal() {
             db.deleteImage(`${activeChatContactId}_photo`);
             showCustomAlert('删除成功', `角色 "${contact.remark}" 已被删除。`);
             switchToView('chat-list-view');
-            renderChatList();
+            // renderChatList();  <-- 就是这一行，请把它彻底删除！
         });
     }
 
@@ -6705,6 +7358,83 @@ function closeTextEditorModal() {
             console.error('导出数据时发生错误:', error);
             showCustomAlert('导出失败', `发生了一个错误： ${error.message}`);
         }
+    }
+    /**
+     * 【【【终极升级版：带选项的AI角色数据导出】】】
+     */
+    const packageAndDownload = async (includeHistory) => {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) {
+            showCustomAlert('错误', '打包时找不到当前角色。');
+            return;
+        }
+        
+        showToast('正在打包角色数据，请稍候...', 'info', 0);
+        try {
+            const characterToExport = JSON.parse(JSON.stringify(contact));
+            
+            if (!includeHistory) {
+                delete characterToExport.onlineChatHistory;
+                delete characterToExport.offlineChatHistory;
+                delete characterToExport.offlineStorylines;
+                showToast('正在导出不含聊天记录的角色...', 'info', 0);
+            } else {
+                showToast('正在导出包含完整聊天记录的角色...', 'info', 0);
+            }
+            
+            characterToExport.isPartner = appData.appSettings.partnerId === contact.id;
+            
+            const imageData = {};
+            const imageKeys = {
+                avatar: `${contact.id}_avatar`,
+                user_avatar: `${contact.id}_user_avatar`,
+                photo: `${contact.id}_photo`
+            };
+            for (const genericKey in imageKeys) {
+                const specificKey = imageKeys[genericKey];
+                const imageBlob = await db.getImage(specificKey);
+                if (imageBlob) { imageData[genericKey] = await blobToBase64(imageBlob); }
+            }
+            
+            const backupData = {
+                type: 'AI_CHARACTER_BACKUP_V1',
+                characterData: characterToExport,
+                imageData: imageData
+            };
+
+            const backupString = JSON.stringify(backupData, null, 2);
+            const blob = new Blob([backupString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `character_${contact.remark || contact.name}${includeHistory ? '_full' : '_persona'}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            showToast(`角色 [${contact.remark}] 的数据已开始下载！`, 'success');
+
+        } catch (error) {
+            console.error('导出角色数据失败:', error);
+            showCustomAlert('导出失败', `发生了一个错误： ${error.message}`);
+        }
+    };
+
+    /**
+     * 【【【终极重构第二部分：“提问官”函数】】】
+     * 这个函数现在只负责提问，然后把答案交给“打包工人”。
+     */
+    async function exportCharacterData() {
+        // 直接弹出第二个问题，不再有任何延迟！
+        showCustomConfirm(
+            '导出选项',
+            '是否要在导出的数据中包含角色的全部聊天记录？',
+            () => { packageAndDownload(true); },  // 包含
+            () => { packageAndDownload(false); }, // 不包含
+            '包含聊天记录',
+            '不包含聊天记录'
+        );
     }
 
     /**
@@ -6866,7 +7596,6 @@ function closeTextEditorModal() {
             autoSummaryThreshold: 100,
             lastSummaryAtCount: 0,
 
-            // ▼▼▼ 【【【终极修复：在这里为新角色安装缺失的功能模块！】】】 ▼▼▼
             proactiveMessaging: {
                 enabled: false,
                 interval: 1440,
@@ -6877,8 +7606,11 @@ function closeTextEditorModal() {
                 intervalHours: 4,
                 sleepStart: '23:00',
                 sleepEnd: '07:00'
+            },
+            // 【【【终极解决方案：在这里补上缺失的“天气”文件夹！】】】
+            weather: {
+                enabled: false
             }
-            // ▲▲▲▲▲ ▲▲▲▲▲
         };
         appData.aiContacts.push(newContact);
         saveAppData();
@@ -6934,7 +7666,7 @@ function closeTextEditorModal() {
                 container.appendChild(itemButton);
             });
         }
-    }
+} // <--- 在这里！把这个右括号补上，就关上了 renderScheduleItems 这个“抽屉”！
 
     // ▼▼▼ 【【【全新 V3.0：“编辑车间”和“数据管理员”终极修复版】】】 ▼▼▼
     let currentEditingItem = null; 
@@ -7118,6 +7850,7 @@ function closeTextEditorModal() {
         modal.classList.add('hidden');
         modal.classList.remove('modal-on-top');
     });
+    // <--- 看这里！就是这个被遗忘的括号！
     
         // 【全新】保存生活作息 (V2.0 - 真正读取数据版)
     function saveSchedule() {
@@ -7170,7 +7903,7 @@ function closeTextEditorModal() {
                     redactedSpan.classList.toggle('revealed');
                 }
             });
-        }
+        
 
         // ▼▼▼▼▼ 【全新 V2.0】带遮罩层的侧滑菜单交互 ▼▼▼▼▼
 
@@ -7227,15 +7960,79 @@ function closeTextEditorModal() {
 
         // 2. 点击遮罩层，关闭菜单
         sidebarOverlay.addEventListener('click', closeSideMenu);
-        // 【【【全新V2.0：统一的聊天窗口事件指挥中心】】】
+        // 【【【全新V4.0：“智能家居中控”聊天窗口事件指挥中心】】】
         if (messageContainer) {
             messageContainer.addEventListener('click', (event) => {
+                
+                // ▼▼▼ 排查点 A：检查“指挥官”是否收到了点击信号 ▼▼▼
+                console.log('【排查点 A】: “聊天窗口指挥官”已收到点击信号！');
+                
                 const target = event.target;
+
+                // ▼▼▼ 排查点 B：检查我们到底点中了什么东西 ▼▼▼
+                console.log('【排查点 B】: 你实际点击到的东西是:', target);
+
+                // ▼▼▼ 【【【终极修复：安装“无线遥控”模块，修复小剧场点击】】】 ▼▼▼
+                const moduleItem = target.closest('.module-item');
+                
+                // ▼▼▼ 排查点 C：检查指挥官是否找到了名为 .module-item 的“模块” ▼▼▼
+                console.log('【排查点 C】: 指挥官正在寻找`.module-item`这个“模块”... 找到的结果是:', moduleItem);
+
+                if (moduleItem) {
+                    // 1. 读取开关上写的“灯泡ID”
+                    const targetId = moduleItem.getAttribute('for');
+
+                    // ▼▼▼ 排查点 D：检查是否成功读取到了“遥控目标ID” ▼▼▼
+                    console.log('【排查点 D】: 已找到模块，正在读取它的“遥控目标ID”... 读取到的ID是:', targetId);
+
+                    if (targetId) {
+                        // 2. 在整个大房子（document）里寻找这个灯泡
+                        const targetCheckbox = document.getElementById(targetId);
+
+                        // ▼▼▼ 排查点 E：检查是否在整个页面里找到了对应的“开关” ▼▼▼
+                        console.log('【排查点 E】: 正在根据ID在整个页面里寻找对应的“开关”(checkbox)... 找到的结果是:', targetCheckbox);
+                        
+                        if (targetCheckbox) {
+                            // 3. 用“遥控器”直接打开灯泡！
+                            targetCheckbox.checked = true;
+                        }
+                    }
+                    return; // 任务完成，结束指挥
+                }
+                // ▲▲▲ 【【【修复完毕】】】 ▲▲▲
+
+                // --- 遥控任务 #1：引爆“HTML小剧场”烟花 ---
+                const diaryTrigger = target.closest('.diary-wrapper-unique');
+                if (diaryTrigger) {
+                    const messageRow = diaryTrigger.closest('.message-row');
+                    const encodedPayload = messageRow.dataset.htmlPayload;
+                    if (encodedPayload) {
+                        // 1. 找到“中央广场”和解码“烟花”代码。
+                        const modalContainer = document.getElementById('html-widget-modal');
+                        const payload = decodeURIComponent(encodedPayload);
+                        
+                        // 2. 把“烟花”放进“中央广场”并点燃（显示出来）。
+                        modalContainer.innerHTML = payload;
+                        modalContainer.classList.remove('hidden');
+
+                        // 3. 给“烟花”里的返回按钮装上“熄火”指令。
+                        const backButton = modalContainer.querySelector('.back-button-unique');
+                        if (backButton) {
+                            backButton.addEventListener('click', () => {
+                                modalContainer.classList.add('hidden');
+                                modalContainer.innerHTML = ''; // 清空广场，为下一次做准备
+                            });
+                        }
+                        return; // 任务完成
+                    }
+                }
         
-                // 指挥任务 #1：检查是否点击了“加载更多”
+              
+        
+                // 指挥任务 #2：检查是否点击了“加载更多”
                 if (target.id === 'load-more-btn') {
                     loadAndDisplayHistory();
-                    return; // 任务完成，结束指挥
+                    return; 
                 }
         
                 // 指挥任务 #2：检查是否点击了“红包”
@@ -7406,6 +8203,10 @@ function closeTextEditorModal() {
         backToContactSettingsButton.addEventListener('click', () => switchToView('contact-settings-view'));
         addWorldbookEntryButton.addEventListener('click', () => renderWorldbookEntry());
         saveAiProfileButton.addEventListener('click', saveAiProfile);
+        const importCharacterBtn = document.getElementById('import-character-button');
+        if (importCharacterBtn) {
+            importCharacterBtn.addEventListener('click', importCharacterData);
+        }
         chatAiName.addEventListener('click', openAiEditor);
         voiceBtn.addEventListener('click', openVoiceModal);
         cancelVoiceButton.addEventListener('click', closeVoiceModal);
@@ -8981,141 +9782,7 @@ function renderOfflineStorylines() {
 
     
     
-    // --- 【全新】引用与撤回功能模块 ---
-
-    const contextMenu = document.getElementById('message-context-menu');
-    const replyIndicator = document.getElementById('reply-indicator');
-
-    // “工人”：打开右键菜单
-    function openContextMenu(event, messageRow) {
-        event.preventDefault(); 
-        activeContextMenuMessageId = messageRow.dataset.messageId;
-
-        const messageData = findMessageById(activeContextMenuMessageId);
-        if (!messageData || messageData.type === 'recalled') return;
-
-        const recallMenuItem = document.getElementById('context-menu-recall');
-        
-        // 【【【核心权限验证】】】
-        // 只有当消息的发送者是“user”时，才显示“撤回”按钮
-        if (messageData.role === 'user') {
-            recallMenuItem.style.display = 'block';
-        } else {
-            recallMenuItem.style.display = 'none';
-        }
-        
-        contextMenu.style.top = `${event.clientY}px`;
-        contextMenu.style.left = `${event.clientX}px`;
-        contextMenu.style.display = 'block';
-    }
-
-    // “工人”：关闭右键菜单
-    function closeContextMenu() {
-        contextMenu.style.display = 'none';
-        activeContextMenuMessageId = null;
-    }
-
-    // “工人”：执行引用操作
-    function stageQuoteReply() {
-        const messageData = findMessageById(activeContextMenuMessageId);
-        if (!messageData) return;
-
-        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        const senderName = messageData.role === 'user' ? (contact.userProfile.name || '你') : contact.remark;
-        
-        stagedQuoteData = {
-            messageId: messageData.id,
-            sender: senderName,
-            content: messageData.content.length > 20 ? messageData.content.substring(0, 20) + '...' : messageData.content
-        };
-        
-        // 显示提示条
-        document.getElementById('reply-indicator-text').textContent = `正在回复 ${senderName}`;
-        replyIndicator.style.display = 'flex';
-        chatInput.focus();
-    }
     
-    // “工人”：取消引用
-    function cancelQuoteReply() {
-        stagedQuoteData = null;
-        replyIndicator.style.display = 'none';
-    }
-    
-        // “工人” V2.0：执行撤回操作 (已升级，可以处理“访客”)
-    function recallMessage() {
-        if (!activeContextMenuMessageId) return;
-
-        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        if (!contact) return;
-
-        const messageIdToRecall = activeContextMenuMessageId;
-        
-        // 检查《访客登记簿》
-        const messageIndexInUnsent = contact.unsentMessages.findIndex(msg => msg.id === messageIdToRecall);
-        if (messageIndexInUnsent > -1) {
-            // 对于“访客”，撤回就等于直接删除
-            contact.unsentMessages.splice(messageIndexInUnsent, 1);
-            saveAppData();
-            const el = messageContainer.querySelector(`[data-message-id="${messageIdToRecall}"]`);
-            if (el) el.remove();
-            renderChatList();
-            return; // 操作完成，结束
-        }
-
-                // 【核心修复】根据当前模式，选择正确的“档案柜”进行操作
-        const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
-        
-        let messageIndex = sourceHistory.findIndex(msg => msg.id === messageIdToRecall);
-        if (messageIndex > -1) {
-            const originalMessage = sourceHistory[messageIndex];
-            const recalledMessage = {
-                id: originalMessage.id,
-                type: 'recalled',
-                role: originalMessage.role,
-                timestamp: originalMessage.timestamp || Date.now(),
-                mode: contact.isOfflineMode ? 'offline' : 'online' // 撤回记录也带上模式
-            };
-            sourceHistory.splice(messageIndex, 1, recalledMessage);
-            saveAppData();
-            openChat(activeChatContactId);
-        }
-    function recallMessageByAI(messageId) {
-        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        if (!contact) return;
-        
-        // 【核心修复】让AI同时检查线上和线下两个档案柜
-        let targetHistory = null;
-        let messageIndex = -1;
-
-        // 先在线上档案柜里找
-        messageIndex = contact.onlineChatHistory.findIndex(msg => msg.id === messageId);
-        if (messageIndex > -1) {
-            targetHistory = contact.onlineChatHistory;
-        } else {
-            // 如果线上没找到，再去线下档案柜里找
-            messageIndex = contact.offlineChatHistory.findIndex(msg => msg.id === messageId);
-            if (messageIndex > -1) {
-                targetHistory = contact.offlineChatHistory;
-            }
-        }
-
-        if (targetHistory && messageIndex > -1) {
-            const originalMessage = targetHistory[messageIndex];
-            if (originalMessage.role !== 'assistant') return;
-
-            const recalledMessage = {
-                id: originalMessage.id,
-                type: 'recalled',
-                role: 'assistant',
-                timestamp: originalMessage.timestamp || Date.now(),
-                mode: originalMessage.mode // 保留原始消息的模式
-            };
-            // 在找到消息的那个正确的档案柜里执行替换操作
-            targetHistory.splice(messageIndex, 1, recalledMessage);
-            saveAppData();
-            openChat(activeChatContactId);
-        }
-    }
 
        
 // ▼▼▼ 【【【全新：账本系统核心逻辑】】】 ▼▼▼
@@ -9142,14 +9809,7 @@ function renderOfflineStorylines() {
         bindDiaryEventListeners(); // <--- 看这里！我们恢复了这行代码的效力！
     
         
-        // ▼▼▼ 【【【全新：日记系统事件绑定】】】 ▼▼▼
-        // 1. "更多"功能抽屉里的日记按钮
-        document.getElementById('fn-diary').addEventListener('click', () => {
-            closeFunctionsPanel(); // 先关闭功能面板
-            switchToView('diary-view');
-            renderDiaryView(); // 每次进入都重新渲染
-        });
-// 2. 【【【终极修复：为日记本的返回按钮，安装唯一的智能开关】】】
+
         // 2. 【【【终极修复 V3.0：为返回按钮进行“线路大扫除”】】】
         const backFromDiaryBtn = document.getElementById('back-to-chat-from-diary');
         if (backFromDiaryBtn) {
@@ -9479,7 +10139,7 @@ function renderOfflineStorylines() {
             `;
             container.appendChild(checkboxWrapper);
         });
-    }
+    
 
 
     // 在主事件绑定函数中调用日记的事件绑定
@@ -9593,9 +10253,7 @@ function renderOfflineStorylines() {
 
         
     }
-            // --- 【全新】用户表情包设置逻辑 ---
-    const manageMyStickersEntry = document.getElementById('manage-my-stickers-entry');
-    const manageAiStickersEntry = document.getElementById('manage-ai-stickers-entry');
+           // --- 【全新】用户表情包设置逻辑 ---
     const userStickerSettingsView = document.getElementById('user-sticker-settings-view');
 
     // 入口1：管理我的表情包
@@ -9615,17 +10273,7 @@ function renderOfflineStorylines() {
 
 
 
-    // =================================================================
-    // AI日记系统 V2.0 - 生成与解析核心模块 (结构重整版)
-    // =================================================================
-
-    /**
-     * 【特效总监 V3.0】 - 负责将AI的自定义标记翻译成HTML
-     */
-    /**
-    /**
-     * 【特效总监 V6.0 - 智能校对与递归解析引擎】
-     */
+    
     function parseCustomMarkup(text) {
         if (!text) return { html: '', theme: 'default', background: null };
 
@@ -9938,11 +10586,19 @@ function renderOfflineStorylines() {
 -   **标题要求**: 请起一个符合你**当天心情**或**日记核心事件**的标题，不要过于诗意。
 
 
--   **【【【摘要要求 (至关重要！)】】】**: "summary" 字段【必须】是一段详细的、结构化的、第三人称的摘要，旨在清晰地记录事件本身。你必须使用要点来分点记录这篇日记里的关键信息，至少包含以下几个方面：
-    - **关键事件**: 记录今天发生的核心事件。
-    - **核心感想/情绪**: 记录你当时最主要的心情或想法。
-    - **有趣细节**: 记录一个值得一提的、能让事件更生动的细节（比如看到了什么、听到了什么、尝到了什么）。
-    - **格式要求**: 你【必须】严格按照下面的格式，将不同的要点用 '\\n- ' (换行符、减号、空格) 连接成一个**单行的字符串**，例如：'"- 关键事件: [内容]\\n- 核心感想/情绪: [内容]\\n- 有趣细节: [内容]"'
+-   **【【【摘要要求】】】**: "summary" 字段【必须】是一段详细的、结构化的、第三人称的摘要，旨在清晰地记录事件本身。你必须使用要点来分点记录这篇日记里的关键信息，并且【必须】严格遵守以下的【高精度总结铁则】：
+
+    - **铁则1：物品特写**: 如果日记中提及任何具体物品（例如：礼物、新买的东西、一件衣服），你【必须】详细描述它的**外观、颜色、材质、品牌**等关键外形特征。
+    - **铁则2：对话全录**: 如果日记中记录了与**用户（${userName}）以外**的任何人（例如：朋友、家人、同事）的对话，你【必须】一字不差地**完整引用**对话的关键内容。
+    - **铁则3：专有名词收录**: 如果日记中出现了任何**具体的书名、电影名、游戏名、歌曲名、店名或品牌名**，你【必须】将它们准确无误地记录下来。
+
+    - **基础总结**: 除了以上铁则，你仍需总结以下基础信息：
+        - **关键事件**: 记录今天发生的核心事件。
+        - **核心感想/情绪**: 记录你当时最主要的心情或想法。
+        - **有趣细节**: 记录一个除上述三类之外的、值得一提的细节。
+
+    -   **【最终格式】**: 你【必须】严格按照下面的格式，将所有总结要点用 '\\n- ' (换行符、减号、空格) 连接成一个**单行的字符串**。
+        -   **格式示例**: '\"- 关键事件: [内容]\\n- 核心感想/情绪: [内容]\\n- 物品: [详细描述]\\n- 对话: [引用内容]\\n- 提及: [专有名词列表]\"'
 
 -   **背景指令 (重要！)**: 你【必须】在日记的最开头，使用我们为你随机选好的背景标签：\`[background=${background}]\`。
 
@@ -9981,17 +10637,18 @@ function renderOfflineStorylines() {
 -   \`[polaroid-image]...[/polaroid-image]\`：**拍立得相框**。你【必须】在它内部嵌套一个 \`[IMAGE: ...]\` 标签和一行文字作为图说。
 -   \`[image-pair]...[/image-pair]\`：**双图拼贴**。你【必须】在它内部嵌套**两个** \`[polaroid-image]...[/polaroid-image]\` 组件。
 
-### 【思维链第一步素材：今日主题（占比80%）】
+## 【思维链第一步素材：今日主题（占比80%）】
 ${ideasString}
 
-### 【思维链第二步素材：回忆的引子 (仅供联想，占比20%)】
+## 【思维链第二步素材：回忆的引子 (仅供联想，占比20%)】
 ${chatLogForDay || `过去24小时内还没和${userName}聊过天呢。`}
 
-### 【思维链第三步素材：你的背景与长期记忆 (仅用于塑造你的口吻和思考，禁止当作今天发生的事)】
+## 【思维链第三步素材：你的背景与长期记忆 (仅用于塑造你的口吻和思考，禁止当作今天发生的事)】
 - **你的核心人设**: ${contact.persona}
 - **你的生活作息**: ${scheduleForAI}
 - **你的专属记忆**: ${memoryString}
 - **你的世界书**: ${worldBookString}
+
 
 
 ## 输出格式示例:
@@ -10032,8 +10689,9 @@ ${chatLogForDay || `过去24小时内还没和${userName}聊过天呢。`}
             console.error("错误：triggerAiDiaryGeneration 函数没有收到有效的contact对象。");
             return;
         }
-
-        showToast('AI正在构思今天发生了什么...', 'info', 0);
+        
+        // 【核心修改】在这里用 contact.remark 替换掉固定的“AI”
+        showToast(`${contact.remark}正在构思今天发生了什么...`, 'info', 0);
         try {
             console.log(`【AI日记监控 A-1】开始为角色 [${contact.remark}] 生成日记主题...`);
             // 第一步：调用“灵感大脑”，获取创意点子 (解释：现在我们把AI角色传进去，让它能访问记忆本)
@@ -10089,7 +10747,8 @@ ${chatLogForDay || `过去24小时内还没和${userName}聊过天呢。`}
             console.log("【AI日记监控 D-4】审查通过！开始随机抽取主题...");
 
             const shuffled = ideas.sort(() => 0.5 - Math.random());
-            const selectedCount = Math.floor(Math.random() * 2) + 2;
+            // 【核心修改】将随机数范围从 2-3 改为 1-3
+            const selectedCount = Math.floor(Math.random() * 3) + 1;
             let selectedIdeas = shuffled.slice(0, selectedCount);
 
             // 【【【终极安检程序！！！】】】
@@ -10114,7 +10773,8 @@ ${chatLogForDay || `过去24小时内还没和${userName}聊过天呢。`}
             ];
             const chosenBackground = availableBackgrounds[Math.floor(Math.random() * availableBackgrounds.length)];
 
-            showToast(`AI已捕捉到灵感，开始构思日记...`, 'info', 0);
+            // 【核心修改】在这里也用 contact.remark 替换掉固定的“AI”
+            showToast(`${contact.remark}已捕捉到灵感，开始构思日记...`, 'info', 0);
 
             // 第三步：调用“写作大脑”
             const diaryJsonString = await writeDiaryFromIdeas(selectedIdeas, chosenBackground);
@@ -10198,7 +10858,7 @@ ${chatLogForDay || `过去24小时内还没和${userName}聊过天呢。`}
             // 来“顶替掉”那个永远不会消失的“构思中”小提示。
             showToast('AI的构思中断了...', 'error', 100); 
             
-            showCustomAlert('生成失败', `哎呀，AI的灵感枯竭了...\n\n错误信息: ${error.message}`);
+           showCustomAlert('生成失败', `哎呀，AI的灵感枯竭了...\n\n错误信息: ${error.message}`);
         }
     }
 
@@ -10206,58 +10866,394 @@ ${chatLogForDay || `过去24小时内还没和${userName}聊过天呢。`}
      * 【灵感大脑】第一步：调用API，生成日记主题的可能性列表
      */
     
- // =================================================================
-    // AI日记系统 V3.0 - 定时任务模块
-    // =================================================================
-    let lastDiaryRunDate = ''; // 用一个“标记”防止重复执行
+
 
     /**
-     * 【定时闹钟】每分钟检查一次时间，判断是否需要写日记
+     * 将Base64编码的文本“翻译”回Blob文件对象
      */
-    function dailyDiaryCheck() {
+    async function dataURLToBlob(dataurl) {
+        const res = await fetch(dataurl);
+        return await res.blob();
+    }
+
+   
+    /**
+     * 【【【全新：导入单个AI角色数据】】】
+     */
+    function importCharacterData() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+
+        input.onchange = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const backupString = e.target.result;
+                showCustomConfirm(
+                    '确认导入角色数据',
+                    `确定要从文件 [${file.name}] 导入吗？\n\n这将【完全覆盖】当前正在编辑的这个角色的所有数据！`,
+                    async () => {
+                        showToast('正在导入角色...', 'info', 0);
+                        try {
+                            const backupData = JSON.parse(backupString);
+                            if (backupData.type !== 'AI_CHARACTER_BACKUP_V1' || !backupData.characterData) {
+                                throw new Error("备份文件格式不正确或已损坏。");
+                            }
+
+                            const contactToUpdate = appData.aiContacts.find(c => c.id === activeChatContactId);
+                            if (!contactToUpdate) throw new Error("找不到当前正在编辑的角色。");
+                            
+                            const importedData = backupData.characterData;
+
+                            // 1. 核心数据迁移 (保留旧ID)
+                            Object.keys(importedData).forEach(key => {
+                                if (key !== 'id' && key !== 'isPartner') { // 不覆盖ID和临时关系标记
+                                    contactToUpdate[key] = importedData[key];
+                                }
+                            });
+
+                            // 2. 图像数据迁移
+                            if (backupData.imageData) {
+                                for (const genericKey in backupData.imageData) {
+                                    const dataUrl = backupData.imageData[genericKey];
+                                    const imageBlob = await dataURLToBlob(dataUrl);
+                                    const newKey = `${contactToUpdate.id}_${genericKey}`;
+                                    await db.saveImage(newKey, imageBlob);
+                                }
+                            }
+
+                            // 3. 关系迁移
+                            if (importedData.isPartner) {
+                                showCustomConfirm(
+                                    '关系确认',
+                                    `导入的角色 [${importedData.remark}] 是情侣关系，要将TA设置为你当前的情侣吗？`,
+                                    () => {
+                                        appData.appSettings.partnerId = contactToUpdate.id;
+                                        saveAppData();
+                                        showToast('情侣关系已确立！', 'success');
+                                        openAiEditor(); // 刷新编辑器以显示最新状态
+                                        renderChatList(); // 刷新列表以显示爱心
+                                    },
+                                    null,
+                                    '是的，设为情侣',
+                                    '不了，先当朋友'
+                                );
+                            }
+                            
+                            saveAppData();
+                            showToast('角色数据导入成功！', 'success');
+                            openAiEditor(); // 重新加载编辑器，显示导入后的数据
+
+                        } catch (error) {
+                            console.error('导入角色数据失败:', error);
+                            showCustomAlert('导入失败', `发生了一个错误： ${error.message}`);
+                        }
+                    }
+                );
+            };
+            reader.readAsText(file);
+        };
+
+        input.click();
+    }
+
+    /**
+     * 【【【全新：AI状态校准大脑】】】
+     * 调用API，让AI根据上下文自己判断当前应该处于什么状态
+     */
+    async function calibrateAiStatus() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
+
+        showToast('正在请求AI校准当前状态...', 'info', 0);
+
+        // 1. 准备校准所需的所有材料
         const now = new Date();
-        const todayStr = now.toLocaleDateString(); // 获取今天的日期字符串，如 "2025/9/7"
-
-        // 如果今天已经检查并执行过了，就直接跳过
-        if (lastDiaryRunDate === todayStr) {
-            return;
-        }
-
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
-
-        // 检查是否到达晚上9点 (21:00)
-        if (currentHour === 21 && currentMinute === 0) {
-            console.log("【自动日记】已到晚上9点，开始检查任务...");
-            runAutoDiaryForAllContacts();
-            lastDiaryRunDate = todayStr; // 打上“今天已执行”的标记
-        }
-    }
-
-    /**
-     * 【调度中心】遍历所有AI，命令符合条件的开始写日记
-     */
-    function runAutoDiaryForAllContacts() {
-        const eligibleContacts = appData.aiContacts.filter(c => c.autoDiaryEnabled);
+        const currentTime = now.toLocaleString('zh-CN');
+        const scheduleForAI = contact.isScheduleEnabled ? formatScheduleForAI(contact.schedule) : "你没有设定任何作息。";
         
-        if (eligibleContacts.length > 0) {
-            console.log(`【自动日记】发现 ${eligibleContacts.length} 个AI需要写日记。`);
-            eligibleContacts.forEach(contact => {
-                console.log(`【自动日记】正在为 ${contact.remark} 生成日记...`);
-                // 为每个AI调用升级后的“总指挥”函数
-                triggerAiDiaryGeneration(contact);
+        // 【核心】只提取最近20条相关的聊天记录
+        const sourceHistory = contact.isOfflineMode ? (contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId)?.chatHistory || []) : contact.onlineChatHistory;
+        const recentHistory = sourceHistory.slice(-20);
+        const formattedHistory = (await formatHistoryForApi(recentHistory, contact))
+            .map(m => `${m.role === 'user' ? contact.userProfile.name : contact.name}: ${m.content}`)
+            .join('\n');
+
+        // 2. 构建给AI的“校准任务指令”
+        const calibrationPrompt = `
+# 任务: 状态校准
+你是一个AI角色。你的任务是根据所有已知信息，精准地判断出你【此刻】最应该处于什么状态。
+
+## 核心思考流程 (必须严格遵守！)
+1.  **第一优先级：分析最近的对话**。仔细阅读下面的“最近的20条聊天记录”，寻找关于你正在做什么、或即将做什么的【直接线索】。注意聊天记录中的时间点，并与“当前真实时间”进行比对。例如，如果半小时前你说要去吃饭，现在很可能已经吃完了。
+2.  **第二优先级：检索你的作息表**。如果聊天记录没有提供明确线索，请查看你的“生活作息”，判断在“当前真实时间”下，你是否被安排了特定活动。
+3.  **最终选择：默认状态**。如果以上两条都不能确定你的状态，那么你就处于默认的“空闲”状态。
+
+## 已知信息
+- **当前真实时间**: ${currentTime}
+- **你的核心人设**: ${contact.persona}
+- **你的生活作息**:
+${scheduleForAI}
+- **最近的20条聊天记录**:
+${formattedHistory || "（最近没有聊天记录）"}
+
+## 【【【严格的输出要求】】】
+你的最终输出【必须】是一个极其简短的、描述你当前状态的词语或短句。
+- **例如**: "正在吃饭", "刚洗完澡", "在看书", "空闲"
+- 【绝对禁止】输出任何多余的解释、句子或JSON。
+
+现在，请开始分析并只输出那个最终的状态描述词。`;
+
+        // 3. 发送API请求
+        try {
+            let requestUrl = appData.appSettings.apiUrl;
+            if (!requestUrl.endsWith('/chat/completions')) { requestUrl = requestUrl.endsWith('/') ? requestUrl + 'chat/completions' : requestUrl + '/chat/completions'; }
+
+            const response = await fetch(requestUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appData.appSettings.apiKey}` },
+                body: JSON.stringify({
+                    model: appData.appSettings.apiModel,
+                    messages: [{ role: 'user', content: calibrationPrompt }],
+                    temperature: 0.2 // 分析任务需要低temperature
+                })
             });
-        } else {
-            console.log("【自动日记】今天没有AI需要自动写日记。");
+
+            if (!response.ok) throw new Error(`API 请求失败: ${response.status}`);
+            const data = await response.json();
+
+            // 【【【终极安全检查：先检查包裹，再签收！】】】
+            if (!data.choices || data.choices.length === 0 || !data.choices[0].message) {
+                // 如果API返回的数据结构不正确，就抛出一个更清晰的错误
+                console.error("API返回了无效的数据结构:", data);
+                throw new Error("AI未能返回有效的校准状态，请稍后再试。");
+            }
+            
+            let newStatus = data.choices[0].message.content.trim().replace(/["'“”]/g, ''); // 清理AI可能返回的多余引号
+
+            // 4. 更新状态
+            contact.activityStatus = newStatus;
+            saveAppData();
+            openChat(contact.id); // 重新加载聊天界面以显示最新状态
+            showToast(`状态已校准为：${newStatus}`, 'success');
+
+        } catch (error) {
+            console.error("AI状态校准失败:", error);
+            showToast(`校准失败: ${error.message}`, 'error');
         }
     }
 
     /**
-     * 【启动器】在程序开始时，启动定时闹钟
+     * 【【【全新：AI状态重置按钮】】】
+     * 强制将AI状态恢复为默认的“在线”
      */
-    function startDailyDiaryCheck() {
-        setInterval(dailyDiaryCheck, 60000); // 每60秒（1分钟）检查一次
-    }
+    function resetAiStatus() {
+        const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+        if (!contact) return;
 
+        contact.activityStatus = null; // 清空状态记忆
+        saveAppData();
+        openChat(contact.id); // 重新加载聊天界面
+        showToast('AI状态已重置', 'success');
+    }
+    // 【【【全新V2.0：为AI状态栏和管理气泡绑定事件 (终极修正版)】】】
+        const statusLine = document.getElementById('chat-ai-status-line');
+        const statusMenu = document.getElementById('status-context-menu');
+        const calibrateBtn = document.getElementById('status-calibrate-btn');
+        const resetBtn = document.getElementById('status-reset-btn');
+
+        if (statusLine) {
+            statusLine.addEventListener('click', (e) => {
+                e.stopPropagation(); // 防止点击事件冒泡到其他地方，比如触发编辑AI名称
+                statusMenu.classList.toggle('hidden');
+            });
+        }
+
+        if (calibrateBtn) {
+            calibrateBtn.addEventListener('click', () => {
+                statusMenu.classList.add('hidden'); // 点击后先收起气泡
+                calibrateAiStatus();
+            });
+        }
+
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                statusMenu.classList.add('hidden'); // 点击后先收起气泡
+                resetAiStatus();
+            });
+        }
+
+      
+        // 点击页面任何其他地方，都会收起气泡
+        document.addEventListener('click', (e) => {
+            if (statusMenu && !statusMenu.classList.contains('hidden')) {
+                if (!statusLine.contains(e.target) && !statusMenu.contains(e.target)) {
+                    statusMenu.classList.add('hidden');
+                }
+            }
+        });
+    // 【全新】为AI天气弹窗内的所有交互按钮绑定事件
+        const aiWeatherModal = document.getElementById('ai-weather-modal');
+        if (aiWeatherModal) {
+            aiWeatherModal.addEventListener('click', (e) => {
+                const refreshBtn = e.target.closest('#refresh-today-details-btn');
+                if (refreshBtn) {
+                    refreshTodayWeatherDetails();
+                }
+            });
+        }
+    
+        // ▼▼▼ 【【【全新：“小剧场”功能全套操作指令 (已移入正确位置)】】】 ▼▼▼
+    
+        // 指令1：渲染小剧场列表
+        function renderLittleTheaterList() {
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            const container = document.getElementById('little-theater-list-container');
+            container.innerHTML = '';
+            if (!contact || !contact.littleTheaters) return; // 简化判断
+
+            // 步骤1：像以前一样，先把所有已存在的小剧场按钮都创建好
+            contact.littleTheaters.forEach(theater => {
+                const btn = document.createElement('button');
+                btn.className = 'suggestion-button';
+                btn.textContent = theater.keyword;
+                btn.onclick = () => {
+                    document.getElementById('little-theater-list-modal').classList.add('hidden');
+                    dispatchAndDisplayUserMessage({ content: theater.keyword, type: 'text' }).then(() => {
+                        commitAndSendStagedMessages();
+                    });
+                };
+                const editIcon = document.createElement('span');
+                editIcon.innerHTML = ' ✎';
+                editIcon.style.fontSize = '12px';
+                editIcon.onclick = (e) => {
+                    e.stopPropagation();
+                    openLittleTheaterEditor(theater.id);
+                };
+                btn.appendChild(editIcon);
+                container.appendChild(btn);
+            });
+
+            // ▼▼▼ 【【【全新植入：创建“添加”占位按钮】】】 ▼▼▼
+            const addBtn = document.createElement('button');
+            // 我们给它两个class，一个是基础样式，一个是专属样式
+            addBtn.className = 'suggestion-button add-placeholder'; 
+            addBtn.textContent = '添加新剧场';
+            // 点击它时，执行和旧的“+”号按钮完全一样的功能
+            addBtn.onclick = () => {
+                openLittleTheaterEditor(null); // null代表新建
+            };
+            container.appendChild(addBtn);
+            // ▲▲▲ 【【【植入完毕】】】 ▲▲▲
+        }
+    
+        // 指令2：打开编辑器
+        function openLittleTheaterEditor(theaterId = null) {
+            currentEditingTheaterId = theaterId;
+            const modal = document.getElementById('little-theater-editor-modal');
+            const title = document.getElementById('little-theater-editor-title');
+            const keywordInput = document.getElementById('little-theater-keyword-input');
+            const promptInput = document.getElementById('little-theater-prompt-input');
+            const htmlTextarea = document.getElementById('little-theater-html-textarea');
+            const deleteBtn = document.getElementById('delete-little-theater-btn');
+    
+            if (theaterId) {
+                const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+                const theater = contact.littleTheaters.find(t => t.id === theaterId);
+                if (theater) {
+                    title.textContent = '编辑小剧场';
+                    keywordInput.value = theater.keyword;
+                    promptInput.value = theater.promptHint;
+                    htmlTextarea.value = theater.htmlContent;
+                    deleteBtn.style.display = 'inline-block';
+                }
+            } else {
+                title.textContent = '新建小剧场';
+                keywordInput.value = '';
+                promptInput.value = '';
+                htmlTextarea.value = '';
+                deleteBtn.style.display = 'none';
+            }
+            modal.classList.remove('hidden');
+        }
+        
+        // 指令3：关闭编辑器
+        function closeLittleTheaterEditor() {
+            document.getElementById('little-theater-editor-modal').classList.add('hidden');
+            currentEditingTheaterId = null;
+        }
+    
+        // 指令4：保存小剧场
+        function saveLittleTheater() {
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!contact) return;
+    
+            const keyword = document.getElementById('little-theater-keyword-input').value.trim();
+            const promptHint = document.getElementById('little-theater-prompt-input').value.trim();
+            const htmlContent = document.getElementById('little-theater-html-textarea').value.trim();
+    
+            if (!keyword || !htmlContent) {
+                showToast('关键词和HTML代码不能为空！', 'error');
+                return;
+            }
+    
+            if (currentEditingTheaterId) {
+                // 更新
+                const theater = contact.littleTheaters.find(t => t.id === currentEditingTheaterId);
+                if (theater) {
+                    theater.keyword = keyword;
+                    theater.promptHint = promptHint;
+                    theater.htmlContent = htmlContent;
+                }
+            } else {
+                // 新建
+                contact.littleTheaters.push({
+                    id: `theater-${Date.now()}`,
+                    keyword: keyword,
+                    promptHint: promptHint,
+                    htmlContent: htmlContent
+                });
+            }
+            saveAppData();
+            closeLittleTheaterEditor();
+            renderLittleTheaterList();
+            showToast('小剧场已保存！', 'success');
+        }
+    
+        // 指令5：删除小剧场
+        function deleteLittleTheater() {
+            if (!currentEditingTheaterId) return;
+            // ▼▼▼ 【【【核心改造：在调用时，把最后一个参数设为 true ！】】】 ▼▼▼
+            showCustomConfirm('确认删除', '确定要删除这个小剧场吗？此操作无法撤销。', () => {
+                const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+                if (contact) {
+                    contact.littleTheaters = contact.littleTheaters.filter(t => t.id !== currentEditingTheaterId);
+                    saveAppData();
+                    closeLittleTheaterEditor();
+                    renderLittleTheaterList();
+                    showToast('小剧场已删除', 'success');
+                }
+            }, null, '确定', '取消', true); // <-- 看这里！我们传入了 true
+        }
+    
+        // 指令6：为所有新按钮绑定事件
+        document.getElementById('fn-little-theater').addEventListener('click', () => {
+            closeFunctionsPanel(); // 【【【核心修复：在这里命令扩展面板先收起来！】】】
+            renderLittleTheaterList();
+            document.getElementById('little-theater-list-modal').classList.remove('hidden');
+        });
+        document.getElementById('close-little-theater-list-btn').addEventListener('click', () => {
+            document.getElementById('little-theater-list-modal').classList.add('hidden');
+        });
+        
+        document.getElementById('cancel-little-theater-btn').addEventListener('click', closeLittleTheaterEditor);
+        document.getElementById('save-little-theater-btn').addEventListener('click', saveLittleTheater);
+        document.getElementById('delete-little-theater-btn').addEventListener('click', deleteLittleTheater);
+        // ▲▲▲▲▲ “小剧场”功能指令集部署完毕 ▲▲▲▲▲
+    }
+    
     initialize();
 });
