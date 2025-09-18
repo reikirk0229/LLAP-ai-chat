@@ -2388,6 +2388,8 @@ if (c.recentDiarySummaries === undefined) {
                     displayContent = '[语音]';
                 } else if (lastMessage.type === 'red-packet') {
                     displayContent = '[红包]';
+                } else if (lastMessage.type === 'html') { // ★★★【【【全新植入：教会识别系统看懂“小剧场”】】】★★★
+                    displayContent = '[小剧场]';
                 } else {
                     // 对于所有其他情况，我们才假定 content 是文本
                     displayContent = lastMessage.content || '...';
@@ -3420,71 +3422,92 @@ async function createMessageElement(text, role, options = {}) {
                 const triggerElement = doc.querySelector('.planner-wrapper');
 
                 if (isFullscreenWidget && triggerElement) {
-                    // --- 流水线A：处理“旅行计划” ---
-                    
-                    const triggerClone = triggerElement.cloneNode(true);
-                    const modalsContainer = document.createElement('div');
-                    const inputsContainer = document.createElement('div');
-                    const stylesContainer = document.createElement('div');
+                // --- 【【【终极修复 V13.0：中央广场统一部署方案】】】 ---
+                
+                // 1. 【打包弹药】我们不再拆分，而是把AI生成的整个HTML（包含样式、开关、弹窗和主界面）完整地打包起来。
+                const finalPayload = doc.documentElement.innerHTML;
+                messageRow.dataset.htmlPayload = encodeURIComponent(finalPayload);
 
-                    // 1. 【手术核心：复印蓝图】先把唯一的样式表复制一份出来备用
-                    const styleTag = doc.querySelector('style');
-                    const styleCloneForGlobal = styleTag ? styleTag.cloneNode(true) : null;
-                    
-                    // 2. 【打包弹药】把弹窗、开关、和【复印的】样式表打包，准备发射到全局
-                    doc.querySelectorAll('.fullscreen-modal').forEach(el => modalsContainer.appendChild(el));
-                    doc.querySelectorAll('.planner-modal-input').forEach(el => inputsContainer.appendChild(el));
-                    if (styleCloneForGlobal) {
-                        stylesContainer.appendChild(styleCloneForGlobal);
-                    }
-                    const finalPayload = stylesContainer.innerHTML + inputsContainer.innerHTML + modalsContainer.innerHTML;
-                    messageRow.dataset.htmlPayload = encodeURIComponent(finalPayload);
-                    
-                    // 3. 【装修气泡】把【原始的】样式表和主面板快照，一起留在气泡里
-                    let triggerFinalHtml = '';
-                    if (styleTag) {
-                        // 【【【终极防火墙 V2.0：智能识别全局规则】】】
-                        const originalCss = styleTag.innerHTML;
-                        
-                        const scopedCss = originalCss.replace(/([^\r\n,{}]+)(,(?=[^}]*{)|\s*{)/g, (match, selector) => {
-                            // 规则1：忽略 @keyframes 这种全局动画规则
-                            if (selector.trim().startsWith('@')) {
-                                return match;
-                            }
-                            // 规则2：【核心！】如果规则里包含了“~”（兄弟选择器），也认定它是全局规则，不加前缀！
-                            if (selector.includes('~')) {
-                                return match;
-                            }
-                            // 规则3：对于所有其他普通规则，才给它加上防火墙前缀
-                            return `.message-html-widget ${selector.trim()} ${match.endsWith(',') ? ',' : ' {'}`;
-                        });
-                        triggerFinalHtml += `<style>${scopedCss}</style>`;
-                    }
-                    triggerFinalHtml += triggerClone.outerHTML;
-                    
-                    const widgetHtml = `<div class="message-html-widget">${triggerFinalHtml}</div>`;
-                    messageContentHTML = `<div class="message">${widgetHtml}</div>`;
-                    
-                    // 4. 打上通行证
-                    messageRow.dataset.renderScope = 'global';
+                // 2. 【装修气泡】我们只把“旅行计划”的主界面(planner-wrapper)作为“快照”留在气泡里，并为它加上样式。
+                const styleTag = doc.querySelector('style');
+                let triggerFinalHtml = '';
+                if (styleTag) {
+                    // 同样，为快照的样式加上“防火墙”，防止它影响聊天界面的其他元素。
+                    const originalCss = styleTag.innerHTML;
+                    const scopedCss = originalCss.replace(/([^\r\n,{}]+)(,(?=[^}]*{)|\s*{)/g, (match, selector) => {
+                        if (selector.trim().startsWith('@') || selector.includes('~')) {
+                            return match;
+                        }
+                        return `.message-html-widget ${selector.trim()} ${match.endsWith(',') ? ',' : ' {'}`;
+                    });
+                    triggerFinalHtml += `<style>${scopedCss}</style>`;
+                }
+                triggerFinalHtml += triggerElement.outerHTML;
+                
+                const widgetHtml = `<div class="message-html-widget">${triggerFinalHtml}</div>`;
+                messageContentHTML = `<div class="message">${widgetHtml}</div>`;
 
-                } else {
-                    // --- 流水线B：处理所有其他普通的、内嵌在气泡里的小剧场 (逻辑不变) ---
-                    const styleElement = doc.head.querySelector('style');
-                    const bodyContent = doc.body.innerHTML;
-                    let finalHtmlContent = '';
-                    if (styleElement) {
-                        const originalCss = styleElement.innerHTML;
-                        const scopedCss = originalCss.replace(/([^\r\n,{}]+)(,(?=[^}]*{)|\s*{)/g, (match, selector) => {
-                            if (selector.trim().startsWith('@')) return match;
-                            return `.message-html-widget ${selector} ${match.endsWith(',') ? ',' : ' {'}`;
-                        });
-                        finalHtmlContent = `<style>${scopedCss}</style>${bodyContent}`;
-                    } else {
-                        finalHtmlContent = bodyContent;
-                    }
-                    const widgetHtml = `<div class="message-html-widget">${finalHtmlContent}</div>`;
-                    messageContentHTML = `<div class="message">${widgetHtml}</div>`;
+                // 3. 【关键】我们给这个气泡打上一个特殊的“身份证”，告诉指挥官它是一个“中央广场”的触发器。
+                messageRow.dataset.action = 'open-html-widget';
+
+            } else {
+                    // --- 【【【终极修复 V23.0：注入“反重力”与“透明化”双重保险】】】 ---
+                    
+                    let originalHtml = text;
+                    const iframeId = `iframe-${Date.now()}-${Math.random()}`;
+
+                    // 2. 【核心升级】准备终极“净化”指令，强制覆盖AI可能添加的有害样式
+                    const overrideStyle = '<style>body { min-height: 0 !important; background: transparent !important; }</style>';
+                    originalHtml = originalHtml.replace('</head>', `${overrideStyle}</head>`);
+
+                    // 3. 【保持不变】继续植入我们强大的“勘探队”脚本
+                    const resizeObserverScript = `
+                        <script>
+                            try {
+                                let lastHeight = 0;
+                                const target = document.body.firstElementChild;
+                                if (target) {
+                                    const resizeObserver = new ResizeObserver(entries => {
+                                        const newHeight = entries[0].target.scrollHeight;
+                                        if (Math.abs(newHeight - lastHeight) > 1) {
+                                            lastHeight = newHeight;
+                                            window.parent.postMessage({
+                                                type: 'resize-iframe',
+                                                iframeId: '${iframeId}',
+                                                height: newHeight
+                                            }, '*');
+                                        }
+                                    });
+                                    resizeObserver.observe(target);
+                                }
+                                if (document.fonts) {
+                                    document.fonts.ready.then(() => {
+                                        if(target) {
+                                          window.parent.postMessage({
+                                              type: 'resize-iframe',
+                                              iframeId: '${iframeId}',
+                                              height: target.scrollHeight
+                                          }, '*');
+                                        }
+                                    });
+                                }
+                            } catch (e) { console.error('Error setting up ResizeObserver in iframe:', e); }
+                        <\/script>
+                    `;
+                    originalHtml = originalHtml.replace('</body>', `${resizeObserverScript}</body>`);
+
+                    // 4. 创建最终的iframe
+                    const iframeHtml = `
+                        <iframe 
+                            id="${iframeId}"
+                            srcdoc="${originalHtml.replace(/"/g, '&quot;')}" 
+                            style="width: 100%; border: none; display: block; height: 150px;" 
+                            sandbox="allow-scripts allow-same-origin allow-top-navigation"
+                        >
+                        </iframe>
+                    `;
+                    
+                    messageContentHTML = `<div class="message message-html-widget">${iframeHtml}</div>`;
                 }
             } catch (error) {
                 console.error("处理HTML小剧场失败:", error);
@@ -4332,8 +4355,11 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
 - **"viewLedger" (布尔值, 仅在回应记账时必须)**: \`true\` 代表你决定查看用户账本，\`false\` 代表不查看。
 - **"activity" (可选字段, 状态管理核心)**:
   - **【核心思考链】**: 在回复前，你【必须】先思考并判断你当前最真实的状态是什么。
-  - **【核心规则1: 报告当前状态】**: 你【必须】在JSON中包含 "activity" 字段，并将其值设置为你当前的状态。例如："在床上躺着", "正在看书", "刚洗完澡"。
-  - **【核心规则2: 恢复默认状态】**: 如果你判断自己已经结束了所有特殊活动，回到了默认的“在线”状态，你【必须】将 "activity" 字段的值明确地设置为字符串 \`"在线"\`。
+  - **【核心规则1: 状态判断】**: 你需要根据你的作息、最近的对话内容和你的人设，来确定一个最符合当下的、简短的状态描述。例如：“在床上躺着”, “正在看书”, “刚洗完澡”, “空闲”。
+  - **【核心规则2: 智能过滤】**:
+    -   **重要变化才报告**: 只有当你判断你的状态发生了**有意义的变化**时（例如：从“看书”变为“准备睡觉”，或者从“工作”变为“吃饭”），你才**应该**在JSON中包含 "activity" 字段来报告这个**新状态**。
+    -   **保持现状则沉默**: 如果你判断你当前的状态与上一次报告的状态**没有本质区别**（例如：你一直在“看书”，或者只是从“在线”变为“空闲”这种微小变化），那么你**不应该**在本次的JSON回复中包含 "activity" 字段。让它保持上一次的状态即可。
+  - **【核心规则3: 恢复默认状态】**: 当你判断自己已经结束了所有特殊活动，回到了默认的“在线”状态时，你【必须】将 "activity" 字段的值明确地设置为字符串 "在线"。这是一个重要的“状态重置”信号。
   - **【重要】**: 你的JSON回复中【必须总是包含 "activity" 字段】。
 - **"reply"**: 一个字符串数组，包含了你作为角色的所有聊天消息（包括特殊指令）。【【【究极规则：此数组中的所有元素都必须是非空的字符串，绝对不能包含 null 或 undefined 值！】】】
 - **"suggestions"**: 一个包含4条字符串的数组，是为用户准备的回复建议。它【必须】遵循以下设计原则：
@@ -7960,69 +7986,30 @@ function closeTextEditorModal() {
 
         // 2. 点击遮罩层，关闭菜单
         sidebarOverlay.addEventListener('click', closeSideMenu);
-        // 【【【全新V4.0：“智能家居中控”聊天窗口事件指挥中心】】】
+        // 【【【全新V5.0：终极统一的“小剧场指挥中心”】】】
         if (messageContainer) {
             messageContainer.addEventListener('click', (event) => {
-                
-                // ▼▼▼ 排查点 A：检查“指挥官”是否收到了点击信号 ▼▼▼
-                console.log('【排查点 A】: “聊天窗口指挥官”已收到点击信号！');
-                
                 const target = event.target;
 
-                // ▼▼▼ 排查点 B：检查我们到底点中了什么东西 ▼▼▼
-                console.log('【排查点 B】: 你实际点击到的东西是:', target);
-
-                // ▼▼▼ 【【【终极修复：安装“无线遥控”模块，修复小剧场点击】】】 ▼▼▼
-                const moduleItem = target.closest('.module-item');
-                
-                // ▼▼▼ 排查点 C：检查指挥官是否找到了名为 .module-item 的“模块” ▼▼▼
-                console.log('【排查点 C】: 指挥官正在寻找`.module-item`这个“模块”... 找到的结果是:', moduleItem);
-
-                if (moduleItem) {
-                    // 1. 读取开关上写的“灯泡ID”
-                    const targetId = moduleItem.getAttribute('for');
-
-                    // ▼▼▼ 排查点 D：检查是否成功读取到了“遥控目标ID” ▼▼▼
-                    console.log('【排查点 D】: 已找到模块，正在读取它的“遥控目标ID”... 读取到的ID是:', targetId);
-
-                    if (targetId) {
-                        // 2. 在整个大房子（document）里寻找这个灯泡
-                        const targetCheckbox = document.getElementById(targetId);
-
-                        // ▼▼▼ 排查点 E：检查是否在整个页面里找到了对应的“开关” ▼▼▼
-                        console.log('【排查点 E】: 正在根据ID在整个页面里寻找对应的“开关”(checkbox)... 找到的结果是:', targetCheckbox);
-                        
-                        if (targetCheckbox) {
-                            // 3. 用“遥控器”直接打开灯泡！
-                            targetCheckbox.checked = true;
-                        }
-                    }
-                    return; // 任务完成，结束指挥
-                }
-                // ▲▲▲ 【【【修复完毕】】】 ▲▲▲
-
-                // --- 遥控任务 #1：引爆“HTML小剧场”烟花 ---
-                const diaryTrigger = target.closest('.diary-wrapper-unique');
-                if (diaryTrigger) {
-                    const messageRow = diaryTrigger.closest('.message-row');
-                    const encodedPayload = messageRow.dataset.htmlPayload;
+                // --- 指挥任务 #1：处理所有需要打开“中央广场”的小剧场 ---
+                const widgetTrigger = target.closest('.message-row[data-action="open-html-widget"]');
+                if (widgetTrigger) {
+                    const encodedPayload = widgetTrigger.dataset.htmlPayload;
                     if (encodedPayload) {
-                        // 1. 找到“中央广场”和解码“烟花”代码。
                         const modalContainer = document.getElementById('html-widget-modal');
                         const payload = decodeURIComponent(encodedPayload);
                         
-                        // 2. 把“烟花”放进“中央广场”并点燃（显示出来）。
+                        // 1. 把完整的、功能正常的HTML小剧场代码，注入到“中央广场”。
                         modalContainer.innerHTML = payload;
                         modalContainer.classList.remove('hidden');
 
-                        // 3. 给“烟花”里的返回按钮装上“熄火”指令。
-                        const backButton = modalContainer.querySelector('.back-button-unique');
-                        if (backButton) {
-                            backButton.addEventListener('click', () => {
+                        // 2. 【智能识别】为所有class为 "back-button" 的元素都装上“关闭”指令。
+                        modalContainer.querySelectorAll('.back-button').forEach(button => {
+                            button.addEventListener('click', () => {
                                 modalContainer.classList.add('hidden');
-                                modalContainer.innerHTML = ''; // 清空广场，为下一次做准备
+                                modalContainer.innerHTML = ''; // 演出结束，清空广场。
                             });
-                        }
+                        });
                         return; // 任务完成
                     }
                 }
@@ -11254,6 +11241,16 @@ ${formattedHistory || "（最近没有聊天记录）"}
         document.getElementById('delete-little-theater-btn').addEventListener('click', deleteLittleTheater);
         // ▲▲▲▲▲ “小剧场”功能指令集部署完毕 ▲▲▲▲▲
     }
-    
+    // --- 【【【全新植入 V21.0：“iframe信号接收总站”】】】 ---
+    window.addEventListener('message', (event) => {
+        // 安全检查：只处理我们自己定义的、来自iframe的身高调整信号
+        if (event.data && event.data.type === 'resize-iframe' && event.data.iframeId) {
+            const iframe = document.getElementById(event.data.iframeId);
+            if (iframe && event.data.height > 0) {
+                // 收到信号后，用最新的、最准确的高度来调整iframe
+                iframe.style.height = (event.data.height + 5) + 'px';
+            }
+        }
+    });
     initialize();
 });
