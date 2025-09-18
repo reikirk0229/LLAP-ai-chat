@@ -6019,3 +6019,13 @@ body.dark-theme .weather-icon-container svg {
 .modal-overlay.modal-on-top {
     z-index: 1005; 
 }
+/* --- 【全新】小剧场列表弹窗居中修复补丁 --- */
+#little-theater-list-modal.modal-overlay {
+    align-items: center; /* 魔法！命令它垂直居中！ */
+    padding-top: 0;      /* (推荐) 同时把顶部的安全距离也去掉，实现完美居中 */
+}
+/* --- 【全新 V3.0】HTML小剧场气泡圆角裁剪 --- */
+/* 我们现在只需要保留裁剪功能，让内边距恢复默认！ */
+.message.message-html-widget {
+    overflow: hidden;
+}
