@@ -144,6 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let stagedQuoteData = null; // 暂存准备要引用的消息数据
     let stagedAccountingEntries = []; // 【全新】暂存记账条目
     let cameFromChatWindow = false; // 全新安装的“短期记忆芯片”！
+    let isSendingMessage = false; // 【【【全新：消息发送交通信号灯】】】
 
     // --- 【【【全新：天气感知系统 V1.0】】】 ---
     let formattedWeatherData = "（天气信息暂未获取）"; // 用来存储给AI看的天气报告
@@ -381,14 +382,17 @@ function isYesterday(date) {
         const renderAllWeatherUI = (forecastData) => {
             const todayData = forecastData.find(day => day.dateLabel === '今天');
             
-            // 【核心修改】我们现在先构建一个包含所有数据的HTML字符串，最后再统一渲染
+            // ▼▼▼ 【【【终极修复：在这里重构HTML结构，将标题栏和内容区分开！】】】 ▼▼▼
             let detailsHTML = `
+                <!-- 家具一：独立的标题栏 -->
                 <div class="details-header">
                     <span>今日详情</span>
                     <button id="refresh-today-details-btn" class="header-button-inline" title="刷新当日详情">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
                     </button>
                 </div>
+
+                <!-- 家具二：独立的六宫格 -->
                 <div class="details-grid">
                     <div class="detail-item">
                         <div class="detail-icon">${`<?xml version="1.0" encoding="UTF-8"?><svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 24H7" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 10L12 12" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 4V7" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 24C14 18.4776 18.4776 14 24 14C29.5224 14 34 18.4776 34 24C34 27.3674 32.3357 30.3458 29.785 32.1578" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M38 10L36 12" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M44 24L41 24" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M37.9814 37.982L36.3614 36.362" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M23.4999 28C20.4999 28 14 28.2 14 31C14 33.8 18.6058 33.7908 20.9998 34C23 34.1747 26.4624 35.6879 25.9999 38C24.9998 43 8.99982 42 4.99994 42" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`}</div>
@@ -422,6 +426,7 @@ function isYesterday(date) {
                     </div>
                 </div>
             `;
+            // ▲▲▲ 【【【修复完毕】】】 ▲▲▲
 
             detailsContainer.innerHTML = detailsHTML;
             renderForecast(forecastData, listContainer);
@@ -1074,36 +1079,61 @@ function closeSideMenu() {
  * @param {Array} history - 要打包的聊天记录数组
  * @returns {Promise<Array>}
  */
-async function formatHistoryForApi(history, contact) { // 關鍵修改1：增加了一個參數 contact
-    // 關鍵修改2：直接使用傳進來的 contact，不再依賴全局變數
-    if (!contact) return []; 
+async function formatHistoryForApi(history, contact) {
+    if (!contact) return [];
 
+    // 【【【终极改造 V2.0：安装带“占位符”功能的智能过滤器】】】
+    
+    // ▼▼▼ 【【【终极修复：在这里为“档案整理员”更新地图！】】】 ▼▼▼
+    const keywordsToFilter = new Set(
+        appData.globalLittleTheaters
+            .filter(t => t.rememberInHistory === false)
+            .map(t => t.keyword.trim())
+    );
+    // ▲▲▲ 【【【修复完毕】】】 ▲▲▲
+
+    // 步骤1：我们不再直接删除，而是先创建一个可修改的副本
+    let processedHistory = [...history];
+
+    // 步骤2：遍历整个历史记录，寻找需要替换的机密消息
+    for (let i = 0; i < processedHistory.length; i++) {
+        const msg = processedHistory[i];
+        if (!msg) continue;
+
+        // 规则1：检查用户的消息是否是机密关键词
+        if (msg.role === 'user' && keywordsToFilter.has(msg.content.trim())) {
+            // 如果是，就把它替换成一个无害的占位符
+            processedHistory[i] = { role: 'user', content: '[用户触发了一个不需记忆的小剧场]' };
+
+            // 并且，检查它的下一条消息是不是AI的HTML回复
+            if (i + 1 < processedHistory.length && processedHistory[i + 1].type === 'html') {
+                // 如果是，也把AI的回复替换成占位符
+                processedHistory[i + 1] = { role: 'assistant', content: '[AI表演了一个不需记忆的小剧场]' };
+                // 跳过下一条消息的检查，因为我们已经处理了它
+                i++; 
+            }
+        }
+    }
+    
+    // 步骤3：现在，我们只对这份处理过的、干净的历史记录进行格式化
     const formattedMessages = await Promise.all(
-        history.map(async (msg) => {
-            if (!msg || !msg.role) return null; // 基础安全检查
+        processedHistory.map(async (msg) => {
+            if (!msg || !msg.role) return null;
 
-            // 【【【全新智能翻译模块 V5.0】】】
-            // 规则1：AI的“内心独白”是唯一需要被彻底过滤掉的，因为它不属于对话历史
             if (msg.type === 'thought') {
                 return null;
             }
-
-            // 规则2：翻译“撤回”事件
             if (msg.type === 'recalled') {
                 const recaller = msg.role === 'user' ? '我' : contact.name;
                 return { role: 'user', content: `[系统提示：刚才 ${recaller} 撤回了一条消息]` };
             }
-
-            // 规则3：【核心修正】过滤掉“系统提示”事件，不让AI看到
             if (msg.type === 'system') {
                 return null;
             }
 
-            // 规则4：处理所有常规对话消息 (用户和AI)
             const role = msg.role;
             const content = msg.content || '';
 
-            // 处理图片消息
             if (role === 'user' && msg.type === 'image' && msg.imageId) {
                 try {
                     const imageBlob = await db.getImage(msg.imageId);
@@ -1117,8 +1147,7 @@ async function formatHistoryForApi(history, contact) { // 關鍵修改1：增加
                 return { role: 'user', content: `[我发送了一张图片，描述是：${content || '无'}]` };
             }
 
-            // 为其他非文本消息添加描述性前缀
-    let finalContent = content;
+            let finalContent = content;
     if (msg.type === 'sticker') {
         const desc = content.replace('[表情] ', '').trim();
         // 【核心修正】根据发言人（role）使用不同的描述
@@ -2063,6 +2092,28 @@ if (c.recentDiarySummaries === undefined) {
         }
         // ▲▲▲▲▲ “小剧场”文件夹补充完毕 ▲▲▲▲▲
     });
+        
+        // 【【【全局小剧场改造第一步：建立中央图书馆】】】
+        if (!appData.globalLittleTheaters) {
+            appData.globalLittleTheaters = [];
+            
+            // 数据迁移：如果任何一个AI有旧的小剧场，就把它们合并到新的中央仓库
+            let allTheaters = [];
+            const seenKeywords = new Set();
+            
+            appData.aiContacts.forEach(contact => {
+                if (contact.littleTheaters && contact.littleTheaters.length > 0) {
+                    contact.littleTheaters.forEach(theater => {
+                        // 防止重复添加
+                        if (!seenKeywords.has(theater.keyword)) {
+                            allTheaters.push(theater);
+                            seenKeywords.add(theater.keyword);
+                        }
+                    });
+                }
+            });
+            appData.globalLittleTheaters = allTheaters;
+        }
         // ▼▼▼ 请把下面这段全新的代码，粘贴在这里 ▼▼▼
         // 【全新】为全局AI表情包建立仓库，如果不存在的话
         if (!appData.globalAiStickers) {
@@ -2996,34 +3047,55 @@ async function openChat(contactId, messageIdToHighlight = null) {
             let messagesToSummarize;
             const range = parseInt(rangeInput.value);
 
-            // 【核心修复】根据当前模式，从正确的档案柜读取记录
-            const sourceHistory = contact.isOfflineMode ? contact.offlineChatHistory : contact.onlineChatHistory;
+            // ▼▼▼ 【【【终极修复V2：高精度、分模式、无限制的消息提取引擎】】】 ▼▼▼
+            
+            // 步骤1：准确判断当前应该总结哪个模式
+            const isOnlineModeForSummary = !contact.isOfflineMode; 
+            const summarizingMode = isOnlineModeForSummary ? 'online' : 'offline';
 
-            if (!isNaN(range) && range > 0) {
-                messagesToSummarize = sourceHistory.slice(-range);
+            // 步骤2：获取当前模式专属的完整历史记录
+            let currentModeHistory;
+            if (isOnlineModeForSummary) {
+                currentModeHistory = contact.onlineChatHistory;
             } else {
-                const lastSummaryCount = contact.lastSummaryAtCount || 0;
-                // 注意：这里的逻辑需要更精确，我们先简单修复读取源
-                const fullHistoryForCount = [...contact.onlineChatHistory, ...contact.offlineChatHistory].sort((a,b)=>a.timestamp-b.timestamp);
-                messagesToSummarize = fullHistoryForCount.slice(lastSummaryCount);
+                const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+                currentModeHistory = activeStory ? activeStory.chatHistory : [];
             }
+            
+            // 步骤3：根据用户输入，决定提取方式
+            if (!isNaN(range) && range > 0) {
+                // 如果用户输入了具体数字（如18），就直接从当前模式的历史中提取最后N条
+                messagesToSummarize = currentModeHistory.slice(-range);
+            } else {
+                // 如果用户没输入，就需要精确计算“新”消息
+                const allOfflineMessages = (contact.offlineStorylines || []).reduce((acc, story) => acc.concat(story.chatHistory || []), []);
+                const fullHistoryForCount = [...contact.onlineChatHistory, ...allOfflineMessages].sort((a, b) => a.timestamp - b.timestamp);
+                const lastSummaryCount = contact.lastSummaryAtCount || 0;
+                const allNewMessages = fullHistoryForCount.slice(lastSummaryCount);
+                // 【关键】从所有新消息里，只筛选出属于当前模式的
+                messagesToSummarize = allNewMessages.filter(m => m.mode === summarizingMode);
+            }
+            // ▲▲▲ 【【【修复完毕】】】 ▲▲▲
 
             if (messagesToSummarize.length === 0) {
-                showCustomAlert('提示', '没有新的聊天记录需要总结。');
+                showCustomAlert('提示', '在当前模式下，没有新的聊天记录需要总结。');
                 return;
             }
             
-            showModeSelectModal(async (isOnlineMode) => {
+            // 【重要】我们不再弹出模式选择框，而是直接使用当前模式
+            (async () => {
                 summaryEditorTextarea.value = 'AI正在努力回忆中，请稍候...';
                 summaryStatusText.textContent = '';
                 summaryEditorModal.classList.remove('hidden');
                 try {
-                    const summary = await generateSummary(isOnlineMode, messagesToSummarize);
+                    // 直接将当前模式 (isOnlineModeForSummary) 传递给生成函数
+                    const summary = await generateSummary(isOnlineModeForSummary, messagesToSummarize);
                     summaryEditorTextarea.value = summary;
                 } catch (error) {
                     summaryEditorTextarea.value = `哎呀，总结失败了 T_T\n\n错误信息:\n${error.message}`;
                 }
-            });
+            })(); // 使用立即执行的异步函数
+
             // 移除监听器，防止重复绑定
             confirmBtn.removeEventListener('click', onConfirm);
             cancelBtn.removeEventListener('click', onCancel);
@@ -3250,7 +3322,7 @@ ${chatLog}
         const allHistoryForCount = [...contact.onlineChatHistory, ...contact.offlineChatHistory].sort((a, b) => a.timestamp - b.timestamp);
         const currentTotalCount = allHistoryForCount.length;
         
-        if ((currentTotalCount - lastSummaryCount) >= threshold) {
+        if ((currentTotalCount - lastSummaryCount) > 0) { // <-- 核心修改在这里！
             console.log(`自动总结触发！当前总数: ${currentTotalCount}, 上次在: ${lastSummaryCount}, 阈值: ${threshold}`);
             
             // 【重要】我们现在要明确告诉AI，总结应该存到哪里
@@ -3413,106 +3485,54 @@ async function createMessageElement(text, role, options = {}) {
             return fragment;
         }
         case 'html': {
-            // ★★★【【【终极修复 V12.0：“复印蓝图”的超精准双轨渲染方案】】】★★★
-            try {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(text, 'text/html');
+            // --- 【【【终极修复 V31.0：补发身份证 + 绝对信任注入】】】 ---
 
-                const isFullscreenWidget = doc.querySelector('.fullscreen-modal');
-                const triggerElement = doc.querySelector('.planner-wrapper');
+            // 【【【核心修复！！！】】】在这里为小剧场消息行打上专属的“身份证”
+            messageRow.classList.add('message-row--html-widget');
 
-                if (isFullscreenWidget && triggerElement) {
-                // --- 【【【终极修复 V13.0：中央广场统一部署方案】】】 ---
-                
-                // 1. 【打包弹药】我们不再拆分，而是把AI生成的整个HTML（包含样式、开关、弹窗和主界面）完整地打包起来。
-                const finalPayload = doc.documentElement.innerHTML;
-                messageRow.dataset.htmlPayload = encodeURIComponent(finalPayload);
+            const htmlToRender = options.rawHtmlContent || text;
+            const iframeId = `iframe-${Date.now()}-${Math.random()}`;
 
-                // 2. 【装修气泡】我们只把“旅行计划”的主界面(planner-wrapper)作为“快照”留在气泡里，并为它加上样式。
-                const styleTag = doc.querySelector('style');
-                let triggerFinalHtml = '';
-                if (styleTag) {
-                    // 同样，为快照的样式加上“防火墙”，防止它影响聊天界面的其他元素。
-                    const originalCss = styleTag.innerHTML;
-                    const scopedCss = originalCss.replace(/([^\r\n,{}]+)(,(?=[^}]*{)|\s*{)/g, (match, selector) => {
-                        if (selector.trim().startsWith('@') || selector.includes('~')) {
-                            return match;
-                        }
-                        return `.message-html-widget ${selector.trim()} ${match.endsWith(',') ? ',' : ' {'}`;
-                    });
-                    triggerFinalHtml += `<style>${scopedCss}</style>`;
-                }
-                triggerFinalHtml += triggerElement.outerHTML;
-                
-                const widgetHtml = `<div class="message-html-widget">${triggerFinalHtml}</div>`;
-                messageContentHTML = `<div class="message">${widgetHtml}</div>`;
+            // 步骤1：准备“身高报告员”脚本 (保持不变)
+            const resizeObserverScript = `
+                <script>
+                    try {
+                        window.addEventListener('load', () => {
+                            let lastHeight = 0;
+                            const target = document.documentElement; 
+                            if (target) {
+                                const updateHeight = () => {
+                                    const newHeight = target.scrollHeight;
+                                    if (Math.abs(newHeight - lastHeight) > 1) {
+                                        lastHeight = newHeight;
+                                        window.parent.postMessage({ type: 'resize-iframe', iframeId: '${iframeId}', height: newHeight }, '*');
+                                    }
+                                };
+                                const resizeObserver = new ResizeObserver(updateHeight);
+                                resizeObserver.observe(target);
+                                updateHeight(); 
+                                if (document.fonts) { document.fonts.ready.then(updateHeight); }
+                            }
+                        });
+                    } catch (e) { console.error('Error in iframe resizer:', e); }
+                <\/script>
+            `;
+            
+            // 步骤2：注入脚本和样式 (保持不变)
+            const finalHtmlToInject = htmlToRender + 
+                                    '<style>body{margin:0;min-height:0!important;background:transparent!important;}</style>' + 
+                                    resizeObserverScript;
+            
+            // 步骤3：创建iframe (保持不变)
+            const iframeHtml = `
+                <iframe 
+                    id="${iframeId}"
+                    srcdoc="${finalHtmlToInject.replace(/"/g, '&quot;')}" 
+                    style="width: 100%; border: none; display: block; height: 150px;" 
+                    sandbox="allow-scripts allow-same-origin"
+                ></iframe>`;
 
-                // 3. 【关键】我们给这个气泡打上一个特殊的“身份证”，告诉指挥官它是一个“中央广场”的触发器。
-                messageRow.dataset.action = 'open-html-widget';
-
-            } else {
-                    // --- 【【【终极修复 V23.0：注入“反重力”与“透明化”双重保险】】】 ---
-                    
-                    let originalHtml = text;
-                    const iframeId = `iframe-${Date.now()}-${Math.random()}`;
-
-                    // 2. 【核心升级】准备终极“净化”指令，强制覆盖AI可能添加的有害样式
-                    const overrideStyle = '<style>body { min-height: 0 !important; background: transparent !important; }</style>';
-                    originalHtml = originalHtml.replace('</head>', `${overrideStyle}</head>`);
-
-                    // 3. 【保持不变】继续植入我们强大的“勘探队”脚本
-                    const resizeObserverScript = `
-                        <script>
-                            try {
-                                let lastHeight = 0;
-                                const target = document.body.firstElementChild;
-                                if (target) {
-                                    const resizeObserver = new ResizeObserver(entries => {
-                                        const newHeight = entries[0].target.scrollHeight;
-                                        if (Math.abs(newHeight - lastHeight) > 1) {
-                                            lastHeight = newHeight;
-                                            window.parent.postMessage({
-                                                type: 'resize-iframe',
-                                                iframeId: '${iframeId}',
-                                                height: newHeight
-                                            }, '*');
-                                        }
-                                    });
-                                    resizeObserver.observe(target);
-                                }
-                                if (document.fonts) {
-                                    document.fonts.ready.then(() => {
-                                        if(target) {
-                                          window.parent.postMessage({
-                                              type: 'resize-iframe',
-                                              iframeId: '${iframeId}',
-                                              height: target.scrollHeight
-                                          }, '*');
-                                        }
-                                    });
-                                }
-                            } catch (e) { console.error('Error setting up ResizeObserver in iframe:', e); }
-                        <\/script>
-                    `;
-                    originalHtml = originalHtml.replace('</body>', `${resizeObserverScript}</body>`);
-
-                    // 4. 创建最终的iframe
-                    const iframeHtml = `
-                        <iframe 
-                            id="${iframeId}"
-                            srcdoc="${originalHtml.replace(/"/g, '&quot;')}" 
-                            style="width: 100%; border: none; display: block; height: 150px;" 
-                            sandbox="allow-scripts allow-same-origin allow-top-navigation"
-                        >
-                        </iframe>
-                    `;
-                    
-                    messageContentHTML = `<div class="message message-html-widget">${iframeHtml}</div>`;
-                }
-            } catch (error) {
-                console.error("处理HTML小剧场失败:", error);
-                messageContentHTML = `<div class="message">哎呀，这个小剧场好像加载失败了...</div>`;
-            }
+            messageContentHTML = `<div class="message message-html-widget">${iframeHtml}</div>`;
             break;
         }
         // ▼▼▼ 【【【终极修复：把丢失的普通文字气泡生产线装回去！】】】 ▼▼▼
@@ -3628,62 +3648,93 @@ async function displayMessage(text, role, options = {}) {
     if (isNew && !isStaged && !isLoading) {
         const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
         if (contact) {
-            // 3. 使用我们刚才提前“抓住”的那个绝对正确的元素引用来获取ID
+            
+            let shouldSaveToHistory = true;
+            let contentForHistory = text;
+
+            // 【【【终极修复V30.0：源头净化与占位符直写系统】】】
+
+
+            if (type === 'html') {
+                const matchedTheater = options.matchedTheater;
+
+                if (matchedTheater) {
+                    if (matchedTheater.rememberInHistory) {
+                        // 协议说“保留”：将HTML翻译成纯文本再存档。
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = text;
+                        tempDiv.querySelectorAll('style').forEach(style => style.remove());
+                        contentForHistory = tempDiv.textContent.trim().replace(/\s+/g, ' ') || '[小剧场]';
+                    } else {
+                        // 协议说“不保留”：我们不保存原始HTML，而是直接把存档内容替换成占位符！
+                        contentForHistory = '[AI表演了一个不需记忆的小剧场]';
+                    }
+                } else {
+                    // 安全措施：如果没有匹配到剧场，默认翻译成纯文本。
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = text;
+                    tempDiv.querySelectorAll('style').forEach(style => style.remove());
+                    contentForHistory = tempDiv.textContent.trim().replace(/\s+/g, ' ') || '[小剧场]';
+                }
+            }
+            
+            // 现在，我们把“是否存档”的判断和“存档的具体内容”都准备好了，
+            // 只有 shouldSaveToHistory 为 true 的消息才能进入最终的存档环节。
+            // 【【【终极修复V31.0：变量声明提升与条件存档】】】
+            
+            // 步骤1：无论如何，都先把这份“文件草稿”(messageToSave) 创建好。
+            // 它现在位于公共区域，函数内所有代码都能访问到它。
             const messageToSave = {
                 id: messageRowForSaving ? messageRowForSaving.dataset.messageId : `${Date.now()}-${Math.random()}`,
                 role: role,
-                content: text,
-                    type: type,
-                    timestamp: options.timestamp || Date.now(),
-                    mode: contact.isOfflineMode ? 'offline' : 'online'
-                };
+                content: contentForHistory,
+                type: type,
+                timestamp: options.timestamp || Date.now(),
+                mode: contact.isOfflineMode ? 'offline' : 'online'
+            };
 
-                Object.assign(messageToSave, options);
-                delete messageToSave.isNew;
+            // 如果是HTML类型，我们依然需要保存原始代码，以备不时之需。
+            if (type === 'html') {
+                messageToSave.rawHtmlContent = text;
+            }
 
-                // --- 【【【终极修复：智能消息存储系统】】】 ---
+            // 把所有附加信息（如图标ID、红包数据等）都合并到这份草稿里。
+            Object.assign(messageToSave, options);
+            delete messageToSave.isNew; // isNew 只是一个临时状态，不需要存进档案。
+
+            // 步骤2：现在，我们才进入“条件房间”，决定是否要把这份已经准备好的文件，
+            // 真正地放进永久的档案柜里。
+            if (shouldSaveToHistory) {
                 if (contact.isOfflineMode) {
-                    // 线下模式：找到当前激活的剧情线
                     const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
                     if (activeStory) {
-                        // 把消息存入这条线专属的记录册
-                        if (!activeStory.chatHistory) activeStory.chatHistory = []; // 安全检查
+                        if (!activeStory.chatHistory) activeStory.chatHistory = [];
                         activeStory.chatHistory.push(messageToSave);
                     }
                 } else {
-                    // 线上模式：逻辑保持不变
                     contact.onlineChatHistory.push(messageToSave);
                 }
-                // --- 【【【修复完毕】】】 ---
-                
-                // ▼▼▼ 【【【终极修复：为小剧场绑定专属的“贴身保镖”】】】 ▼▼▼
-                if (messageRowForSaving && messageRowForSaving.dataset.renderScope === 'global') {
-                    // 1. 我们只为带有“全局渲染”通行证的小剧场气泡，配备保镖
-                    messageRowForSaving.addEventListener('click', (event) => {
-                        console.log('【保镖已触发】专属保镖收到了点击信号！');
-                        const moduleItem = event.target.closest('.module-item');
-                        if (moduleItem) {
-                            console.log('【保镖行动中】发现点击的是模块:', moduleItem);
-                            const targetId = moduleItem.getAttribute('for');
-                            if (targetId) {
-                                console.log('【保镖行动中】读取到目标ID:', targetId);
-                                const targetCheckbox = document.getElementById(targetId);
-                                if (targetCheckbox) {
-                                    console.log('【保镖行动中】已找到目标开关，即将触发！', targetCheckbox);
-                                    targetCheckbox.checked = true;
-                                } else {
-                                    console.error('【保镖失手】在页面中找不到ID为 ' + targetId + ' 的开关！');
-                                }
+            }
+            // (后面的事件绑定和保存逻辑保持不变)
+            if (messageRowForSaving && messageRowForSaving.dataset.renderScope === 'global') {
+                messageRowForSaving.addEventListener('click', (event) => {
+                    const moduleItem = event.target.closest('.module-item');
+                    if (moduleItem) {
+                        const targetId = moduleItem.getAttribute('for');
+                        if (targetId) {
+                            const targetCheckbox = document.getElementById(targetId);
+                            if (targetCheckbox) {
+                                targetCheckbox.checked = true;
                             }
                         }
-                    });
-                }
-                // ▲▲▲▲▲ 【【【修复完毕】】】 ▲▲▲▲▲
-
-                saveAppData();
-                renderChatList();
+                    }
+                });
             }
+
+            saveAppData();
+            renderChatList();
         }
+    }
     }
     function removeLoadingBubble() {
         if (loadingBubbleElement) { loadingBubbleElement.remove(); loadingBubbleElement = null; }
@@ -3769,93 +3820,88 @@ async function displayMessage(text, role, options = {}) {
     }
 
         async function commitAndSendStagedMessages() {
-        // 【核心修复】第一步：在做任何事之前，先命令“管家”进行“现场勘查”！
-        // ▼▼▼ 【【【第二处修改：删除下面这一行代码】】】 ▼▼▼
-        // rebuildStagedMessagesFromDOM();  <-- 把这一行删掉
-
-        // 第二步：像以前一样，处理当前输入框里的新内容
-        if (chatInput.value.trim() !== '') {
-            await stageUserMessage();
+        if (isSendingMessage) {
+            console.log("信号灯为红，成功拦截了来自“幽灵点击”的重复指令！");
+            return; 
         }
-        
-                // 第三步：现在再检查“记事本”，它已经是完整的了！
-                const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-        if (!contact) return;
+        isSendingMessage = true; 
 
-        // ▼▼▼ 【【【第三处修改：在这里替换数组名】】】 ▼▼▼
-         contact.unsentMessages.forEach(msg => {
-            const messageToSave = {
-                role: 'user', 
-                timestamp: Date.now(), 
-                ...msg,
-                id: msg.id || `${Date.now()}-${Math.random()}`,
-                mode: contact.isOfflineMode ? 'offline' : 'online'
-            };
-            
-            // --- 【【【终极修复：用户消息智能存储】】】 ---
-            if (contact.isOfflineMode) {
-                const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
-                if (activeStory) {
-                    if (!activeStory.chatHistory) activeStory.chatHistory = [];
-                    activeStory.chatHistory.push(messageToSave);
-                }
-            } else {
-                contact.onlineChatHistory.push(messageToSave);
+        // ▼▼▼ 【【【终极修复：在这里建立“安全协议”，确保信号灯一定会被重置！】】】 ▼▼▼
+        try {
+            if (chatInput.value.trim() !== '') {
+                await stageUserMessage();
             }
-            // --- 【【【修复完毕】】】 ---
-        });
-        
-        let shouldCallAI = true;
 
-        if (contact.isScheduleEnabled) {
-            const activity = calculateCurrentActivity(contact.schedule);
-            if (activity.isAwake === false) {
-                contact.consecutiveMessagesWhileSleeping++;
-                
-                // 【核心改造】引入全新的“非线性”唤醒机制
-                // 解释：唤醒概率不再是简单的线性增加(attempts * 0.08)，
-                // 而是指数级增长 (attempts^2.2 / 200)。
-                // 这使得前几次骚扰的成功率极低，但会随着次数增加而急剧攀升，更符合“耐心耗尽”的真实感。
-                const attempts = contact.consecutiveMessagesWhileSleeping;
-                const wakeupChance = Math.pow(attempts, 2.2) / 200;
+            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            if (!contact) return; 
 
-                                if (Math.random() < wakeupChance) {
-                    forceRestartContext = true;
-                    contact.consecutiveMessagesWhileSleeping = 0; 
-                    contact.schedule.forcefullyWokenAt = Date.now();
+            contact.unsentMessages.forEach(msg => {
+                const messageToSave = {
+                    role: 'user',
+                    timestamp: Date.now(),
+                    ...msg,
+                    id: msg.id || `${Date.now()}-${Math.random()}`,
+                    mode: contact.isOfflineMode ? 'offline' : 'online'
+                };
+
+                if (contact.isOfflineMode) {
+                    const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
+                    if (activeStory) {
+                        if (!activeStory.chatHistory) activeStory.chatHistory = [];
+                        activeStory.chatHistory.push(messageToSave);
+                    }
                 } else {
-                    displayMessage(`${contact.remark} 正在睡觉，似乎没有听到...`, 'system', { isNew: true, type: 'system' });
-                    shouldCallAI = false; 
+                    contact.onlineChatHistory.push(messageToSave);
+                }
+            });
+
+            let shouldCallAI = true;
+
+            if (contact.isScheduleEnabled) {
+                const activity = calculateCurrentActivity(contact.schedule);
+                if (activity.isAwake === false) {
+                    contact.consecutiveMessagesWhileSleeping++;
+                    const attempts = contact.consecutiveMessagesWhileSleeping;
+                    const wakeupChance = Math.pow(attempts, 2.2) / 200;
+
+                    if (Math.random() < wakeupChance) {
+                        forceRestartContext = true;
+                        contact.consecutiveMessagesWhileSleeping = 0;
+                        contact.schedule.forcefullyWokenAt = Date.now();
+                    } else {
+                        displayMessage(`${contact.remark} 正在睡觉，似乎没有听到...`, 'system', { isNew: true, type: 'system' });
+                        shouldCallAI = false;
+                    }
+                } else {
+                    contact.consecutiveMessagesWhileSleeping = 0;
                 }
             } else {
                 contact.consecutiveMessagesWhileSleeping = 0;
             }
-        } else {
-            contact.consecutiveMessagesWhileSleeping = 0;
+
+            document.querySelectorAll('[data-staged="true"]').forEach(el => {
+                el.removeAttribute('data-staged');
+            });
+
+            contact.unsentMessages = [];
+            saveAppData();
+
+            contact.schedule.lastInteractionTimestamp = Date.now();
+            contact.proactiveMessaging.lastSent = Date.now();
+            saveAppData();
+            triggerAutoSummaryIfNeeded();
+
+            if (shouldCallAI) {
+                getAiResponse();
+            }
+        } finally {
+            // 这个 “finally” 块是关键！无论上面的 try 块里发生了什么
+            // (无论是正常结束，还是因为AI睡觉而提前结束)
+            // 离开这个函数前，这行代码都【必须】被执行！
+            isSendingMessage = false; 
+            console.log("信号灯已重置为绿色，可以再次发送。");
         }
-
-                document.querySelectorAll('[data-staged="true"]').forEach(el => {
-            el.removeAttribute('data-staged');
-        });
-        
-        // ▼▼▼ 【【【第四处修改：清空正确的文件夹并保存】】】 ▼▼▼
-        // 转移完成后，立刻清空“待办文件夹”
-        contact.unsentMessages = [];
-        // 【重要】最后，把所有改动（档案转移+清空待办）一次性永久保存
-        saveAppData();
-        // ▲▲▲▲▲ ▲▲▲▲▲
-
-        contact.schedule.lastInteractionTimestamp = Date.now();
-        
-        contact.proactiveMessaging.lastSent = Date.now();
-
-        saveAppData();
-
-        triggerAutoSummaryIfNeeded();
-
-        if (shouldCallAI) {
-            getAiResponse();
-        }
+        // ▲▲▲ 【【【“安全协议”部署完毕】】】 ▲▲▲
     }
         /**
      * 【全新辅助函数】将图片文件(Blob)转换为API能识别的Base64文本
@@ -3873,60 +3919,31 @@ async function displayMessage(text, role, options = {}) {
     
     }
 
-        async function getAiResponse() {
+        async function getAiResponse() { // <--- 确认这里没有参数！
             const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
             if (!contact) return;
 
-            // ★★★【【【终极修复 V7.0：剧情线感知的上下文检索系统】】】★★★
+            // ★★★【【【终极修复 V29.0：单一数据源的权威情报系统】】】★★★
+
+            // 步骤 1：确立唯一的、最权威的情报来源：永久档案室。
+            // 此时，用户刚发的消息已经被正确地、只存了一次地放进了这里。
             let sourceHistory;
             if (contact.isOfflineMode) {
-                // 线下模式：1. 找到当前激活的剧情线
                 const activeStory = contact.offlineStorylines.find(s => s.id === contact.activeOfflineStoryId);
-                // 2. 从这条线里，拿出它专属的聊天记录册
                 sourceHistory = activeStory && activeStory.chatHistory ? activeStory.chatHistory : [];
             } else {
-                // 线上模式：逻辑保持不变
                 sourceHistory = contact.onlineChatHistory;
             }
-
-            // 立即根据模式，切出本次API调用真正需要的“上下文”片段
+            
+            // 步骤 2：直接从这个权威档案里，截取 AI 需要看到的上下文。
+            // 这份 historyToUse 现在是绝对干净、无重复的。
             const historyToUse = contact.isOfflineMode 
-                ? sourceHistory.slice(-10) // 线下模式只看最近10条
+                ? sourceHistory.slice(-10) 
                 : sourceHistory.slice(contact.contextStartIndex || 0).slice(-(appData.appSettings.contextLimit || 50));
             
-            // 立即获取最后一条用户消息，供后续的功能使用
-            const lastUserMessage = sourceHistory.length > 0 ? sourceHistory[sourceHistory.length - 1] : null;
+            // 步骤 3：要找到用户的最后一条消息，也直接从这份干净的档案里找。
+            const lastUserMessage = [...historyToUse].reverse().find(m => m.role === 'user');
 
-            // ▼▼▼ 【【【“小剧场”核心触发器 V2.0 (指令注入版)】】】 ▼▼▼
-            let theaterInjectionPrompt = ""; // 准备一个空的“注射器”
-            if (lastUserMessage && lastUserMessage.role === 'user' && contact.littleTheaters && contact.littleTheaters.length > 0) {
-                const keyword = lastUserMessage.content.trim();
-                const matchedTheater = contact.littleTheaters.find(t => t.keyword.trim() === keyword);
-
-                if (matchedTheater) {
-                    // 如果匹配成功，就把小剧场的指令装进“注射器”
-                    theaterInjectionPrompt = `
----
-# 【【【最高优先级任务：小剧场演出】】】
-用户的最新消息触发了一个特殊的小剧场。你的本次回复【必须】严格遵循以下规则，【忽略】所有常规的聊天格式要求（如JSON、拆分消息等）。
-
-## 演出剧本 (HTML模板)
-你必须使用这个HTML结构作为你回复的基础：
-\`\`\`html
-${matchedTheater.htmlContent}
-\`\`\`
-
-## 导演要求
-1.  **角色扮演**: 你【必须】调用你的全部人设、记忆和当前的聊天上下文，将符合当前情景的对话、心理活动、故事等内容，填充到上述HTML模板的适当位置。
-2.  **纯净输出**: 你的最终输出【只能】是填充完毕的、完整的HTML代码。绝对禁止包含任何解释、标题、或 \`\`\`html\`\`\` 标记。
-
-## 灵感方向 (用户提供)
-${matchedTheater.promptHint || "（用户未提供提示，请自由发挥）"}
----
-`;
-                }
-            }
-            // ▲▲▲▲▲ “小剧场”指令准备完毕 ▲▲▲▲▲
 
 
             removeLoadingBubble();
@@ -4410,11 +4427,7 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
         }
         // 注意：我们删除了多余的 contact.consecutiveMessagesWhileSleeping = 0; 和 saveAppData();
 
-        
-        
-        // 【【【终极修复：在这里设立“总管”，提前合并好最终的指令大纲！】】】
-        // 核心：在所有指令的最前面，优先注入“小剧场”的最高优先级任务
-        finalSystemPrompt = theaterInjectionPrompt + prefixPrompt + finalPrompt;
+
 
                // 【【【核心终极改造 V9.0：多模态消息安全组装模块】】】
         let finalMessagesForApi;
@@ -4461,7 +4474,40 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
             // 如果没有日记内容，就直接使用最开始准备好的基础消息队列
             finalMessagesForApi = baseMessages;
         }
-        
+        // ▼▼▼ 【【【终极修复：“小剧场”指令最终注入点】】】 ▼▼▼
+            let theaterInjectionPrompt = ""; // 在这里准备一个全新的、干净的“注射器”
+            if (lastUserMessage && lastUserMessage.role === 'user' && appData.globalLittleTheaters && appData.globalLittleTheaters.length > 0) {
+            const keyword = lastUserMessage.content.trim();
+            const matchedTheater = appData.globalLittleTheaters.find(t => t.keyword.trim() === keyword);
+
+                if (matchedTheater) {
+                    // 如果匹配成功，才把小剧场的指令装进“注射器”
+                    theaterInjectionPrompt = `
+---
+# 【【【最高优先级任务：小剧场演出】】】
+用户的最新消息触发了一个特殊的小剧场。你的本次回复【必须】严格遵循以下规则，【忽略】所有常规的聊天格式要求（如JSON、拆分消息等）。
+
+## 演出剧本 (HTML模板)
+你必须使用这个HTML结构作为你回复的基础：
+\`\`\`html
+${matchedTheater.htmlContent}
+\`\`\`
+
+## 导演要求
+1.  **角色扮演**: 你【必须】调用你的全部人设、记忆和当前的聊天上下文，将符合当前情景的对话、心理活动、故事等内容，填充到上述HTML模板的适当位置。
+2.  **灵感方向**: ${matchedTheater.promptHint || "（用户未提供提示，请自由发挥）"}
+
+## 【【【绝对铁则：输出格式生命线！！！】】】
+-   你的回复**从第一个字符开始，就必须是 '<'**，也就是直接开始输出HTML代码。
+-   **绝对！绝对！绝对禁止**在你的回复前后添加任何 \`\`\`html\`\`\` 或 \`\`\` 标记！
+-   任何多余的字符，哪怕只是一个空格，都将导致程序彻底崩溃。这是**最高优先级的、不可违反的铁律！**
+---
+`;
+                }
+            }
+            
+            // 【【【终极修复 V2.0：在这里设立“总管”，提前合并好最终的指令大纲！】】】
+            finalSystemPrompt = theaterInjectionPrompt + prefixPrompt + finalPrompt;
                             } // else 语句在这里结束
 
             // ==========================================================
@@ -4472,11 +4518,12 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
 
             
             
-            // 【【【终极修复：无论是线上还是线下，都必须经过“专业翻译官”！】】】
+            // 【【【终极修复：所有情报都必须经过“专业翻译官”的统一处理！】】】
+            // 我们把这份干净、无重复、权威的 historyToUse 直接交给翻译官处理。
             const messagesForApi = await formatHistoryForApi(historyToUse, contact);
             
             try {
-                // 无论是线上还是线下，都将最终的系统指令和对话历史合并
+                // 步骤 3：最后发送给 AI 的，就是这份被完美处理过的、干净的最终报告。
                 const finalMessagesForApi = [ { role: "system", content: finalSystemPrompt }, ...messagesForApi ];
 
                 console.log('DEBUG: Sending to API:', JSON.stringify(finalMessagesForApi, null, 2));
@@ -4499,11 +4546,25 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
                 
                 let responseText = data.choices[0].message.content;
 
-                // --- 【【【全新V2.0：智能回复格式安检通道】】】 ---
-                // 规则1：如果AI的回复以 "<" 开头并以 ">" 结尾，我们就认定它是一个HTML小剧场
+                // --- 【【【全新V3.0：带“处理便签”的智能安检通道】】】 ---
                 if (responseText.trim().startsWith('<') && responseText.trim().endsWith('>')) {
-                    // 直接走贵宾通道，显示HTML，然后“下班”
-                    await displayMessage(responseText, 'assistant', { isNew: true, type: 'html' });
+                    // AI返回了HTML，说明小剧场被触发了。我们现在需要找出是哪个剧场。
+                    // 【【【终极修复！！！】】】我们现在从那个干净、权威的 historyToUse 档案里，反查用户最后发的消息。
+                    const lastUserMessage = [...historyToUse].reverse().find(m => m.role === 'user');
+                    let matchedTheater = null;
+                    if (lastUserMessage) {
+                        const keyword = lastUserMessage.content.trim();
+                        // ▼▼▼ 【【【终极修复：在这里修正图书管理员的查找路径！】】】 ▼▼▼
+                        matchedTheater = appData.globalLittleTheaters.find(t => t.keyword.trim() === keyword);
+                        // ▲▲▲ 【【【修复完毕】】】 ▲▲▲
+                    }
+                    
+                    // 把找到的剧场对象（也就是“处理便签”）一起传递过去
+                    await displayMessage(responseText, 'assistant', { 
+                        isNew: true, 
+                        type: 'html', 
+                        matchedTheater: matchedTheater // <-- 这就是附上的“便签”！
+                    });
                     return; 
                 }
                 // --- 【【【安检结束，非HTML的常规消息请继续】】】 ---
@@ -4511,11 +4572,8 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
                 // 【核心】根据模式决定如何处理回复
                 if (contact.isOfflineMode) {
                     // 线下模式：直接显示一整段富文本
-                    await displayMessage(responseText, 'assistant', { isNew: true, mode: 'offline' }); // 【【【核心修复：在这里补上模式标签！】】】
+                    await displayMessage(responseText, 'assistant', { isNew: true, mode: 'offline' });
                 } else {
-                    
-                    
-
                     // 线上模式：走原来的JSON解析和多条消息发送逻辑
                     let replies = [];
                     lastReceivedSuggestions = [];
@@ -4704,6 +4762,9 @@ ${messagesForApi.map(m => `${m.role}: ${Array.isArray(m.content) ? m.content.map
                 console.error('API调用失败:', error);
                 removeLoadingBubble();
                 displayMessage(`(｡•́︿•̀｡) 哎呀,出错了: ${error.message}`, 'assistant', { isNew: true });
+            } finally {
+                // 【【【终极修复V3：无论成功还是失败，都必须把信号灯变绿！】】】
+                isSendingMessage = false;
             }
     }
     /**
@@ -8819,15 +8880,18 @@ if (restartContextSetting) {
             });
             renderChatList(allFoundMessages);
         };
+// --- 核心交互逻辑修改 ---
+        // 1. 【【【终极修复：为手机端增加“备用侦察兵”】】】
+        const performSearchWithCheck = () => {
+            if (!filtersPanel.classList.contains('is-open')) {
+                performSearch();
+            }
+        };
 
-        // --- 核心交互逻辑修改 ---
-        // 1. 主输入框的实时搜索逻辑保持不变
         if (searchInput) {
-            searchInput.addEventListener('input', () => {
-                if (!filtersPanel.classList.contains('is-open')) {
-                    performSearch();
-                }
-            });
+            // 我们同时监听两个事件，确保在所有设备上都能实时响应
+            searchInput.addEventListener('input', performSearchWithCheck);
+            searchInput.addEventListener('keyup', performSearchWithCheck);
         }
 
         // 2. 点击“应用筛选”按钮的逻辑保持不变
@@ -9713,10 +9777,14 @@ function renderOfflineStorylines() {
             const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
             if (!contact) return;
             
+            // ▼▼▼ 【【【终极修复：解除“霸王条款”，允许设置任意阈值！】】】 ▼▼▼
             let threshold = parseInt(csAutoSummaryInput.value);
-            if (isNaN(threshold) || threshold < 50) {
-                threshold = 100; // 默认值
+            // 我们只检查用户输入的是不是一个有效的数字，如果不是，才给一个默认值
+            if (isNaN(threshold) || threshold <= 0) {
+                threshold = 100; // 如果输入无效，则默认为100
             }
+            // ▲▲▲ 【【【修复完毕】】】 ▲▲▲
+
             csAutoSummaryInput.value = threshold;
             contact.autoSummaryThreshold = threshold;
             csAutoSummaryDisplay.textContent = `${threshold}条`;
@@ -11097,13 +11165,14 @@ ${formattedHistory || "（最近没有聊天记录）"}
     
         // 指令1：渲染小剧场列表
         function renderLittleTheaterList() {
-            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
+            // 【【【全局小剧场改造第二步：从中央图书馆读取】】】
             const container = document.getElementById('little-theater-list-container');
             container.innerHTML = '';
-            if (!contact || !contact.littleTheaters) return; // 简化判断
+            
+            // 直接从 appData.globalLittleTheaters 读取剧本列表
+            const theaters = appData.globalLittleTheaters || [];
 
-            // 步骤1：像以前一样，先把所有已存在的小剧场按钮都创建好
-            contact.littleTheaters.forEach(theater => {
+            theaters.forEach(theater => {
                 const btn = document.createElement('button');
                 btn.className = 'suggestion-button';
                 btn.textContent = theater.keyword;
@@ -11124,17 +11193,13 @@ ${formattedHistory || "（最近没有聊天记录）"}
                 container.appendChild(btn);
             });
 
-            // ▼▼▼ 【【【全新植入：创建“添加”占位按钮】】】 ▼▼▼
             const addBtn = document.createElement('button');
-            // 我们给它两个class，一个是基础样式，一个是专属样式
             addBtn.className = 'suggestion-button add-placeholder'; 
             addBtn.textContent = '添加新剧场';
-            // 点击它时，执行和旧的“+”号按钮完全一样的功能
             addBtn.onclick = () => {
-                openLittleTheaterEditor(null); // null代表新建
+                openLittleTheaterEditor(null);
             };
             container.appendChild(addBtn);
-            // ▲▲▲ 【【【植入完毕】】】 ▲▲▲
         }
     
         // 指令2：打开编辑器
@@ -11148,16 +11213,28 @@ ${formattedHistory || "（最近没有聊天记录）"}
             const deleteBtn = document.getElementById('delete-little-theater-btn');
     
             if (theaterId) {
-                const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-                const theater = contact.littleTheaters.find(t => t.id === theaterId);
+                // 【【【全局小剧场改造第三步：从中央图书馆查找要编辑的剧本】】】
+                const theater = appData.globalLittleTheaters.find(t => t.id === theaterId);
                 if (theater) {
                     title.textContent = '编辑小剧场';
                     keywordInput.value = theater.keyword;
                     promptInput.value = theater.promptHint;
                     htmlTextarea.value = theater.htmlContent;
+                    document.getElementById('little-theater-remember-toggle').checked = theater.rememberInHistory;
                     deleteBtn.style.display = 'inline-block';
                 }
-            } else {
+            if (theater) {
+                title.textContent = '编辑小剧场';
+                keywordInput.value = theater.keyword;
+                promptInput.value = theater.promptHint;
+                htmlTextarea.value = theater.htmlContent;
+                // 【核心新增】读取并设置开关的当前状态
+                document.getElementById('little-theater-remember-toggle').checked = theater.rememberInHistory;
+                deleteBtn.style.display = 'inline-block';
+            }
+        } else {
+            // 【核心新增】新建时，默认让开关处于“开启”状态
+            document.getElementById('little-theater-remember-toggle').checked = true;
                 title.textContent = '新建小剧场';
                 keywordInput.value = '';
                 promptInput.value = '';
@@ -11175,33 +11252,32 @@ ${formattedHistory || "（最近没有聊天记录）"}
     
         // 指令4：保存小剧场
         function saveLittleTheater() {
-            const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-            if (!contact) return;
-    
+            // 【【【全局小剧场改造第四步：向中央图书馆保存】】】
             const keyword = document.getElementById('little-theater-keyword-input').value.trim();
             const promptHint = document.getElementById('little-theater-prompt-input').value.trim();
             const htmlContent = document.getElementById('little-theater-html-textarea').value.trim();
-    
+
             if (!keyword || !htmlContent) {
                 showToast('关键词和HTML代码不能为空！', 'error');
                 return;
             }
-    
+            const rememberInHistory = document.getElementById('little-theater-remember-toggle').checked;
+
             if (currentEditingTheaterId) {
-                // 更新
-                const theater = contact.littleTheaters.find(t => t.id === currentEditingTheaterId);
+                const theater = appData.globalLittleTheaters.find(t => t.id === currentEditingTheaterId);
                 if (theater) {
                     theater.keyword = keyword;
                     theater.promptHint = promptHint;
                     theater.htmlContent = htmlContent;
+                    theater.rememberInHistory = rememberInHistory;
                 }
             } else {
-                // 新建
-                contact.littleTheaters.push({
+                appData.globalLittleTheaters.push({
                     id: `theater-${Date.now()}`,
                     keyword: keyword,
                     promptHint: promptHint,
-                    htmlContent: htmlContent
+                    htmlContent: htmlContent,
+                    rememberInHistory: rememberInHistory
                 });
             }
             saveAppData();
@@ -11215,15 +11291,13 @@ ${formattedHistory || "（最近没有聊天记录）"}
             if (!currentEditingTheaterId) return;
             // ▼▼▼ 【【【核心改造：在调用时，把最后一个参数设为 true ！】】】 ▼▼▼
             showCustomConfirm('确认删除', '确定要删除这个小剧场吗？此操作无法撤销。', () => {
-                const contact = appData.aiContacts.find(c => c.id === activeChatContactId);
-                if (contact) {
-                    contact.littleTheaters = contact.littleTheaters.filter(t => t.id !== currentEditingTheaterId);
-                    saveAppData();
-                    closeLittleTheaterEditor();
-                    renderLittleTheaterList();
-                    showToast('小剧场已删除', 'success');
-                }
-            }, null, '确定', '取消', true); // <-- 看这里！我们传入了 true
+                        // 【【【全局小剧场改造第五步：从中央图书馆删除】】】
+                        appData.globalLittleTheaters = appData.globalLittleTheaters.filter(t => t.id !== currentEditingTheaterId);
+                        saveAppData();
+                        closeLittleTheaterEditor();
+                        renderLittleTheaterList();
+                        showToast('小剧场已删除', 'success');
+                    }, null, '确定', '取消', true); // <-- 看这里！我们传入了 true
         }
     
         // 指令6：为所有新按钮绑定事件
@@ -11241,6 +11315,28 @@ ${formattedHistory || "（最近没有聊天记录）"}
         document.getElementById('delete-little-theater-btn').addEventListener('click', deleteLittleTheater);
         // ▲▲▲▲▲ “小剧场”功能指令集部署完毕 ▲▲▲▲▲
     }
+    // --- 【【【全新植入 V21.0：“iframe信号接收总站”】】】 ---
+    window.addEventListener('message', (event) => {
+        // 安全检查：只处理我们自己定义的、来自iframe的身高调整信号
+        if (event.data && event.data.type === 'resize-iframe' && event.data.iframeId) {
+            const iframe = document.getElementById(event.data.iframeId);
+            if (iframe && event.data.height > 0) {
+                // 收到信号后，用最新的、最准确的高度来调整iframe
+                iframe.style.height = (event.data.height + 5) + 'px';
+            }
+        }
+    });
+    // --- 【【【全新植入 V21.0：“iframe信号接收总站”】】】 ---
+    window.addEventListener('message', (event) => {
+        // 安全检查：只处理我们自己定义的、来自iframe的身高调整信号
+        if (event.data && event.data.type === 'resize-iframe' && event.data.iframeId) {
+            const iframe = document.getElementById(event.data.iframeId);
+            if (iframe && event.data.height > 0) {
+                // 收到信号后，用最新的、最准确的高度来调整iframe
+                iframe.style.height = (event.data.height + 5) + 'px';
+            }
+        }
+    });
     // --- 【【【全新植入 V21.0：“iframe信号接收总站”】】】 ---
     window.addEventListener('message', (event) => {
         // 安全检查：只处理我们自己定义的、来自iframe的身高调整信号
