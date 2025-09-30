@@ -9,21 +9,54 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 【【【全新：IndexedDB 仓库管理员】】】 ---
     const db = {
         _db: null,
+        _needsMigration: false,
         init: function() {
             return new Promise((resolve, reject) => {
-                const request = indexedDB.open('AIChatAppDB', 1); // 打开或创建数据库
+                const request = indexedDB.open('AIChatAppDB', 2); // 升级版本号：1 → 2
                 request.onerror = (event) => reject("数据库打开失败: " + event.target.errorCode);
                 request.onsuccess = (event) => {
                     this._db = event.target.result;
                     console.log("数据库初始化成功");
-                    resolve();
+
+                    // 【修复】在数据库成功打开后，再执行迁移
+                    if (this._needsMigration) {
+                        console.log("检测到版本1，准备执行数据迁移...");
+                        this._migrateFromLocalStorage().then(() => {
+                            console.log("✓ 数据迁移完成");
+                            resolve();
+                        }).catch(err => {
+                            console.error("✗ 数据迁移失败:", err);
+                            resolve(); // 即使迁移失败也继续，因为有降级方案
+                        });
+                    } else {
+                        resolve();
+                    }
                 };
                 // 如果是第一次创建，或版本升级，会触发此事件
                 request.onupgradeneeded = (event) => {
                     const dbInstance = event.target.result;
-                    // 创建一个名为 'images' 的“货架”（Object Store）专门用来放图片
+                    const oldVersion = event.oldVersion;
+
+                    console.log(`数据库升级: v${oldVersion} → v2`);
+
+                    // 创建一个名为 'images' 的"货架"（Object Store）专门用来放图片
                     if (!dbInstance.objectStoreNames.contains('images')) {
                         dbInstance.createObjectStore('images');
+                    }
+
+                    // 【新增】创建 'appData' 存储应用数据
+                    if (!dbInstance.objectStoreNames.contains('appData')) {
+                        dbInstance.createObjectStore('appData');
+                    }
+
+                    // 【新增】创建 'settings' 存储设置项
+                    if (!dbInstance.objectStoreNames.contains('settings')) {
+                        dbInstance.createObjectStore('settings');
+                    }
+
+                    // 【标记需要迁移】如果从版本1升级
+                    if (oldVersion === 1) {
+                        this._needsMigration = true;
                     }
                 };
             });
@@ -106,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         resolve(results);
                     }
                 };
-                
+
                 request.onsuccess = (event) => {
                     images = event.target.result;
                     checkCompletion();
@@ -118,6 +151,80 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 request.onerror = (event) => reject("读取所有图片失败: " + event.target.errorCode);
                 keysRequest.onerror = (event) => reject("读取所有图片钥匙失败: " + event.target.errorCode);
+            });
+        },
+        // ▼▼▼ 【【【通用数据操作方法】】】 ▼▼▼
+        get: function(storeName, key) {
+            return new Promise((resolve, reject) => {
+                if (!this._db) return reject(new Error("数据库未初始化"));
+                try {
+                    const transaction = this._db.transaction([storeName], 'readonly');
+                    const store = transaction.objectStore(storeName);
+                    const request = store.get(key);
+                    request.onsuccess = (event) => resolve(event.target.result);
+                    request.onerror = () => reject(request.error);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        },
+        set: function(storeName, key, value) {
+            return new Promise((resolve, reject) => {
+                if (!this._db) return reject(new Error("数据库未初始化"));
+                try {
+                    const transaction = this._db.transaction([storeName], 'readwrite');
+                    const store = transaction.objectStore(storeName);
+                    const request = store.put(value, key);
+                    request.onerror = () => reject(request.error);
+                    transaction.onerror = () => reject(transaction.error);
+                    transaction.oncomplete = () => resolve();
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        },
+        delete: function(storeName, key) {
+            return new Promise((resolve, reject) => {
+                if (!this._db) return reject(new Error("数据库未初始化"));
+                try {
+                    const transaction = this._db.transaction([storeName], 'readwrite');
+                    const store = transaction.objectStore(storeName);
+                    const request = store.delete(key);
+                    request.onerror = () => reject(request.error);
+                    transaction.oncomplete = () => resolve();
+                    transaction.onerror = () => reject(transaction.error);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        },
+        // ▼▼▼ 【【【localStorage → IndexedDB 迁移函数】】】 ▼▼▼
+        _migrateFromLocalStorage: function() {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    console.log("开始从 localStorage 迁移数据...");
+
+                    // 1. 迁移主应用数据
+                    const appDataStr = localStorage.getItem('myAiChatApp_V8_Data');
+                    if (appDataStr) {
+                        const appDataObj = JSON.parse(appDataStr);
+                        await this.set('appData', 'main', appDataObj);
+                        console.log("✓ appData 迁移完成");
+                    }
+
+                    // 2. 迁移主题设置
+                    const theme = localStorage.getItem('theme');
+                    if (theme) {
+                        await this.set('settings', 'theme', theme);
+                        console.log("✓ theme 迁移完成");
+                    }
+
+                    console.log("✓ localStorage 数据保留，迁移成功");
+                    resolve();
+                } catch (error) {
+                    console.error("迁移过程出错:", error);
+                    reject(error);
+                }
             });
         }
     };
@@ -1767,15 +1874,24 @@ async function formatHistoryForApi(history, contact) {
     }
 
     async function initialize() {
-        // 【全新】开机自动应用上次保存的主题
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme === 'dark') {
-            document.body.classList.add('dark-theme');
-        }
-
         await db.init();
+
+        // 【迁移升级】从 IndexedDB 加载主题设置
+        try {
+            const savedTheme = await db.get('settings', 'theme');
+            if (savedTheme === 'dark') {
+                document.body.classList.add('dark-theme');
+            }
+        } catch (error) {
+            console.error("加载主题失败:", error);
+            // 降级方案
+            const fallbackTheme = localStorage.getItem('theme');
+            if (fallbackTheme === 'dark') {
+                document.body.classList.add('dark-theme');
+            }
+        }
         startDailyDiaryCheck(); // 【AI日记系统 V3.0】启动定时闹钟
-        loadAppData();
+        await loadAppData(); // 【迁移升级】等待异步加载完成
         renderSettingsUI(); // 依然先渲染设置数据
         bindEventListeners(); // 依然先绑定所有按钮事件
 
@@ -1866,16 +1982,32 @@ setInterval(() => {
             initializeWeatherSystem(); 
         }, 500);
     }
-    function loadAppData() {
-        const savedData = localStorage.getItem('myAiChatApp_V8_Data');
-        
-        if (savedData) { 
-            appData = JSON.parse(savedData); 
-        } else { 
-            appData = { 
-                aiContacts: [], 
-                appSettings: { apiType: 'openai_proxy', apiUrl: '', apiKey: '', apiModel: '', contextLimit: 20 } 
-            }; 
+    async function loadAppData() {
+        // 【迁移升级】从 IndexedDB 读取数据
+        try {
+            const savedData = await db.get('appData', 'main');
+
+            if (savedData) {
+                appData = savedData;
+            } else {
+                appData = {
+                    aiContacts: [],
+                    appSettings: { apiType: 'openai_proxy', apiUrl: '', apiKey: '', apiModel: '', contextLimit: 20 }
+                };
+            }
+        } catch (error) {
+            console.error("从 IndexedDB 加载数据失败:", error);
+            // 降级方案：尝试从 localStorage 读取
+            const fallbackData = localStorage.getItem('myAiChatApp_V8_Data');
+            if (fallbackData) {
+                appData = JSON.parse(fallbackData);
+                console.log("已从 localStorage 降级加载");
+            } else {
+                appData = {
+                    aiContacts: [],
+                    appSettings: { apiType: 'openai_proxy', apiUrl: '', apiKey: '', apiModel: '', contextLimit: 20 }
+                };
+            }
         }
 
         // ▼▼▼▼▼ 【全新】全局用户信息初始化 (修正逻辑后) ▼▼▼▼▼
@@ -2168,8 +2300,20 @@ if (c.recentDiarySummaries === undefined) {
         });
     }
 
-    function saveAppData() {
-        localStorage.setItem('myAiChatApp_V8_Data', JSON.stringify(appData));
+    async function saveAppData() {
+        // 【迁移升级】保存数据到 IndexedDB
+        try {
+            await db.set('appData', 'main', appData);
+        } catch (error) {
+            console.error("保存数据到 IndexedDB 失败:", error);
+            // 降级方案：保存到 localStorage
+            try {
+                localStorage.setItem('myAiChatApp_V8_Data', JSON.stringify(appData));
+                console.log("已降级保存到 localStorage");
+            } catch (lsError) {
+                console.error("localStorage 保存也失败:", lsError);
+            }
+        }
     }
     
     function switchToView(viewId) {
@@ -7407,8 +7551,12 @@ function closeTextEditorModal() {
         showToast('正在打包数据，请稍候...', 'info', 0);
 
         try {
-            // 步骤 1-4 保持不变，我们依然需要打包所有数据
-            const appDataToExport = JSON.parse(localStorage.getItem('myAiChatApp_V8_Data'));
+            // 【迁移升级】从 IndexedDB 读取数据
+            const appDataToExport = await db.get('appData', 'main');
+            if (!appDataToExport) {
+                throw new Error('未找到应用数据');
+            }
+
             const allImages = await db.getAllImages();
             const imageDataBase64 = {};
             for (const key in allImages) {
@@ -7416,9 +7564,14 @@ function closeTextEditorModal() {
                     imageDataBase64[key] = await blobToBase64(allImages[key]);
                 }
             }
+
+            // 读取设置数据
+            const theme = await db.get('settings', 'theme');
+
             const backupData = {
                 appData: appDataToExport,
-                imageData: imageDataBase64
+                imageData: imageDataBase64,
+                settings: { theme: theme || 'light' }
             };
 
             // 5. 【核心改造】将“超级包裹”转换成适合阅读的JSON文本
@@ -7569,8 +7722,14 @@ function closeTextEditorModal() {
                 throw new Error("备份文件格式不正确或已损坏。");
             }
 
-            // 3. 恢复文本数据 (保持不变)
-            localStorage.setItem('myAiChatApp_V8_Data', JSON.stringify(backupData.appData));
+            // 3. 【迁移升级】恢复文本数据到 IndexedDB
+            showToast('正在恢复应用数据...', 'info', 0);
+            await db.set('appData', 'main', backupData.appData);
+
+            // 恢复设置数据
+            if (backupData.settings && backupData.settings.theme) {
+                await db.set('settings', 'theme', backupData.settings.theme);
+            }
 
             // 4. 将所有Base64图片预先转换为Blob对象 (保持不变)
             showToast('正在解析图片...', 'info', 0);
@@ -8009,13 +8168,16 @@ function closeTextEditorModal() {
 
         // 2. 夜间模式按钮：点击后切换主题
         if (darkModeBtn) {
-            darkModeBtn.addEventListener('click', () => {
+            darkModeBtn.addEventListener('click', async () => {
                 document.body.classList.toggle('dark-theme');
-                // (可选) 你可以把用户选择的主题保存起来，下次打开时自动应用
-                if (document.body.classList.contains('dark-theme')) {
-                    localStorage.setItem('theme', 'dark');
-                } else {
-                    localStorage.setItem('theme', 'light');
+                // 【迁移升级】保存主题到 IndexedDB
+                const newTheme = document.body.classList.contains('dark-theme') ? 'dark' : 'light';
+                try {
+                    await db.set('settings', 'theme', newTheme);
+                } catch (error) {
+                    console.error("保存主题失败:", error);
+                    // 降级保存到 localStorage
+                    localStorage.setItem('theme', newTheme);
                 }
             });
         }
