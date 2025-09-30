@@ -29,15 +29,6 @@
      <link rel="stylesheet" href="style.css">
     <!-- ▼▼▼ 【【【全新：引入flatpickr日历样式】】】 ▼▼▼ -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-        <script>
-var _hmt = _hmt || [];
-(function() {
-  var hm = document.createElement("script");
-  hm.src = "https://hm.baidu.com/hm.js?ba7f37e3381acad0f7ea1fafa4697bb8";
-  var s = document.getElementsByTagName("script")[0]; 
-  s.parentNode.insertBefore(hm, s);
-})();
-</script>
 <style>
         /* 【【【全新：关闭按钮居中校准补丁】】】 */
         .close-button {
@@ -1561,13 +1552,22 @@ var _hmt = _hmt || [];
                     <input type="text" id="little-theater-keyword-input" placeholder="例如：下雨了">
                 </div>
                 <div class="input-group">
-                    <label for="little-theater-prompt-input">内容提示词 (选填)</label>
+                    <label for="little-theater-prompt-input">附加提示词 (选填)</label>
                     <input type="text" id="little-theater-prompt-input" placeholder="例如：写一段悲伤的独白">
                 </div>
                 <div class="input-group" style="flex-grow: 1; display: flex; flex-direction: column;">
-                    <label for="little-theater-html-textarea">小剧场HTML代码</label>
-                    <textarea id="little-theater-html-textarea" placeholder="在此处粘贴你的HTML代码..." style="flex-grow: 1; min-height: 200px;"></textarea>
+                    <label for="little-theater-html-textarea">小剧场提示词</label>
+                    <textarea id="little-theater-html-textarea" placeholder="在此处粘贴你的html提示词..." style="flex-grow: 1; min-height: 200px;"></textarea>
                 </div>
+                <!-- ▼▼▼ 【【【全新植入：“记忆分拣机”开关】】】 ▼▼▼ -->
+<div class="form-group settings-item" style="padding: 10px 0;">
+    <span>保留在记忆中</span>
+    <label class="switch">
+        <input type="checkbox" id="little-theater-remember-toggle">
+        <span class="slider"></span>
+    </label>
+</div>
+<!-- ▲▲▲▲▲ 【【【植入完毕】】】 ▲▲▲▲▲ -->
             </div>
         </div>
     </div>
@@ -1591,6 +1591,7 @@ var _hmt = _hmt || [];
     </div>
 </div>
 <!-- ▲▲▲▲▲ 通知弹窗结束 ▲▲▲▲▲ -->
+ 
 <!-- ▼▼▼ 【【【全新：全局加载动画遮罩层 (V2.0 带进度条版)】】】 ▼▼▼ -->
 <div id="loading-overlay" class="loading-overlay hidden">
     <div class="loading-spinner"></div>
